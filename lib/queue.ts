@@ -50,6 +50,8 @@ export interface VideoDownloadJobData {
     userId: string;
     sourceUrl: string;
     platform: string;
+    autoTranscribe?: boolean;
+    autoSegment?: boolean;
 }
 
 export interface AudioExtractJobData {

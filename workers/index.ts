@@ -47,12 +47,13 @@ if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 const downloadWorker = new Worker(
     QUEUE_NAMES.VIDEO_DOWNLOAD,
     async (job: Job) => {
-        const { videoId, userId, sourceUrl } = job.data;
+        const { videoId, userId, sourceUrl, autoTranscribe = true, autoSegment = true } = job.data;
         const videoDir = path.join(TEMP_DIR, videoId);
 
         try {
             if (!fs.existsSync(videoDir)) fs.mkdirSync(videoDir, { recursive: true });
             console.log(`[Download] Starting: ${sourceUrl}`);
+            console.log(`[Download] Pipeline: transcribe=${autoTranscribe}, segment=${autoSegment}`);
             await job.updateProgress(10);
 
             // Get metadata
@@ -90,18 +91,30 @@ const downloadWorker = new Worker(
             await job.updateProgress(70);
 
             // Extract audio
+            let audioStoragePath: string | null = null;
             const audioPath = path.join(videoDir, "audio.wav");
             try {
                 execSync(
                     `ffmpeg -i "${localVideoPath}" -vn -acodec pcm_s16le -ar 16000 -ac 1 "${audioPath}" -y`,
                     { timeout: 300000 }
                 );
+
+                // Upload audio to R2
+                const audioR2Key = `videos/${userId}/${videoId}/audio.wav`;
+                try {
+                    const { uploadFileToR2 } = await import("../lib/storage");
+                    await uploadFileToR2(audioPath, audioR2Key, "audio/wav");
+                    audioStoragePath = audioR2Key;
+                } catch {
+                    audioStoragePath = audioPath;
+                }
             } catch (ffErr) {
                 console.warn("[Download] Audio extraction failed, will retry later");
             }
             await job.updateProgress(85);
 
             // Update database
+            const newStatus = autoTranscribe ? "TRANSCRIBING" : "READY";
             await prisma.video.update({
                 where: { id: videoId },
                 data: {
@@ -109,9 +122,27 @@ const downloadWorker = new Worker(
                     thumbnail: metadata.thumbnail || null,
                     duration: Math.round(metadata.duration || 0),
                     storagePath,
-                    status: "TRANSCRIBING",
+                    audioPath: audioStoragePath,
+                    status: newStatus,
                 },
             });
+
+            // Chain: enqueue transcription if enabled
+            if (autoTranscribe && audioStoragePath) {
+                const { Queue } = await import("bullmq");
+                const transcriptionQueue = new Queue(QUEUE_NAMES.TRANSCRIPTION, { connection: redis as any });
+                await transcriptionQueue.add(
+                    `transcribe-${videoId}`,
+                    {
+                        videoId,
+                        userId,
+                        audioStoragePath,
+                        autoSegment,  // pass through so transcription can chain into segmentation
+                    },
+                    { priority: 1 }
+                );
+                console.log(`[Download] → Chained to transcription queue`);
+            }
 
             console.log(`[Download] ✅ Complete: ${videoId}`);
             await job.updateProgress(100);

@@ -14,6 +14,8 @@ import {
     Tag,
     X,
     Image,
+    FileText,
+    Brain,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -50,6 +52,8 @@ export default function IngestPage() {
     const [tags, setTags] = useState<TagType[]>([]);
     const [selectedTags, setSelectedTags] = useState<string[]>([]);
     const [recentIngests, setRecentIngests] = useState<IngestedVideo[]>([]);
+    const [autoTranscribe, setAutoTranscribe] = useState(true);
+    const [autoSegment, setAutoSegment] = useState(true);
 
     // Fetch tags on load
     useEffect(() => {
@@ -96,7 +100,12 @@ export default function IngestPage() {
             const res = await fetch("/api/videos/ingest", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url, tags: selectedTags }),
+                body: JSON.stringify({
+                    url,
+                    tags: selectedTags,
+                    autoTranscribe,
+                    autoSegment,
+                }),
             });
             const data = await res.json();
             if (!res.ok) {
@@ -291,6 +300,67 @@ export default function IngestPage() {
             )}
 
             {/* Submit Button */}
+
+            {/* Pipeline Options */}
+            {(metadata || url) && (
+                <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-5">
+                    <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                        <Brain className="w-4 h-4 text-violet-400" />
+                        Pipeline Options
+                    </h3>
+                    <div className="space-y-3">
+                        <label className="flex items-center gap-3 cursor-pointer group">
+                            <div className="relative">
+                                <input
+                                    type="checkbox"
+                                    checked={autoTranscribe}
+                                    onChange={(e) => {
+                                        setAutoTranscribe(e.target.checked);
+                                        if (!e.target.checked) setAutoSegment(false);
+                                    }}
+                                    className="sr-only peer"
+                                />
+                                <div className="w-9 h-5 bg-gray-700 rounded-full peer-checked:bg-violet-600 transition-colors" />
+                                <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-4" />
+                            </div>
+                            <div>
+                                <span className="text-sm text-white font-medium flex items-center gap-1.5">
+                                    <FileText className="w-3.5 h-3.5 text-blue-400" />
+                                    Auto-Transcribe
+                                </span>
+                                <p className="text-[10px] text-gray-500">
+                                    Extract audio and transcribe to text with word-level timestamps
+                                </p>
+                            </div>
+                        </label>
+
+                        <label className={cn("flex items-center gap-3 cursor-pointer group", !autoTranscribe && "opacity-40 pointer-events-none")}>
+                            <div className="relative">
+                                <input
+                                    type="checkbox"
+                                    checked={autoSegment}
+                                    onChange={(e) => setAutoSegment(e.target.checked)}
+                                    disabled={!autoTranscribe}
+                                    className="sr-only peer"
+                                />
+                                <div className="w-9 h-5 bg-gray-700 rounded-full peer-checked:bg-violet-600 transition-colors" />
+                                <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-4" />
+                            </div>
+                            <div>
+                                <span className="text-sm text-white font-medium flex items-center gap-1.5">
+                                    <Brain className="w-3.5 h-3.5 text-cyan-400" />
+                                    Auto-Segment (AI)
+                                </span>
+                                <p className="text-[10px] text-gray-500">
+                                    AI analyzes transcript and suggests best 30–60s clips with scores
+                                </p>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            )}
+
+            {/* Submit */}
             <button
                 onClick={handleSubmit}
                 disabled={!url.trim() || submitting}
