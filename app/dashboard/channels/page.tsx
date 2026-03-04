@@ -78,6 +78,8 @@ export default function ChannelsPage() {
             .then((data) => {
                 setChannels(Array.isArray(data) ? data : []);
                 setLoading(false);
+                // Silently refresh tokens in background
+                fetch("/api/channels/refresh", { method: "POST" }).catch(() => { });
             })
             .catch(() => setLoading(false));
     };

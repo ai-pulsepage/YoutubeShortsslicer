@@ -81,6 +81,7 @@ model User {
   tags          Tag[]
   subtitlePresets SubtitlePreset[]
   subscription  Subscription?
+  schedules     ContentSchedule[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -216,6 +217,7 @@ model Channel {
   publishJobs  PublishJob[]
   draftPosts   DraftPost[]
   channelFlags ChannelFlag[]
+  schedules    ContentSchedule[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -236,6 +238,7 @@ model PublishJob {
   id              String        @id @default(cuid())
   shortVideoId    String
   channelId       String
+  scheduleId      String?       // optional: which schedule this belongs to
   title           String?
   description     String?       @db.Text
   hashtags        String[]
@@ -245,8 +248,29 @@ model PublishJob {
   platformVideoId String?       // ID on YouTube/Instagram/Whop
   errorMsg        String?       @db.Text
 
-  shortVideo ShortVideo @relation(fields: [shortVideoId], references: [id], onDelete: Cascade)
-  channel    Channel    @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  shortVideo      ShortVideo       @relation(fields: [shortVideoId], references: [id], onDelete: Cascade)
+  channel         Channel          @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  schedule        ContentSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Content Schedules (Pipelines) ───────────────────────
+
+model ContentSchedule {
+  id          String   @id @default(cuid())
+  userId      String
+  channelId   String
+  name        String       // "Animal Clips", "News Shorts"
+  description String?
+  isActive    Boolean  @default(true)
+  postTimes   Json     @default("[\"09:00\",\"13:00\",\"18:00\"]")
+  postsPerDay Int      @default(3)
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel     Channel      @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  publishJobs PublishJob[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
