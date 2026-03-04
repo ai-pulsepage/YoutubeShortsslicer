@@ -22,6 +22,8 @@ export async function GET() {
             channelName: true,
             channelId: true,
             isActive: true,
+            defaults: true,
+            tokenExpiry: true,
             createdAt: true,
             _count: { select: { publishJobs: true, channelFlags: true } },
         },
