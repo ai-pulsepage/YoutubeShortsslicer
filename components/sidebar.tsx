@@ -21,6 +21,7 @@ import {
     Library,
     ChevronLeft,
     ChevronRight,
+    HelpCircle,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -36,6 +37,7 @@ const navItems = [
     { label: "Scheduler", href: "/dashboard/scheduler", icon: Calendar },
     { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
     { label: "Whop", href: "/dashboard/whop", icon: DollarSign },
+    { label: "Help", href: "/dashboard/help", icon: HelpCircle },
     { label: "Admin", href: "/dashboard/admin", icon: Settings, adminOnly: true },
 ];
 
