@@ -12,14 +12,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         Google({
             clientId: process.env.GOOGLE_CLIENT_ID!,
             clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-            authorization: {
-                params: {
-                    scope:
-                        "openid email profile https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly",
-                    access_type: "offline",
-                    prompt: "consent",
-                },
-            },
+            // Only request basic scopes for login.
+            // YouTube scopes (youtube.upload, youtube.readonly) are requested
+            // separately when the user connects a channel via /dashboard/channels.
         }),
     ],
     callbacks: {
