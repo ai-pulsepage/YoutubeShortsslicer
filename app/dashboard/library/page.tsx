@@ -16,6 +16,10 @@ import {
     ChevronRight,
     ExternalLink,
     MoreVertical,
+    Trash2,
+    Loader2,
+    AlertCircle,
+    RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -99,6 +103,23 @@ export default function LibraryPage() {
     useEffect(() => {
         fetchTags();
     }, [fetchTags]);
+
+    // Auto-refresh every 5s when there are in-progress videos
+    useEffect(() => {
+        const hasProcessing = videos.some((v) =>
+            ["PENDING", "DOWNLOADING", "TRANSCRIBING", "SEGMENTING"].includes(v.status)
+        );
+        if (!hasProcessing) return;
+        const interval = setInterval(fetchVideos, 5000);
+        return () => clearInterval(interval);
+    }, [videos, fetchVideos]);
+
+    const deleteVideo = async (videoId: string) => {
+        if (!confirm("Delete this video and all its segments? This cannot be undone.")) return;
+        await fetch(`/api/videos/${videoId}`, { method: "DELETE" });
+        setVideos((prev) => prev.filter((v) => v.id !== videoId));
+        setTotal((prev) => prev - 1);
+    };
 
     const createTag = async () => {
         if (!newTagName.trim()) return;
@@ -332,13 +353,13 @@ export default function LibraryPage() {
             ) : viewMode === "grid" ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {videos.map((video) => (
-                        <VideoCard key={video.id} video={video} />
+                        <VideoCard key={video.id} video={video} onDelete={deleteVideo} />
                     ))}
                 </div>
             ) : (
                 <div className="space-y-2">
                     {videos.map((video) => (
-                        <VideoRow key={video.id} video={video} />
+                        <VideoRow key={video.id} video={video} onDelete={deleteVideo} />
                     ))}
                 </div>
             )}
@@ -369,8 +390,10 @@ export default function LibraryPage() {
     );
 }
 
-function VideoCard({ video }: { video: Video }) {
+function VideoCard({ video, onDelete }: { video: Video; onDelete: (id: string) => void }) {
     const status = STATUS_LABELS[video.status] || STATUS_LABELS.PENDING;
+    const isProcessing = ["PENDING", "DOWNLOADING", "TRANSCRIBING", "SEGMENTING"].includes(video.status);
+    const isFailed = video.status === "FAILED";
 
     return (
         <div className="group bg-gray-900/50 border border-gray-800 rounded-2xl overflow-hidden hover:border-gray-700 transition-all duration-200 hover:shadow-lg">
@@ -380,7 +403,7 @@ function VideoCard({ video }: { video: Video }) {
                     <img
                         src={video.thumbnail}
                         alt={video.title || "Video"}
-                        className="w-full h-full object-cover"
+                        className={cn("w-full h-full object-cover", isProcessing && "opacity-60")}
                     />
                 ) : (
                     <div className="w-full h-full flex items-center justify-center">
@@ -392,9 +415,30 @@ function VideoCard({ video }: { video: Video }) {
                         {Math.floor(video.duration / 60)}:{(video.duration % 60).toString().padStart(2, "0")}
                     </span>
                 )}
-                <span className={cn("absolute top-2 left-2 text-xs font-medium px-2 py-0.5 rounded-full", status.class)}>
+                <span className={cn(
+                    "absolute top-2 left-2 text-xs font-medium px-2 py-0.5 rounded-full flex items-center gap-1",
+                    status.class
+                )}>
+                    {isProcessing && <Loader2 className="w-3 h-3 animate-spin" />}
+                    {isFailed && <AlertCircle className="w-3 h-3" />}
                     {status.label}
                 </span>
+
+                {/* Delete button */}
+                <button
+                    onClick={(e) => { e.stopPropagation(); onDelete(video.id); }}
+                    className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/50 text-gray-400 hover:text-red-400 hover:bg-red-500/20 opacity-0 group-hover:opacity-100 transition-all"
+                    title="Delete video"
+                >
+                    <Trash2 className="w-3.5 h-3.5" />
+                </button>
+
+                {/* Processing animation bar */}
+                {isProcessing && (
+                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-700 overflow-hidden">
+                        <div className="h-full bg-violet-500 animate-pulse" style={{ width: "60%" }} />
+                    </div>
+                )}
             </div>
 
             {/* Info */}
@@ -427,18 +471,25 @@ function VideoCard({ video }: { video: Video }) {
     );
 }
 
-function VideoRow({ video }: { video: Video }) {
+function VideoRow({ video, onDelete }: { video: Video; onDelete: (id: string) => void }) {
     const status = STATUS_LABELS[video.status] || STATUS_LABELS.PENDING;
+    const isProcessing = ["PENDING", "DOWNLOADING", "TRANSCRIBING", "SEGMENTING"].includes(video.status);
+    const isFailed = video.status === "FAILED";
 
     return (
-        <div className="flex items-center gap-4 bg-gray-900/50 border border-gray-800 rounded-xl px-4 py-3 hover:border-gray-700 transition-colors">
+        <div className="flex items-center gap-4 bg-gray-900/50 border border-gray-800 rounded-xl px-4 py-3 hover:border-gray-700 transition-colors group">
             {/* Thumbnail */}
-            <div className="w-24 h-14 bg-gray-800 rounded-lg flex-shrink-0 overflow-hidden">
+            <div className="w-24 h-14 bg-gray-800 rounded-lg flex-shrink-0 overflow-hidden relative">
                 {video.thumbnail ? (
-                    <img src={video.thumbnail} alt="" className="w-full h-full object-cover" />
+                    <img src={video.thumbnail} alt="" className={cn("w-full h-full object-cover", isProcessing && "opacity-60")} />
                 ) : (
                     <div className="w-full h-full flex items-center justify-center">
                         <Film className="w-5 h-5 text-gray-600" />
+                    </div>
+                )}
+                {isProcessing && (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                        <Loader2 className="w-4 h-4 text-violet-400 animate-spin" />
                     </div>
                 )}
             </div>
@@ -465,7 +516,9 @@ function VideoRow({ video }: { video: Video }) {
             </div>
 
             {/* Status */}
-            <span className={cn("text-xs font-medium px-2.5 py-1 rounded-full flex-shrink-0", status.class)}>
+            <span className={cn("text-xs font-medium px-2.5 py-1 rounded-full flex-shrink-0 flex items-center gap-1", status.class)}>
+                {isProcessing && <Loader2 className="w-3 h-3 animate-spin" />}
+                {isFailed && <AlertCircle className="w-3 h-3" />}
                 {status.label}
             </span>
 
@@ -488,6 +541,13 @@ function VideoRow({ video }: { video: Video }) {
             >
                 <ExternalLink className="w-4 h-4" />
             </a>
+            <button
+                onClick={() => onDelete(video.id)}
+                className="p-2 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100"
+                title="Delete video"
+            >
+                <Trash2 className="w-4 h-4" />
+            </button>
         </div>
     );
 }
