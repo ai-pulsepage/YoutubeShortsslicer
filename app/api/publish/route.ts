@@ -73,7 +73,7 @@ export async function POST(req: Request) {
                 channelId,
                 title: title || "",
                 description: description || "",
-                hashtags: hashtags || "",
+                hashtags: Array.isArray(hashtags) ? hashtags : hashtags ? [hashtags] : [],
             },
         });
     }

@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 /**
- * GET /api/admin/keys - List all API keys
+ * GET /api/admin/keys - List all API keys (masked)
  * POST /api/admin/keys - Upsert an API key
  */
 export async function GET() {
@@ -16,7 +16,8 @@ export async function GET() {
         select: {
             id: true,
             service: true,
-            lastFour: true,
+            label: true,
+            isActive: true,
             updatedAt: true,
         },
         orderBy: { service: "asc" },
@@ -31,7 +32,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const { service, key } = await req.json();
+    const { service, key, label } = await req.json();
     if (!service || !key) {
         return NextResponse.json(
             { error: "Service name and key are required" },
@@ -41,25 +42,24 @@ export async function POST(req: Request) {
 
     // Simple encryption — in production, use a proper KMS
     const encrypted = Buffer.from(key).toString("base64");
-    const lastFour = key.slice(-4);
 
     const apiKey = await prisma.apiKey.upsert({
         where: { service },
         create: {
             service,
-            encryptedKey: encrypted,
-            lastFour,
+            key: encrypted,
+            label: label || service,
         },
         update: {
-            encryptedKey: encrypted,
-            lastFour,
+            key: encrypted,
+            label: label || undefined,
         },
     });
 
     return NextResponse.json({
         id: apiKey.id,
         service: apiKey.service,
-        lastFour: apiKey.lastFour,
+        label: apiKey.label,
         updatedAt: apiKey.updatedAt,
     });
 }

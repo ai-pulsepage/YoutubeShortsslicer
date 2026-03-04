@@ -48,7 +48,7 @@ async function processRender(job: Job<RenderJobData>) {
             where: { id: segmentId },
             include: {
                 video: true,
-                shortVideos: { take: 1, orderBy: { createdAt: "desc" } },
+                shortVideo: true,
             },
         });
 
@@ -67,10 +67,10 @@ async function processRender(job: Job<RenderJobData>) {
 
         // Step 2: Cut segment
         const cutVideo = path.join(renderDir, "cut.mp4");
-        const duration = segment.end - segment.start;
+        const duration = segment.endTime - segment.startTime;
 
         execSync(
-            `ffmpeg -ss ${segment.start} -i "${sourceVideo}" -t ${duration} -c copy -avoid_negative_ts 1 "${cutVideo}" -y`,
+            `ffmpeg -ss ${segment.startTime} -i "${sourceVideo}" -t ${duration} -c copy -avoid_negative_ts 1 "${cutVideo}" -y`,
             { timeout: 300000 }
         );
         await job.updateProgress(30);
@@ -85,7 +85,7 @@ async function processRender(job: Job<RenderJobData>) {
         if (preset) {
             // Build ASS subtitle filter from preset
             const fontName = preset.font || "Inter";
-            const fontSize = preset.size || 24;
+            const fontSize = preset.fontSize || 24;
             const primaryColor = hexToAss(preset.color || "#FFFFFF");
             const outlineColor = hexToAss(preset.outline || "#000000");
             const shadowColor = hexToAss(preset.shadow || "#00000080");

@@ -64,12 +64,12 @@ async function processSegmentation(job: Job<SegmentationJobData>) {
             await prisma.segment.create({
                 data: {
                     videoId,
-                    start: suggestion.start,
-                    end: suggestion.end,
+                    startTime: suggestion.start,
+                    endTime: suggestion.end,
                     title: suggestion.title,
                     description: suggestion.description,
                     aiScore: suggestion.overallScore,
-                    status: "SUGGESTED",
+                    status: "AI_SUGGESTED",
                 },
             });
         }

@@ -114,10 +114,8 @@ print(json.dumps(result))
         const transcript = await prisma.transcript.create({
             data: {
                 videoId,
-                fullText: transcriptData.map((s: any) => s.text).join(" "),
+                content: transcriptData.map((s: any) => s.text).join(" "),
                 segments: transcriptData,
-                language: "en",
-                wordTimestamps: true,
             },
         });
 

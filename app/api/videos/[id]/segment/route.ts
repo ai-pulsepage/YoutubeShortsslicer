@@ -18,22 +18,17 @@ export async function POST(
 
     const { id } = await params;
 
-    // Load video + transcript
+    // Load video + transcript (singular relation)
     const video = await prisma.video.findFirst({
         where: { id, userId: session.user.id },
-        include: {
-            transcripts: {
-                orderBy: { createdAt: "desc" },
-                take: 1,
-            },
-        },
+        include: { transcript: true },
     });
 
     if (!video) {
         return NextResponse.json({ error: "Video not found" }, { status: 404 });
     }
 
-    const transcript = video.transcripts[0];
+    const transcript = video.transcript;
     if (!transcript) {
         return NextResponse.json(
             { error: "No transcript found. Process the video first." },
@@ -51,18 +46,18 @@ export async function POST(
         const segments = transcript.segments as any[];
         const suggestions = await segmentVideo(segments, video.duration || 0);
 
-        // Store segments
+        // Store segments — use startTime/endTime per schema
         const created = await Promise.all(
             suggestions.map((s) =>
                 prisma.segment.create({
                     data: {
                         videoId: id,
-                        start: s.start,
-                        end: s.end,
+                        startTime: s.start,
+                        endTime: s.end,
                         title: s.title,
                         description: s.description,
                         aiScore: s.overallScore,
-                        status: "SUGGESTED",
+                        status: "AI_SUGGESTED",
                     },
                 })
             )
@@ -107,9 +102,9 @@ export async function GET(
 
     const segments = await prisma.segment.findMany({
         where: { videoId: id, video: { userId: session.user.id } },
-        orderBy: { start: "asc" },
+        orderBy: { startTime: "asc" },
         include: {
-            shortVideos: {
+            shortVideo: {
                 select: { id: true, status: true, storagePath: true },
             },
         },

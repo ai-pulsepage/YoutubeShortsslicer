@@ -21,7 +21,6 @@ export async function GET() {
             platform: true,
             channelName: true,
             channelId: true,
-            avatar: true,
             isActive: true,
             createdAt: true,
             _count: { select: { publishJobs: true, channelFlags: true } },
@@ -37,7 +36,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { platform, accessToken, refreshToken, channelName, channelId, avatar } =
+    const { platform, accessToken, refreshToken, channelName, channelId } =
         await req.json();
 
     if (!platform || !channelName) {
@@ -52,10 +51,9 @@ export async function POST(req: Request) {
             userId: session.user.id,
             platform,
             channelName,
-            channelId: channelId || "",
-            accessToken: accessToken || "",
-            refreshToken: refreshToken || "",
-            avatar: avatar || null,
+            channelId: channelId || null,
+            accessToken: accessToken || null,
+            refreshToken: refreshToken || null,
             isActive: true,
         },
     });

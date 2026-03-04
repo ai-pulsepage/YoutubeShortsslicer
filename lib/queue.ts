@@ -2,9 +2,9 @@ import { Queue, Worker, Job } from "bullmq";
 import IORedis from "ioredis";
 
 // Redis connection — reuse across queues
-let redisConnection: IORedis | null = null;
+let redisConnection: any = null;
 
-export function getRedisConnection(): IORedis {
+export function getRedisConnection() {
     if (!redisConnection) {
         redisConnection = new IORedis(process.env.REDIS_URL || "redis://localhost:6379", {
             maxRetriesPerRequest: null, // Required by BullMQ
