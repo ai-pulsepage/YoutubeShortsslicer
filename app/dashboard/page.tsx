@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import {
     Film,
     Scissors,
@@ -6,12 +7,71 @@ import {
     Clock,
     TrendingUp,
     Zap,
+    Plus,
+    ExternalLink,
 } from "lucide-react";
+import Link from "next/link";
 
 export default async function DashboardPage() {
     const session = await auth();
     const userName = session?.user?.name?.split(" ")[0] || "there";
     const isAdmin = (session?.user as any)?.role === "ADMIN";
+    const userId = session?.user?.id;
+
+    // Fetch live stats
+    let stats = { totalVideos: 0, totalSegments: 0, totalPublished: 0, pendingJobs: 0 };
+    let recentVideos: any[] = [];
+
+    if (userId) {
+        const [totalVideos, totalSegments, totalPublished, pendingJobs, recent] =
+            await Promise.all([
+                prisma.video.count({ where: { userId } }),
+                prisma.segment.count({
+                    where: {
+                        video: { userId },
+                        status: { in: ["APPROVED", "RENDERED"] },
+                    },
+                }),
+                prisma.publishJob.count({
+                    where: {
+                        shortVideo: { segment: { video: { userId } } },
+                        status: "PUBLISHED",
+                    },
+                }),
+                prisma.publishJob.count({
+                    where: {
+                        shortVideo: { segment: { video: { userId } } },
+                        status: { in: ["DRAFT", "SCHEDULED"] },
+                    },
+                }),
+                prisma.video.findMany({
+                    where: { userId },
+                    orderBy: { createdAt: "desc" },
+                    take: 5,
+                    select: {
+                        id: true,
+                        title: true,
+                        status: true,
+                        thumbnail: true,
+                        platform: true,
+                        createdAt: true,
+                        _count: { select: { segments: true } },
+                    },
+                }),
+            ]);
+
+        stats = { totalVideos, totalSegments, totalPublished, pendingJobs };
+        recentVideos = recent;
+    }
+
+    const STATUS_COLORS: Record<string, string> = {
+        PENDING: "text-gray-400",
+        DOWNLOADING: "text-blue-400",
+        TRANSCRIBING: "text-cyan-400",
+        SEGMENTING: "text-violet-400",
+        READY: "text-emerald-400",
+        FAILED: "text-red-400",
+    };
 
     return (
         <div className="space-y-8">
@@ -36,29 +96,25 @@ export default async function DashboardPage() {
                 <StatCard
                     icon={<Film className="w-5 h-5" />}
                     label="Videos Processed"
-                    value="0"
-                    trend="+0 this week"
+                    value={stats.totalVideos.toString()}
                     color="violet"
                 />
                 <StatCard
                     icon={<Scissors className="w-5 h-5" />}
-                    label="Shorts Generated"
-                    value="0"
-                    trend="+0 this week"
+                    label="Shorts Ready"
+                    value={stats.totalSegments.toString()}
                     color="blue"
                 />
                 <StatCard
                     icon={<Upload className="w-5 h-5" />}
                     label="Published"
-                    value="0"
-                    trend="+0 this week"
+                    value={stats.totalPublished.toString()}
                     color="emerald"
                 />
                 <StatCard
                     icon={<Clock className="w-5 h-5" />}
                     label="In Queue"
-                    value="0"
-                    trend="0 processing"
+                    value={stats.pendingJobs.toString()}
                     color="amber"
                 />
             </div>
@@ -93,15 +149,64 @@ export default async function DashboardPage() {
 
             {/* Recent Activity */}
             <div>
-                <h2 className="text-lg font-semibold text-white mb-4">
-                    Recent Activity
-                </h2>
-                <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-8 text-center">
-                    <TrendingUp className="w-10 h-10 text-gray-600 mx-auto mb-3" />
-                    <p className="text-gray-400 text-sm">
-                        No activity yet. Start by ingesting your first video!
-                    </p>
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-semibold text-white">Recent Videos</h2>
+                    {recentVideos.length > 0 && (
+                        <Link
+                            href="/dashboard/library"
+                            className="text-sm text-violet-400 hover:text-violet-300 transition-colors"
+                        >
+                            View all →
+                        </Link>
+                    )}
                 </div>
+                {recentVideos.length === 0 ? (
+                    <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-8 text-center">
+                        <TrendingUp className="w-10 h-10 text-gray-600 mx-auto mb-3" />
+                        <p className="text-gray-400 text-sm">
+                            No activity yet. Start by ingesting your first video!
+                        </p>
+                    </div>
+                ) : (
+                    <div className="space-y-2">
+                        {recentVideos.map((video: any) => (
+                            <Link
+                                key={video.id}
+                                href={`/dashboard/editor?video=${video.id}`}
+                                className="flex items-center gap-4 bg-gray-900/50 border border-gray-800 rounded-xl px-4 py-3 hover:border-gray-700 transition-colors group"
+                            >
+                                <div className="w-16 h-10 bg-gray-800 rounded-lg flex-shrink-0 overflow-hidden">
+                                    {video.thumbnail ? (
+                                        <img
+                                            src={video.thumbnail}
+                                            alt=""
+                                            className="w-full h-full object-cover"
+                                        />
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center">
+                                            <Film className="w-4 h-4 text-gray-600" />
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <h3 className="text-sm font-medium text-white truncate">
+                                        {video.title || "Untitled"}
+                                    </h3>
+                                    <p className="text-xs text-gray-500">
+                                        {video._count.segments} segments · {video.platform}
+                                    </p>
+                                </div>
+                                <span
+                                    className={`text-xs font-medium ${STATUS_COLORS[video.status] || "text-gray-400"
+                                        }`}
+                                >
+                                    {video.status}
+                                </span>
+                                <ExternalLink className="w-4 h-4 text-gray-600 group-hover:text-violet-400 transition-colors" />
+                            </Link>
+                        ))}
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -111,13 +216,11 @@ function StatCard({
     icon,
     label,
     value,
-    trend,
     color,
 }: {
     icon: React.ReactNode;
     label: string;
     value: string;
-    trend: string;
     color: string;
 }) {
     const colorClasses: Record<string, string> = {
@@ -138,7 +241,6 @@ function StatCard({
                 <span className="text-sm text-gray-400">{label}</span>
             </div>
             <p className="text-3xl font-bold text-white">{value}</p>
-            <p className="text-xs text-gray-500 mt-1">{trend}</p>
         </div>
     );
 }
@@ -157,7 +259,7 @@ function QuickAction({
     gradient: string;
 }) {
     return (
-        <a
+        <Link
             href={href}
             className="group relative overflow-hidden bg-gray-900/50 border border-gray-800 rounded-2xl p-5 hover:border-gray-700 transition-all duration-300 hover:shadow-lg"
         >
@@ -171,6 +273,6 @@ function QuickAction({
                 <h3 className="font-semibold text-white mb-1">{label}</h3>
                 <p className="text-sm text-gray-500">{description}</p>
             </div>
-        </a>
+        </Link>
     );
 }
