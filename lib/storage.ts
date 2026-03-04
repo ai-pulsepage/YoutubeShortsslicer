@@ -18,7 +18,7 @@ const s3 = new S3Client({
     },
 });
 
-const BUCKET = process.env.R2_BUCKET_NAME || "youtube-shorts-slicer";
+const BUCKET = process.env.R2_BUCKET_NAME || "youtubeshorts";
 
 /**
  * Upload a file to R2 from a local path
