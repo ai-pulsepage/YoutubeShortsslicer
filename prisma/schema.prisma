@@ -1,0 +1,355 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+enum Platform {
+  YOUTUBE
+  INSTAGRAM
+  WHOP
+}
+
+enum VideoStatus {
+  PENDING
+  DOWNLOADING
+  TRANSCRIBING
+  SEGMENTING
+  READY
+  FAILED
+}
+
+enum SegmentStatus {
+  AI_SUGGESTED
+  APPROVED
+  REJECTED
+  RENDERING
+  RENDERED
+  FAILED
+}
+
+enum ShortVideoStatus {
+  PENDING
+  RENDERING
+  RENDERED
+  FAILED
+}
+
+enum PublishStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+}
+
+enum SubscriptionPlan {
+  FREE
+  PRO
+  AGENCY
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELED
+  UNPAID
+}
+
+// ─── Auth Models (NextAuth) ──────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  role          Role      @default(USER)
+
+  accounts      Account[]
+  sessions      Session[]
+  videos        Video[]
+  channels      Channel[]
+  tags          Tag[]
+  subtitlePresets SubtitlePreset[]
+  subscription  Subscription?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── Core Models ─────────────────────────────────────────
+
+model Video {
+  id          String      @id @default(cuid())
+  userId      String
+  sourceUrl   String
+  platform    String      // detected platform name
+  title       String?
+  description String?     @db.Text
+  thumbnail   String?
+  duration    Int?        // seconds
+  status      VideoStatus @default(PENDING)
+  storagePath String?     // R2 path
+  audioPath   String?     // R2 path for extracted audio
+  errorMsg    String?     @db.Text
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transcript  Transcript?
+  segments    Segment[]
+  videoTags   VideoTag[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Transcript {
+  id       String @id @default(cuid())
+  videoId  String @unique
+  content  String @db.Text  // full transcript text
+  segments Json   // word-level timestamps [{word, start, end}]
+
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
+model Segment {
+  id          String        @id @default(cuid())
+  videoId     String
+  startTime   Float         // seconds
+  endTime     Float         // seconds
+  title       String?
+  description String?       @db.Text
+  aiScore     Float?        // 0-10 engagement score
+  hookStrength Float?       // 0-10
+  emotionalArc String?      // e.g. "tension-resolution"
+  status      SegmentStatus @default(AI_SUGGESTED)
+  voiceoverEnabled Boolean  @default(false)
+  voiceoverText    String?  @db.Text
+
+  video       Video         @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  shortVideo  ShortVideo?
+  channelFlags ChannelFlag[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ShortVideo {
+  id            String           @id @default(cuid())
+  segmentId     String           @unique
+  storagePath   String?          // R2 path to rendered short
+  thumbnailPath String?
+  subtitleStyle Json?            // snapshot of style used
+  duration      Float?           // seconds
+  status        ShortVideoStatus @default(PENDING)
+  errorMsg      String?          @db.Text
+
+  segment      Segment       @relation(fields: [segmentId], references: [id], onDelete: Cascade)
+  publishJobs  PublishJob[]
+  draftPosts   DraftPost[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Channel & Publishing ────────────────────────────────
+
+model Channel {
+  id           String   @id @default(cuid())
+  userId       String
+  platform     Platform
+  channelName  String
+  channelId    String?  // platform-specific ID
+  accessToken  String?  @db.Text
+  refreshToken String?  @db.Text
+  tokenExpiry  DateTime?
+  isActive     Boolean  @default(true)
+  defaults     Json?    // default subtitle style, schedule, description template
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  publishJobs  PublishJob[]
+  draftPosts   DraftPost[]
+  channelFlags ChannelFlag[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ChannelFlag {
+  id        String @id @default(cuid())
+  segmentId String
+  channelId String
+
+  segment Segment @relation(fields: [segmentId], references: [id], onDelete: Cascade)
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([segmentId, channelId])
+}
+
+model PublishJob {
+  id              String        @id @default(cuid())
+  shortVideoId    String
+  channelId       String
+  title           String?
+  description     String?       @db.Text
+  hashtags        String[]
+  scheduledAt     DateTime?
+  publishedAt     DateTime?
+  status          PublishStatus @default(DRAFT)
+  platformVideoId String?       // ID on YouTube/Instagram/Whop
+  errorMsg        String?       @db.Text
+
+  shortVideo ShortVideo @relation(fields: [shortVideoId], references: [id], onDelete: Cascade)
+  channel    Channel    @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model DraftPost {
+  id            String  @id @default(cuid())
+  shortVideoId  String
+  channelId     String
+  title         String?
+  description   String? @db.Text
+  hashtags      String[]
+  thumbnailPath String?
+
+  shortVideo ShortVideo @relation(fields: [shortVideoId], references: [id], onDelete: Cascade)
+  channel    Channel    @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Organization ────────────────────────────────────────
+
+model Tag {
+  id     String @id @default(cuid())
+  name   String
+  color  String @default("#3B82F6") // hex color
+  userId String
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  videoTags VideoTag[]
+
+  @@unique([name, userId])
+}
+
+model VideoTag {
+  id      String @id @default(cuid())
+  videoId String
+  tagId   String
+
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  tag   Tag   @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([videoId, tagId])
+}
+
+model SubtitlePreset {
+  id        String @id @default(cuid())
+  userId    String
+  name      String
+  font      String @default("Montserrat")
+  fontSize  Int    @default(48)
+  color     String @default("#FFFFFF")
+  outline   String @default("#000000")
+  shadow    String @default("rgba(0,0,0,0.5)")
+  position  String @default("bottom") // top, center, bottom
+  animation String @default("word-highlight") // word-highlight, fade, pop
+  // AI segmentation defaults for this preset
+  segmentMode   String? // e.g. "mini-drama", "suspense", "educational"
+  targetMinDuration Int @default(30)
+  targetMaxDuration Int @default(58)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Admin ───────────────────────────────────────────────
+
+model ApiKey {
+  id        String @id @default(cuid())
+  service   String @unique // e.g. "deepseek", "gemini", "together", "whop", "stripe"
+  key       String @db.Text // encrypted
+  label     String? // human-readable label
+  isActive  Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SystemSetting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String @db.Text
+
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Subscription ────────────────────────────────────────
+
+model Subscription {
+  id                  String             @id @default(cuid())
+  userId              String             @unique
+  stripeSubscriptionId String?           @unique
+  stripeCustomerId    String?
+  plan                SubscriptionPlan   @default(FREE)
+  status              SubscriptionStatus @default(ACTIVE)
+  trialEnd            DateTime?
+  currentPeriodEnd    DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
