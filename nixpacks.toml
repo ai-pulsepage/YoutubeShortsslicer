@@ -2,7 +2,7 @@
 # Installs system dependencies needed by workers
 
 [variables]
-NIXPACKS_NODE_VERSION = "20"
+NIXPACKS_NODE_VERSION = "22"
 
 [phases.setup]
 aptPkgs = ["ffmpeg", "python3", "python3-pip"]
