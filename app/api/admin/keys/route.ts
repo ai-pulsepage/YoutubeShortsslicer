@@ -16,6 +16,7 @@ export async function GET() {
         select: {
             id: true,
             service: true,
+            key: true,
             label: true,
             isActive: true,
             updatedAt: true,
@@ -23,7 +24,21 @@ export async function GET() {
         orderBy: { service: "asc" },
     });
 
-    return NextResponse.json(keys);
+    // Return masked keys so admin can see what's configured
+    const masked = keys.map((k) => {
+        let maskedKey = "••••••••";
+        try {
+            const decoded = Buffer.from(k.key, "base64").toString("utf8");
+            if (decoded.length > 8) {
+                maskedKey = `${decoded.slice(0, 4)}...${decoded.slice(-4)}`;
+            } else if (decoded.length > 0) {
+                maskedKey = `${decoded.slice(0, 2)}...`;
+            }
+        } catch { }
+        return { ...k, key: maskedKey };
+    });
+
+    return NextResponse.json(masked);
 }
 
 export async function POST(req: Request) {

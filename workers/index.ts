@@ -58,7 +58,7 @@ const downloadWorker = new Worker(
 
             // Get metadata
             const metadataJson = execSync(
-                `yt-dlp --js-runtimes nodejs --dump-json --no-download "${sourceUrl}"`,
+                `yt-dlp --js-runtimes node --dump-json --no-download "${sourceUrl}"`,
                 { encoding: "utf8", timeout: 30000 }
             );
             const metadata = JSON.parse(metadataJson);
@@ -67,7 +67,7 @@ const downloadWorker = new Worker(
             // Download video
             const outputTemplate = path.join(videoDir, "%(id)s.%(ext)s");
             execSync(
-                `yt-dlp --js-runtimes nodejs -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4 -o "${outputTemplate}" "${sourceUrl}"`,
+                `yt-dlp --js-runtimes node -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4 -o "${outputTemplate}" "${sourceUrl}"`,
                 { encoding: "utf8", timeout: 600000, maxBuffer: 50 * 1024 * 1024 }
             );
             await job.updateProgress(50);
@@ -160,7 +160,16 @@ const downloadWorker = new Worker(
             throw error;
         }
     },
-    { connection: redis as any, concurrency: 2 }
+    {
+        connection: redis as any,
+        concurrency: 2,
+        settings: {
+            backoffStrategy: (attemptsMade: number) => {
+                // Exponential backoff: 30s, 60s, 120s, 240s, 480s
+                return Math.min(30000 * Math.pow(2, attemptsMade - 1), 480000);
+            },
+        },
+    }
 );
 
 // ─── Transcription Worker ────────────────────────
