@@ -38,10 +38,28 @@ export default function AdminPage() {
     const { data: session } = useSession();
     const [activeTab, setActiveTab] = useState("keys");
     const [keys, setKeys] = useState<Record<string, string>>({});
+    const [savedKeys, setSavedKeys] = useState<Record<string, string>>({});
     const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
     const [saving, setSaving] = useState(false);
+    const [loadingKeys, setLoadingKeys] = useState(true);
 
     const isAdmin = (session?.user as any)?.role === "ADMIN";
+
+    // Fetch existing keys on mount
+    useEffect(() => {
+        if (!isAdmin) return;
+        fetch("/api/admin/keys")
+            .then((r) => r.json())
+            .then((data: any[]) => {
+                const existing: Record<string, string> = {};
+                data.forEach((k) => {
+                    existing[k.service] = k.key; // masked value like "sk-1...xYz4"
+                });
+                setSavedKeys(existing);
+            })
+            .catch(console.error)
+            .finally(() => setLoadingKeys(false));
+    }, [isAdmin]);
 
     if (!isAdmin) {
         return (
@@ -57,6 +75,32 @@ export default function AdminPage() {
 
     const toggleShowKey = (key: string) => {
         setShowKeys((prev) => ({ ...prev, [key]: !prev[key] }));
+    };
+
+    const handleSaveKeys = async () => {
+        setSaving(true);
+        try {
+            // Only save keys that have been edited (non-empty)
+            const entries = Object.entries(keys).filter(([_, v]) => v.trim() !== "");
+            for (const [service, key] of entries) {
+                await fetch("/api/admin/keys", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ service, key, label: service }),
+                });
+            }
+            // Refresh saved state
+            const res = await fetch("/api/admin/keys");
+            const data = await res.json();
+            const existing: Record<string, string> = {};
+            data.forEach((k: any) => { existing[k.service] = k.key; });
+            setSavedKeys(existing);
+            setKeys({}); // Clear input fields after save
+        } catch (err) {
+            console.error("Failed to save keys:", err);
+        } finally {
+            setSaving(false);
+        }
     };
 
     return (
@@ -97,50 +141,69 @@ export default function AdminPage() {
                         </p>
                     </div>
 
-                    <div className="space-y-3">
-                        {API_KEY_FIELDS.map((field) => (
-                            <div
-                                key={field.key}
-                                className="bg-gray-900/50 border border-gray-800 rounded-xl p-4"
-                            >
-                                <div className="flex items-center justify-between mb-2">
-                                    <div>
-                                        <label className="text-sm font-medium text-white">
-                                            {field.label}
-                                        </label>
-                                        <p className="text-xs text-gray-500">{field.desc}</p>
-                                    </div>
-                                    <button
-                                        onClick={() => toggleShowKey(field.key)}
-                                        className="p-2 text-gray-400 hover:text-white transition-colors"
+                    {loadingKeys ? (
+                        <div className="flex items-center justify-center py-8">
+                            <RefreshCw className="w-5 h-5 text-gray-400 animate-spin" />
+                            <span className="ml-2 text-sm text-gray-400">Loading keys...</span>
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {API_KEY_FIELDS.map((field) => {
+                                const isConfigured = !!savedKeys[field.key];
+                                return (
+                                    <div
+                                        key={field.key}
+                                        className="bg-gray-900/50 border border-gray-800 rounded-xl p-4"
                                     >
-                                        {showKeys[field.key] ? (
-                                            <EyeOff className="w-4 h-4" />
-                                        ) : (
-                                            <Eye className="w-4 h-4" />
-                                        )}
-                                    </button>
-                                </div>
-                                <input
-                                    type={showKeys[field.key] ? "text" : "password"}
-                                    value={keys[field.key] || ""}
-                                    onChange={(e) =>
-                                        setKeys((prev) => ({ ...prev, [field.key]: e.target.value }))
-                                    }
-                                    placeholder="Enter key..."
-                                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 transition-colors font-mono"
-                                />
-                            </div>
-                        ))}
-                    </div>
+                                        <div className="flex items-center justify-between mb-2">
+                                            <div className="flex items-center gap-2">
+                                                <div className={cn(
+                                                    "w-2 h-2 rounded-full",
+                                                    isConfigured ? "bg-green-500" : "bg-gray-600"
+                                                )} />
+                                                <div>
+                                                    <label className="text-sm font-medium text-white">
+                                                        {field.label}
+                                                    </label>
+                                                    <p className="text-xs text-gray-500">{field.desc}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                {isConfigured && !keys[field.key] && (
+                                                    <span className="text-xs font-mono text-green-400 bg-green-500/10 px-2 py-1 rounded">
+                                                        {savedKeys[field.key]}
+                                                    </span>
+                                                )}
+                                                <button
+                                                    onClick={() => toggleShowKey(field.key)}
+                                                    className="p-2 text-gray-400 hover:text-white transition-colors"
+                                                >
+                                                    {showKeys[field.key] ? (
+                                                        <EyeOff className="w-4 h-4" />
+                                                    ) : (
+                                                        <Eye className="w-4 h-4" />
+                                                    )}
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <input
+                                            type={showKeys[field.key] ? "text" : "password"}
+                                            value={keys[field.key] || ""}
+                                            onChange={(e) =>
+                                                setKeys((prev) => ({ ...prev, [field.key]: e.target.value }))
+                                            }
+                                            placeholder={isConfigured ? "Enter new value to update..." : "Enter key..."}
+                                            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 transition-colors font-mono"
+                                        />
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
 
                     <button
-                        onClick={async () => {
-                            setSaving(true);
-                            // Phase 11 will wire to actual API
-                            setTimeout(() => setSaving(false), 1000);
-                        }}
-                        disabled={saving}
+                        onClick={handleSaveKeys}
+                        disabled={saving || Object.values(keys).every((v) => !v.trim())}
                         className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-violet-600 hover:bg-violet-500 text-white transition-colors disabled:opacity-50"
                     >
                         {saving ? (
