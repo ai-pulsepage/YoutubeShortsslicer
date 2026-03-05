@@ -14,17 +14,18 @@ RUN pip3 install --break-system-packages yt-dlp
 
 WORKDIR /app
 
-# Copy package files first for better caching
+# Copy package files and prisma schema first for better caching
 COPY package.json package-lock.json ./
+COPY prisma ./prisma/
 
-# Install dependencies
+# Install dependencies (prisma generate runs as postinstall)
 RUN npm ci --omit=dev
 
 # Copy the rest of the application
 COPY . .
 
-# Generate Prisma client and build Next.js
-RUN npx prisma generate && npm run build
+# Build Next.js
+RUN npm run build
 
 # Expose the port
 EXPOSE 3000
