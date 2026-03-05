@@ -13,6 +13,7 @@ import {
     Save,
     RefreshCw,
     Shield,
+    Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -240,12 +241,7 @@ export default function AdminPage() {
                             <InfoRow label="Database" value="Railway PostgreSQL" />
                         </div>
                     </div>
-                    <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-5">
-                        <h3 className="text-sm font-semibold text-white mb-3">Worker Status</h3>
-                        <p className="text-sm text-gray-400">
-                            BullMQ workers will be displayed here after Phase 3-4 setup.
-                        </p>
-                    </div>
+                    <QueueManager />
                 </div>
             )}
 
@@ -257,6 +253,109 @@ export default function AdminPage() {
                     <p className="text-gray-400 text-sm">
                         API usage, processing costs, and system-wide performance metrics.
                     </p>
+                </div>
+            )}
+        </div>
+    );
+}
+
+type QueueStat = { name: string; waiting: number; active: number; completed: number; failed: number; delayed: number };
+
+function QueueManager() {
+    const [queues, setQueues] = useState<QueueStat[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [clearing, setClearing] = useState<string | null>(null);
+
+    const fetchQueues = () => {
+        fetch("/api/admin/queues")
+            .then((r) => r.json())
+            .then(setQueues)
+            .catch(console.error)
+            .finally(() => setLoading(false));
+    };
+
+    useEffect(() => { fetchQueues(); }, []);
+
+    const clearQueue = async (queue: string, type: string) => {
+        setClearing(`${queue}-${type}`);
+        try {
+            await fetch("/api/admin/queues", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ queue, type }),
+            });
+            fetchQueues();
+        } finally {
+            setClearing(null);
+        }
+    };
+
+    const ICONS: Record<string, string> = {
+        "video-download": "📥",
+        transcription: "🎤",
+        segmentation: "🧠",
+        render: "🎬",
+    };
+
+    return (
+        <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-5">
+            <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-white">Worker Queues</h3>
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => clearQueue("all", "failed")}
+                        disabled={clearing !== null}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-red-500/15 text-red-400 hover:bg-red-500/25 transition-colors disabled:opacity-50"
+                    >
+                        <Trash2 className="w-3 h-3" />
+                        Clear All Failed
+                    </button>
+                    <button
+                        onClick={() => { setLoading(true); fetchQueues(); }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-800 text-gray-300 hover:text-white transition-colors"
+                    >
+                        <RefreshCw className={cn("w-3 h-3", loading && "animate-spin")} />
+                        Refresh
+                    </button>
+                </div>
+            </div>
+
+            {loading ? (
+                <div className="flex items-center justify-center py-6">
+                    <RefreshCw className="w-4 h-4 text-gray-500 animate-spin" />
+                    <span className="ml-2 text-sm text-gray-500">Loading queues...</span>
+                </div>
+            ) : (
+                <div className="space-y-3">
+                    {queues.map((q) => (
+                        <div key={q.name} className="flex items-center justify-between py-3 border-b border-gray-800 last:border-0">
+                            <div className="flex items-center gap-2">
+                                <span className="text-lg">{ICONS[q.name] || "📦"}</span>
+                                <div>
+                                    <p className="text-sm font-medium text-white">{q.name}</p>
+                                    <div className="flex gap-2 mt-1">
+                                        {q.active > 0 && <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400">{q.active} active</span>}
+                                        {q.waiting > 0 && <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-400">{q.waiting} waiting</span>}
+                                        {q.delayed > 0 && <span className="text-xs px-1.5 py-0.5 rounded bg-orange-500/15 text-orange-400">{q.delayed} delayed</span>}
+                                        {q.failed > 0 && <span className="text-xs px-1.5 py-0.5 rounded bg-red-500/15 text-red-400">{q.failed} failed</span>}
+                                        {q.completed > 0 && <span className="text-xs px-1.5 py-0.5 rounded bg-green-500/15 text-green-400">{q.completed} done</span>}
+                                        {q.active === 0 && q.waiting === 0 && q.failed === 0 && q.delayed === 0 && q.completed === 0 && (
+                                            <span className="text-xs text-gray-600">empty</span>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                            {q.failed > 0 && (
+                                <button
+                                    onClick={() => clearQueue(q.name, "failed")}
+                                    disabled={clearing !== null}
+                                    className="text-xs px-2.5 py-1.5 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/15 transition-colors disabled:opacity-50"
+                                >
+                                    {clearing === `${q.name}-failed` ? "Clearing..." : "Clear Failed"}
+                                </button>
+                            )}
+                        </div>
+                    ))}
                 </div>
             )}
         </div>
