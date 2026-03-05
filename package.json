@@ -9,6 +9,7 @@
     "dev": "next dev",
     "build": "prisma generate && next build",
     "start": "next start",
+    "worker": "tsx workers/index.ts",
     "postinstall": "prisma generate",
     "lint": "eslint"
   },
@@ -37,6 +38,7 @@
     "react-dom": "19.2.3",
     "recharts": "^3.7.0",
     "tailwind-merge": "^3.5.0",
+    "tsx": "^4.19.0",
     "wavesurfer.js": "^7.12.1",
     "zustand": "^5.0.11"
   },
