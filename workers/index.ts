@@ -58,7 +58,7 @@ const downloadWorker = new Worker(
 
             // Get metadata
             const metadataJson = execSync(
-                `yt-dlp --js-runtimes node --dump-json --no-download "${sourceUrl}"`,
+                `yt-dlp --js-runtimes node --remote-components ejs:github --dump-json --no-download "${sourceUrl}"`,
                 { encoding: "utf8", timeout: 30000 }
             );
             const metadata = JSON.parse(metadataJson);
@@ -67,7 +67,7 @@ const downloadWorker = new Worker(
             // Download video
             const outputTemplate = path.join(videoDir, "%(id)s.%(ext)s");
             execSync(
-                `yt-dlp --js-runtimes node -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4 -o "${outputTemplate}" "${sourceUrl}"`,
+                `yt-dlp --js-runtimes node --remote-components ejs:github -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4 -o "${outputTemplate}" "${sourceUrl}"`,
                 { encoding: "utf8", timeout: 600000, maxBuffer: 50 * 1024 * 1024 }
             );
             await job.updateProgress(50);
@@ -162,7 +162,9 @@ const downloadWorker = new Worker(
     },
     {
         connection: redis as any,
-        concurrency: 2,
+        concurrency: 1,
+        lockDuration: 600000,      // 10 minutes — long videos take time
+        stalledInterval: 300000,   // 5 minutes — don't mark as stalled too early
         settings: {
             backoffStrategy: (attemptsMade: number) => {
                 // Exponential backoff: 30s, 60s, 120s, 240s, 480s
