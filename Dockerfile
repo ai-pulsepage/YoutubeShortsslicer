@@ -18,14 +18,14 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY prisma ./prisma/
 
-# Install dependencies (prisma generate runs as postinstall)
-RUN npm ci --omit=dev
+# Install ALL dependencies (devDeps needed for build: tailwindcss, postcss, etc.)
+RUN npm ci
 
 # Copy the rest of the application
 COPY . .
 
-# Build Next.js
-RUN npm run build
+# Build Next.js, then prune dev dependencies to keep image small
+RUN npm run build && npm prune --omit=dev
 
 # Expose the port
 EXPOSE 3000
