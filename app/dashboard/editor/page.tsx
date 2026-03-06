@@ -540,12 +540,109 @@ export default function EditorPage() {
 
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label className="text-[10px] text-gray-500 uppercase">In</label>
-                                    <p className="text-sm text-white font-mono">{formatTime(selected.start)}</p>
+                                    <label className="text-[10px] text-gray-500 uppercase mb-1 block">In</label>
+                                    <div className="flex items-center gap-1">
+                                        <button
+                                            onClick={() => {
+                                                const newStart = Math.max(0, selected.start - 1);
+                                                setSegments(prev => prev.map(s => s.id === selected.id ? { ...s, start: newStart } : s));
+                                                seekTo(newStart);
+                                                fetch(`/api/videos/${videoId}/segment/${selected.id}`, {
+                                                    method: "PATCH",
+                                                    headers: { "Content-Type": "application/json" },
+                                                    body: JSON.stringify({ startTime: newStart }),
+                                                }).catch(() => { });
+                                            }}
+                                            className="w-6 h-6 rounded bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white flex items-center justify-center text-xs font-bold transition-colors"
+                                        >−</button>
+                                        <input
+                                            type="text"
+                                            value={formatTime(selected.start)}
+                                            onChange={(e) => {
+                                                const parts = e.target.value.split(":").map(Number);
+                                                let secs = 0;
+                                                if (parts.length === 3) secs = parts[0] * 3600 + parts[1] * 60 + parts[2];
+                                                else if (parts.length === 2) secs = parts[0] * 60 + parts[1];
+                                                else secs = parts[0] || 0;
+                                                if (isFinite(secs) && secs >= 0) {
+                                                    setSegments(prev => prev.map(s => s.id === selected.id ? { ...s, start: secs } : s));
+                                                }
+                                            }}
+                                            onBlur={() => {
+                                                seekTo(selected.start);
+                                                fetch(`/api/videos/${videoId}/segment/${selected.id}`, {
+                                                    method: "PATCH",
+                                                    headers: { "Content-Type": "application/json" },
+                                                    body: JSON.stringify({ startTime: selected.start }),
+                                                }).catch(() => { });
+                                            }}
+                                            className="w-16 text-center bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-xs text-white font-mono focus:border-violet-500 focus:outline-none"
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                const newStart = Math.min(selected.end - 1, selected.start + 1);
+                                                setSegments(prev => prev.map(s => s.id === selected.id ? { ...s, start: newStart } : s));
+                                                seekTo(newStart);
+                                                fetch(`/api/videos/${videoId}/segment/${selected.id}`, {
+                                                    method: "PATCH",
+                                                    headers: { "Content-Type": "application/json" },
+                                                    body: JSON.stringify({ startTime: newStart }),
+                                                }).catch(() => { });
+                                            }}
+                                            className="w-6 h-6 rounded bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white flex items-center justify-center text-xs font-bold transition-colors"
+                                        >+</button>
+                                    </div>
                                 </div>
                                 <div>
-                                    <label className="text-[10px] text-gray-500 uppercase">Out</label>
-                                    <p className="text-sm text-white font-mono">{formatTime(selected.end)}</p>
+                                    <label className="text-[10px] text-gray-500 uppercase mb-1 block">Out</label>
+                                    <div className="flex items-center gap-1">
+                                        <button
+                                            onClick={() => {
+                                                const newEnd = Math.max(selected.start + 1, selected.end - 1);
+                                                setSegments(prev => prev.map(s => s.id === selected.id ? { ...s, end: newEnd } : s));
+                                                fetch(`/api/videos/${videoId}/segment/${selected.id}`, {
+                                                    method: "PATCH",
+                                                    headers: { "Content-Type": "application/json" },
+                                                    body: JSON.stringify({ endTime: newEnd }),
+                                                }).catch(() => { });
+                                            }}
+                                            className="w-6 h-6 rounded bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white flex items-center justify-center text-xs font-bold transition-colors"
+                                        >−</button>
+                                        <input
+                                            type="text"
+                                            value={formatTime(selected.end)}
+                                            onChange={(e) => {
+                                                const parts = e.target.value.split(":").map(Number);
+                                                let secs = 0;
+                                                if (parts.length === 3) secs = parts[0] * 3600 + parts[1] * 60 + parts[2];
+                                                else if (parts.length === 2) secs = parts[0] * 60 + parts[1];
+                                                else secs = parts[0] || 0;
+                                                if (isFinite(secs) && secs > selected.start) {
+                                                    setSegments(prev => prev.map(s => s.id === selected.id ? { ...s, end: secs } : s));
+                                                }
+                                            }}
+                                            onBlur={() => {
+                                                fetch(`/api/videos/${videoId}/segment/${selected.id}`, {
+                                                    method: "PATCH",
+                                                    headers: { "Content-Type": "application/json" },
+                                                    body: JSON.stringify({ endTime: selected.end }),
+                                                }).catch(() => { });
+                                            }}
+                                            className="w-16 text-center bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-xs text-white font-mono focus:border-violet-500 focus:outline-none"
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                const newEnd = selected.end + 1;
+                                                setSegments(prev => prev.map(s => s.id === selected.id ? { ...s, end: newEnd } : s));
+                                                fetch(`/api/videos/${videoId}/segment/${selected.id}`, {
+                                                    method: "PATCH",
+                                                    headers: { "Content-Type": "application/json" },
+                                                    body: JSON.stringify({ endTime: newEnd }),
+                                                }).catch(() => { });
+                                            }}
+                                            className="w-6 h-6 rounded bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white flex items-center justify-center text-xs font-bold transition-colors"
+                                        >+</button>
+                                    </div>
                                 </div>
                                 <div>
                                     <label className="text-[10px] text-gray-500 uppercase">Duration</label>
