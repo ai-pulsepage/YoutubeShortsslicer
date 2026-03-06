@@ -153,24 +153,64 @@ const downloadWorker = new Worker(
             }
             await job.updateProgress(70);
 
-            // Download YouTube auto-captions (replaces whisper transcription)
+            // Transcription: Whisper (precise timestamps) → VTT fallback
             let transcriptId: string | null = null;
             if (autoTranscribe) {
                 try {
-                    console.log(`[Download] Fetching YouTube auto-captions...`);
-                    execSync(
-                        `yt-dlp ${ytdlpCookieFlag()} --js-runtimes node --write-auto-sub --sub-lang "en.*" --sub-format vtt --skip-download -o "${path.join(videoDir, "%(id)s")}" "${sourceUrl}"`,
-                        { encoding: "utf8", timeout: 60000 }
-                    );
+                    // Try Together.ai Whisper first for word-level timestamps
+                    const togetherKey = process.env.TOGETHER_API_KEY;
+                    if (togetherKey) {
+                        console.log(`[Download] Extracting audio for Whisper transcription...`);
+                        const audioPath = path.join(videoDir, "audio.mp3");
+                        execSync(
+                            `ffmpeg -i "${localVideoPath}" -vn -acodec libmp3lame -ar 16000 -ac 1 -b:a 64k "${audioPath}" -y`,
+                            { encoding: "utf8", timeout: 300000 }
+                        );
 
-                    // Find the downloaded VTT file
-                    const vttFiles = fs.readdirSync(videoDir).filter((f: string) => f.endsWith(".vtt"));
-                    if (vttFiles.length > 0) {
-                        const vttContent = fs.readFileSync(path.join(videoDir, vttFiles[0]), "utf8");
-                        const segments = parseVTT(vttContent);
-                        const fullText = segments.map((s: any) => s.text).join(" ");
+                        const audioStat = fs.statSync(audioPath);
+                        console.log(`[Download] Audio extracted: ${(audioStat.size / 1024 / 1024).toFixed(1)}MB`);
+
+                        // Upload audio to Together.ai Whisper API
+                        console.log(`[Download] Sending to Together.ai Whisper...`);
+                        const FormData = (await import("form-data")).default;
+                        const form = new FormData();
+                        form.append("file", fs.createReadStream(audioPath));
+                        form.append("model", "whisper-large-v3");
+                        form.append("response_format", "verbose_json");
+                        form.append("timestamp_granularities[]", "word");
+                        form.append("timestamp_granularities[]", "segment");
+
+                        const whisperRes = await fetch("https://api.together.xyz/v1/audio/transcriptions", {
+                            method: "POST",
+                            headers: {
+                                "Authorization": `Bearer ${togetherKey}`,
+                                ...form.getHeaders(),
+                            },
+                            body: form as any,
+                        });
+
+                        if (!whisperRes.ok) {
+                            const errText = await whisperRes.text();
+                            throw new Error(`Whisper API ${whisperRes.status}: ${errText}`);
+                        }
+
+                        const whisperData = await whisperRes.json() as any;
+                        console.log(`[Download] Whisper returned ${whisperData.segments?.length || 0} segments`);
+
+                        // Parse Whisper response into transcript segments with word-level timestamps
+                        const segments = (whisperData.segments || []).map((seg: any) => ({
+                            start: seg.start,
+                            end: seg.end,
+                            text: seg.text?.trim() || "",
+                            words: (seg.words || []).map((w: any) => ({
+                                start: w.start,
+                                end: w.end,
+                                text: w.word?.trim() || "",
+                            })),
+                        }));
 
                         if (segments.length > 0) {
+                            const fullText = segments.map((s: any) => s.text).join(" ");
                             const transcript = await prisma.transcript.create({
                                 data: {
                                     videoId,
@@ -179,15 +219,38 @@ const downloadWorker = new Worker(
                                 },
                             });
                             transcriptId = transcript.id;
-                            console.log(`[Download] Captions saved: ${segments.length} segments, ${fullText.length} chars`);
-                        } else {
-                            console.warn("[Download] VTT parsed but no segments found");
+                            console.log(`[Download] Whisper transcript saved: ${segments.length} segments (word-level timestamps)`);
                         }
-                    } else {
-                        console.warn("[Download] No auto-captions available for this video");
+
+                        // Cleanup audio
+                        if (fs.existsSync(audioPath)) fs.unlinkSync(audioPath);
+                    }
+
+                    // Fallback: YouTube VTT captions
+                    if (!transcriptId) {
+                        console.log(`[Download] Whisper unavailable, fetching YouTube auto-captions...`);
+                        execSync(
+                            `yt-dlp ${ytdlpCookieFlag()} --js-runtimes node --write-auto-sub --sub-lang "en.*" --sub-format vtt --skip-download -o "${path.join(videoDir, "%(id)s")}" "${sourceUrl}"`,
+                            { encoding: "utf8", timeout: 60000 }
+                        );
+
+                        const vttFiles = fs.readdirSync(videoDir).filter((f: string) => f.endsWith(".vtt"));
+                        if (vttFiles.length > 0) {
+                            const vttContent = fs.readFileSync(path.join(videoDir, vttFiles[0]), "utf8");
+                            const segments = parseVTT(vttContent);
+                            const fullText = segments.map((s: any) => s.text).join(" ");
+
+                            if (segments.length > 0) {
+                                const transcript = await prisma.transcript.create({
+                                    data: { videoId, content: fullText, segments: segments as any },
+                                });
+                                transcriptId = transcript.id;
+                                console.log(`[Download] VTT captions saved: ${segments.length} segments`);
+                            }
+                        }
                     }
                 } catch (captionErr: any) {
-                    console.warn(`[Download] Caption download failed: ${captionErr.message}`);
+                    console.warn(`[Download] Transcription failed: ${captionErr.message}`);
                 }
             }
             await job.updateProgress(85);
