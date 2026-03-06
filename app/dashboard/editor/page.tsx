@@ -64,10 +64,12 @@ export default function EditorPage() {
     const [showShortcuts, setShowShortcuts] = useState(false);
     const [segmenting, setSegmenting] = useState(false);
     const [rendering, setRendering] = useState(false);
+    const [videoDuration, setVideoDuration] = useState(0);
+    const [videos, setVideos] = useState<Video[]>([]);
     const videoRef = useRef<HTMLVideoElement>(null);
     const timelineRef = useRef<HTMLDivElement>(null);
 
-    const duration = video?.duration || 0;
+    const duration = videoDuration || video?.duration || 0;
     const selected = segments.find((s) => s.id === selectedSegment);
 
     // Fetch video + segments
@@ -79,7 +81,19 @@ export default function EditorPage() {
             fetch(`/api/videos/${videoId}/segment`).then((r) => r.json()),
         ]).then(([videoData, segmentData]) => {
             setVideo(videoData);
-            if (Array.isArray(segmentData)) setSegments(segmentData);
+            if (Array.isArray(segmentData)) {
+                // Map API fields (startTime/endTime) to component fields (start/end)
+                setSegments(segmentData.map((s: any) => ({
+                    id: s.id,
+                    start: s.startTime ?? s.start ?? 0,
+                    end: s.endTime ?? s.end ?? 0,
+                    title: s.title || "Untitled",
+                    description: s.description || null,
+                    aiScore: s.aiScore || null,
+                    status: s.status || "AI_SUGGESTED",
+                    voiceoverEnabled: s.voiceoverEnabled || false,
+                })));
+            }
             setLoading(false);
         });
     }, [videoId]);
@@ -138,10 +152,23 @@ export default function EditorPage() {
         video.addEventListener("play", onPlay);
         video.addEventListener("pause", onPause);
 
+        // Get actual duration from loaded video
+        const onMeta = () => {
+            if (video.duration && isFinite(video.duration)) {
+                setVideoDuration(video.duration);
+            }
+        };
+        video.addEventListener("loadedmetadata", onMeta);
+        // If already loaded
+        if (video.duration && isFinite(video.duration)) {
+            setVideoDuration(video.duration);
+        }
+
         return () => {
             video.removeEventListener("timeupdate", onTimeUpdate);
             video.removeEventListener("play", onPlay);
             video.removeEventListener("pause", onPause);
+            video.removeEventListener("loadedmetadata", onMeta);
         };
     }, []);
 
@@ -160,7 +187,7 @@ export default function EditorPage() {
     };
 
     const seekTo = (time: number) => {
-        if (!videoRef.current) return;
+        if (!videoRef.current || !isFinite(time)) return;
         videoRef.current.currentTime = time;
         setCurrentTime(time);
     };
@@ -225,7 +252,18 @@ export default function EditorPage() {
             const data = await res.json();
             if (res.ok) {
                 const segs = await fetch(`/api/videos/${videoId}/segment`).then((r) => r.json());
-                if (Array.isArray(segs)) setSegments(segs);
+                if (Array.isArray(segs)) {
+                    setSegments(segs.map((s: any) => ({
+                        id: s.id,
+                        start: s.startTime ?? s.start ?? 0,
+                        end: s.endTime ?? s.end ?? 0,
+                        title: s.title || "Untitled",
+                        description: s.description || null,
+                        aiScore: s.aiScore || null,
+                        status: s.status || "AI_SUGGESTED",
+                        voiceoverEnabled: s.voiceoverEnabled || false,
+                    })));
+                }
             } else {
                 alert(data.error || "Segmentation failed");
             }
@@ -274,6 +312,7 @@ export default function EditorPage() {
     };
 
     const formatTime = (secs: number) => {
+        if (!isFinite(secs) || isNaN(secs)) return "0:00";
         const m = Math.floor(secs / 60);
         const s = Math.floor(secs % 60);
         const ms = Math.floor((secs % 1) * 10);
@@ -287,17 +326,61 @@ export default function EditorPage() {
         return "text-red-400";
     };
 
+    // Fetch available videos when no videoId
+    useEffect(() => {
+        if (videoId) return;
+        fetch("/api/videos")
+            .then((r) => r.json())
+            .then((data) => {
+                if (Array.isArray(data)) setVideos(data);
+                setLoading(false);
+            })
+            .catch(() => setLoading(false));
+    }, [videoId]);
+
     if (!videoId) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-                <Scissors className="w-16 h-16 text-violet-400/30 mb-4" />
-                <h1 className="text-2xl font-bold text-white mb-2">Segment Editor</h1>
-                <p className="text-gray-400 text-sm mb-6">
-                    Select a video from your library to start editing
-                </p>
-                <a href="/dashboard/library" className="px-5 py-2.5 rounded-xl text-sm font-medium bg-violet-600 hover:bg-violet-500 text-white transition-colors">
-                    Open Library
-                </a>
+            <div className="max-w-3xl mx-auto space-y-6">
+                <div>
+                    <h1 className="text-2xl font-bold text-white">Segment Editor</h1>
+                    <p className="text-gray-400 text-sm mt-1">
+                        Select a video to start editing segments
+                    </p>
+                </div>
+                {loading ? (
+                    <div className="flex justify-center py-16">
+                        <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
+                    </div>
+                ) : videos.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-16 text-center">
+                        <Scissors className="w-16 h-16 text-violet-400/30 mb-4" />
+                        <p className="text-gray-400 text-sm mb-6">
+                            No videos yet. Ingest a video first.
+                        </p>
+                        <a href="/dashboard/ingest" className="px-5 py-2.5 rounded-xl text-sm font-medium bg-violet-600 hover:bg-violet-500 text-white transition-colors">
+                            Ingest Video
+                        </a>
+                    </div>
+                ) : (
+                    <div className="space-y-2">
+                        {videos.map((v: any) => (
+                            <a
+                                key={v.id}
+                                href={`/dashboard/editor?video=${v.id}`}
+                                className="flex items-center gap-4 p-4 bg-gray-900/50 border border-gray-800 rounded-xl hover:border-violet-500/30 transition-colors"
+                            >
+                                {v.thumbnail && (
+                                    <img src={v.thumbnail} alt="" className="w-24 h-14 object-cover rounded-lg" />
+                                )}
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm text-white font-medium truncate">{v.title || "Untitled"}</p>
+                                    <p className="text-xs text-gray-500 mt-0.5">{v.platform} · {v.status}</p>
+                                </div>
+                                <ArrowLeft className="w-4 h-4 text-gray-500 rotate-180" />
+                            </a>
+                        ))}
+                    </div>
+                )}
             </div>
         );
     }
