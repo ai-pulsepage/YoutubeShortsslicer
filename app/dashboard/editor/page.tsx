@@ -25,6 +25,7 @@ import {
     Loader2,
     RefreshCw,
     ArrowLeft,
+    Film,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -62,6 +63,7 @@ export default function EditorPage() {
     const [loading, setLoading] = useState(true);
     const [showShortcuts, setShowShortcuts] = useState(false);
     const [segmenting, setSegmenting] = useState(false);
+    const [rendering, setRendering] = useState(false);
     const videoRef = useRef<HTMLVideoElement>(null);
     const timelineRef = useRef<HTMLDivElement>(null);
 
@@ -234,6 +236,43 @@ export default function EditorPage() {
         }
     };
 
+    const approveAll = async () => {
+        const updated = segments.map((s) => ({ ...s, status: "APPROVED" }));
+        setSegments(updated);
+        for (const seg of updated) {
+            try {
+                await fetch(`/api/videos/${videoId}/segment/${seg.id}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ status: "APPROVED" }),
+                });
+            } catch { }
+        }
+    };
+
+    const renderApproved = async () => {
+        if (!videoId) return;
+        const approved = segments.filter((s) => s.status === "APPROVED");
+        if (approved.length === 0) {
+            alert("No approved segments to render. Approve segments first.");
+            return;
+        }
+        setRendering(true);
+        try {
+            const res = await fetch(`/api/videos/${videoId}/render`, { method: "POST" });
+            const data = await res.json();
+            if (res.ok) {
+                alert(`Queued ${data.queued} segment(s) for rendering!`);
+            } else {
+                alert(data.error || "Failed to queue rendering");
+            }
+        } catch (err: any) {
+            alert("Render request failed: " + err.message);
+        } finally {
+            setRendering(false);
+        }
+    };
+
     const formatTime = (secs: number) => {
         const m = Math.floor(secs / 60);
         const s = Math.floor(secs % 60);
@@ -334,7 +373,7 @@ export default function EditorPage() {
             <div className="flex gap-4 px-6">
                 {/* Video */}
                 <div className="flex-1">
-                    <div className="aspect-video bg-black rounded-xl overflow-hidden relative">
+                    <div className="aspect-video bg-black rounded-xl overflow-hidden relative" onClick={togglePlay} style={{ cursor: "pointer" }}>
                         <video
                             ref={videoRef}
                             className="w-full h-full object-contain"
@@ -522,6 +561,7 @@ export default function EditorPage() {
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     setSelectedSegment(seg.id);
+                                    seekTo(seg.start);
                                 }}
                                 className={cn(
                                     "absolute top-2 bottom-2 rounded-lg border cursor-pointer transition-all group",
@@ -584,9 +624,29 @@ export default function EditorPage() {
 
             {/* Segment List */}
             <div className="px-6 pb-6">
-                <h3 className="text-sm font-semibold text-white mb-3">
-                    All Segments ({segments.length})
-                </h3>
+                <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-white">
+                        All Segments ({segments.length})
+                    </h3>
+                    {segments.length > 0 && (
+                        <div className="flex gap-2">
+                            <button
+                                onClick={approveAll}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-medium bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+                            >
+                                <Check className="w-3 h-3" /> Approve All
+                            </button>
+                            <button
+                                onClick={renderApproved}
+                                disabled={rendering || segments.filter(s => s.status === "APPROVED").length === 0}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-medium bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 disabled:opacity-40 transition-colors"
+                            >
+                                {rendering ? <Loader2 className="w-3 h-3 animate-spin" /> : <Film className="w-3 h-3" />}
+                                Render {segments.filter(s => s.status === "APPROVED").length} Approved
+                            </button>
+                        </div>
+                    )}
+                </div>
                 <div className="space-y-1.5">
                     {segments
                         .sort((a, b) => a.start - b.start)
@@ -604,24 +664,27 @@ export default function EditorPage() {
                                         : "bg-gray-900/30 hover:bg-gray-800/50 border border-transparent"
                                 )}
                             >
+                                {/* Inline approve/reject */}
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        updateSegmentStatus(seg.id, seg.status === "APPROVED" ? "AI_SUGGESTED" : "APPROVED");
+                                    }}
+                                    className={cn(
+                                        "w-5 h-5 rounded-md border flex items-center justify-center flex-shrink-0 transition-colors",
+                                        seg.status === "APPROVED"
+                                            ? "bg-emerald-500 border-emerald-500 text-white"
+                                            : "border-gray-600 hover:border-emerald-500 text-transparent hover:text-emerald-400"
+                                    )}
+                                >
+                                    <Check className="w-3 h-3" />
+                                </button>
                                 <span className="text-xs text-gray-500 font-mono w-20 flex-shrink-0">
                                     {formatTime(seg.start)} → {formatTime(seg.end)}
                                 </span>
                                 <span className="text-sm text-white flex-1 truncate">{seg.title}</span>
-                                <span
-                                    className={cn(
-                                        "text-[10px] font-medium px-2 py-0.5 rounded-full",
-                                        seg.status === "APPROVED"
-                                            ? "bg-emerald-500/15 text-emerald-400"
-                                            : seg.status === "REJECTED"
-                                                ? "bg-red-500/15 text-red-400"
-                                                : "bg-gray-800 text-gray-400"
-                                    )}
-                                >
-                                    {seg.status}
-                                </span>
                                 <span className={cn("text-xs font-bold", scoreColor(seg.aiScore))}>
-                                    {seg.aiScore || "—"}
+                                    {seg.aiScore || "—"}/10
                                 </span>
                                 {seg.voiceoverEnabled && <Mic className="w-3 h-3 text-violet-400" />}
                             </div>

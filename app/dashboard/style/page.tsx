@@ -107,6 +107,29 @@ export default function StylePage() {
     const [savedPresets, setSavedPresets] = useState<Preset[]>([]);
     const [previewText, setPreviewText] = useState("The world's most incredible creatures");
 
+    // Load saved presets from localStorage
+    useEffect(() => {
+        try {
+            const saved = localStorage.getItem("subtitle-presets");
+            if (saved) setSavedPresets(JSON.parse(saved));
+        } catch { }
+    }, []);
+
+    const savePreset = () => {
+        const name = prompt("Preset name:", active.name || "My Preset");
+        if (!name) return;
+        const preset: Preset = { ...active, name, id: `custom-${Date.now()}` };
+        const updated = [...savedPresets, preset];
+        setSavedPresets(updated);
+        localStorage.setItem("subtitle-presets", JSON.stringify(updated));
+    };
+
+    const deletePreset = (id: string) => {
+        const updated = savedPresets.filter((p) => p.id !== id);
+        setSavedPresets(updated);
+        localStorage.setItem("subtitle-presets", JSON.stringify(updated));
+    };
+
     return (
         <div className="space-y-6">
             <div>
@@ -261,12 +284,58 @@ export default function StylePage() {
                     </div>
 
                     {/* Save */}
-                    <button className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium bg-violet-600 hover:bg-violet-500 text-white transition-colors">
+                    <button
+                        onClick={savePreset}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium bg-violet-600 hover:bg-violet-500 text-white transition-colors"
+                    >
                         <Save className="w-4 h-4" />
                         Save as Preset
                     </button>
                 </div>
             </div>
+
+            {/* Saved Presets */}
+            {savedPresets.length > 0 && (
+                <div>
+                    <h2 className="text-sm font-semibold text-white mb-3">Your Presets</h2>
+                    <div className="grid grid-cols-5 gap-3">
+                        {savedPresets.map((preset) => (
+                            <div
+                                key={preset.id}
+                                className={cn(
+                                    "p-3 rounded-xl border text-left transition-all relative group cursor-pointer",
+                                    active.name === preset.name
+                                        ? "bg-violet-500/10 border-violet-500/30"
+                                        : "bg-gray-900/50 border-gray-800 hover:border-gray-700"
+                                )}
+                                onClick={() => setActive(preset)}
+                            >
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        deletePreset(preset.id!);
+                                    }}
+                                    className="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                    <Trash2 className="w-2.5 h-2.5" />
+                                </button>
+                                <p
+                                    className="text-lg font-bold mb-1 truncate"
+                                    style={{
+                                        fontFamily: preset.font,
+                                        color: preset.color,
+                                        textShadow: `1px 1px 2px ${preset.shadow}`,
+                                    }}
+                                >
+                                    Aa
+                                </p>
+                                <p className="text-[10px] text-gray-400 truncate">{preset.name}</p>
+                                <p className="text-[9px] text-gray-600">{preset.font} · {preset.size}px</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* Template Presets */}
             <div>

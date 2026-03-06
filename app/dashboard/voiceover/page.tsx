@@ -122,7 +122,7 @@ export default function VoiceoverPage() {
                                 key={voice.id}
                                 onClick={() => setSelectedVoice(voice.id)}
                                 className={cn(
-                                    "p-3 rounded-xl border text-left transition-all",
+                                    "p-3 rounded-xl border text-left transition-all relative group",
                                     selectedVoice === voice.id
                                         ? "bg-violet-500/10 border-violet-500/30"
                                         : "bg-gray-900/50 border-gray-800 hover:border-gray-700"
@@ -130,7 +130,23 @@ export default function VoiceoverPage() {
                             >
                                 <div className="flex items-center justify-between mb-1">
                                     <span className="text-sm font-medium text-white">{voice.name}</span>
-                                    <span className="text-[10px] text-gray-500">{voice.gender}</span>
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="text-[10px] text-gray-500">{voice.gender}</span>
+                                        <span
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSelectedVoice(voice.id);
+                                                // Small delay so state updates before generatePreview reads it
+                                                setTimeout(() => {
+                                                    const btn = document.getElementById("generate-preview-btn");
+                                                    if (btn) btn.click();
+                                                }, 100);
+                                            }}
+                                            className="w-5 h-5 rounded-full bg-violet-500/20 hover:bg-violet-500/40 flex items-center justify-center cursor-pointer transition-colors"
+                                        >
+                                            <Play className="w-2.5 h-2.5 text-violet-400" />
+                                        </span>
+                                    </div>
                                 </div>
                                 <p className="text-xs text-gray-400">{voice.description}</p>
                                 <p className="text-[10px] text-gray-600 mt-0.5">{voice.accent}</p>
@@ -204,6 +220,7 @@ export default function VoiceoverPage() {
 
                         <div className="flex gap-2">
                             <button
+                                id="generate-preview-btn"
                                 onClick={generatePreview}
                                 disabled={generating || !previewText.trim()}
                                 className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-50 transition-colors"
