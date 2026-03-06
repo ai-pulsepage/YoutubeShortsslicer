@@ -42,6 +42,21 @@ export async function POST(
         data: { status: "SEGMENTING" },
     });
 
+    // Clear existing segments and their rendered shorts
+    const existingSegments = await prisma.segment.findMany({
+        where: { videoId: id },
+        select: { id: true },
+    });
+    if (existingSegments.length > 0) {
+        await prisma.shortVideo.deleteMany({
+            where: { segmentId: { in: existingSegments.map((s) => s.id) } },
+        });
+        await prisma.segment.deleteMany({
+            where: { videoId: id },
+        });
+        console.log(`[Segment API] Cleared ${existingSegments.length} old segments`);
+    }
+
     try {
         const segments = transcript.segments as any[];
         const suggestions = await segmentVideo(segments, video.duration || 0);

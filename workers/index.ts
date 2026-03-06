@@ -415,9 +415,11 @@ const renderWorker = new Worker(
             await uploadFileToR2(outputPath, r2Key, "video/mp4");
             await job.updateProgress(95);
 
-            // Step 6: Save to DB
-            await prisma.shortVideo.create({
-                data: { segmentId, storagePath: r2Key, duration: Math.round(duration), status: "RENDERED" },
+            // Step 6: Save to DB (upsert to handle re-renders)
+            await prisma.shortVideo.upsert({
+                where: { segmentId },
+                create: { segmentId, storagePath: r2Key, duration: Math.round(duration), status: "RENDERED" },
+                update: { storagePath: r2Key, duration: Math.round(duration), status: "RENDERED" },
             });
             await prisma.segment.update({
                 where: { id: segmentId },

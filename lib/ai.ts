@@ -22,25 +22,34 @@ interface TranscriptSegment {
     text: string;
 }
 
-const SEGMENTATION_PROMPT = `You are a viral short-form content expert. Analyze this video transcript and identify the BEST segments that would make compelling YouTube Shorts (under 60 seconds each).
+const SEGMENTATION_PROMPT = `You are a viral short-form content expert. Analyze this video transcript and identify COMPLETE STORIES or SCENES that would make compelling YouTube Shorts.
 
-For each segment, look for:
-1. **Self-contained narrative arcs** — mini-stories with a beginning, middle, and end
-2. **Escalation moments** — tension building to a climax or reveal
-3. **Emotional hooks** — surprising, funny, shocking, or deeply engaging moments
-4. **Topic shifts** — natural breakpoints where a new compelling topic begins
+YOUR PRIMARY OBJECTIVE: Find every distinct story, scene, or topic in the video. Each story must be captured in full — never cut a story short.
 
-CRITICAL RULES:
-- Each segment MUST be under 60 seconds
-- Each segment should be 15-58 seconds (sweet spot: 30-50s)
-- Segments must start and end at natural speech boundaries
-- Never cut mid-sentence or mid-thought
-- Prefer segments with strong opening hooks (first 3 seconds matter most)
-- Start and end timestamps must be ABSOLUTE timestamps in SECONDS from the beginning of the FULL video
-- The transcript timestamps tell you the exact position in the full video — use them directly
+STORY RULES:
+1. **Capture the COMPLETE story** — from its natural beginning to its natural end
+2. **If a story is ≤60 seconds** → create ONE segment covering it entirely
+3. **If a story is >60 seconds** → split it into sequential parts:
+   - "Story Title (Part 1 of 2)" covering seconds 0-58
+   - "Story Title (Part 2 of 2)" covering seconds 58-115
+   - Parts should overlap by ~2 seconds for smooth transitions
+4. **Each part must be 15-60 seconds** (sweet spot: 30-55s)
+5. **NO OVERLAP between different stories** — each story's time range is exclusive
+6. **Cover the ENTIRE video** — identify stories throughout, not just the beginning
+
+IDENTIFICATION CRITERIA:
+- Self-contained narrative arcs (mini-stories with beginning, middle, end)
+- Topic shifts — when a new animal, scene, or subject begins
+- Emotional moments — surprising, dramatic, or heartwarming scenes
+- Natural speech boundaries — never cut mid-sentence
+
+TIMESTAMPS:
+- Start and end must be ABSOLUTE timestamps in SECONDS from the beginning of the FULL video
+- Use the transcript timestamps directly — they show the exact position
+- Each segment's start/end must align with natural speech boundaries
 
 Score each segment 1-10 on:
-- hookStrength: How attention-grabbing is the first 3 seconds?
+- hookStrength: How attention-grabbing is the opening?
 - emotionalArc: Does it have a satisfying emotional journey?
 - completeness: Is it a self-contained piece that makes sense alone?
 
@@ -49,11 +58,21 @@ Respond ONLY with valid JSON array. No markdown, no explanation:
   {
     "start": 125.0,
     "end": 170.5,
-    "title": "Short descriptive title",
-    "description": "Why this segment is compelling",
-    "hookStrength": 8,
-    "emotionalArc": 7,
+    "title": "Killer Whales Hunt Grey Whale Calf",
+    "description": "A pod of killer whales coordinates to separate a grey whale calf from its mother",
+    "hookStrength": 9,
+    "emotionalArc": 8,
     "completeness": 9,
+    "overallScore": 9
+  },
+  {
+    "start": 170.5,
+    "end": 225.0,
+    "title": "Killer Whales Hunt Grey Whale Calf (Part 2 of 2)",
+    "description": "The hunt reaches its climax as the pod closes in",
+    "hookStrength": 7,
+    "emotionalArc": 9,
+    "completeness": 8,
     "overallScore": 8
   }
 ]`;

@@ -246,6 +246,14 @@ export default function EditorPage() {
 
     const triggerSegmentation = async () => {
         if (!videoId) return;
+        if (segments.length > 0) {
+            const ok = confirm(
+                `Re-segment this video?\n\nThis will delete all ${segments.length} existing segments and any rendered shorts, then run AI segmentation from scratch across the full video.`
+            );
+            if (!ok) return;
+        }
+        setSegments([]);
+        setSelectedSegment(null);
         setSegmenting(true);
         try {
             const res = await fetch(`/api/videos/${videoId}/segment`, { method: "POST" });
@@ -647,6 +655,7 @@ export default function EditorPage() {
                                     e.stopPropagation();
                                     setSelectedSegment(seg.id);
                                     seekTo(seg.start);
+                                    videoRef.current?.play();
                                 }}
                                 className={cn(
                                     "absolute top-2 bottom-2 rounded-lg border cursor-pointer transition-all group",
@@ -741,6 +750,7 @@ export default function EditorPage() {
                                 onClick={() => {
                                     setSelectedSegment(seg.id);
                                     seekTo(seg.start);
+                                    videoRef.current?.play();
                                 }}
                                 className={cn(
                                     "flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors",
