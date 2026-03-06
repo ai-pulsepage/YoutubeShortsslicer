@@ -336,9 +336,8 @@ export default function EditorPage() {
                             className="w-full h-full object-contain"
                             muted={muted}
                             playsInline
-                        >
-                            {/* Source will come from R2 storage path */}
-                        </video>
+                            src={videoId ? `/api/videos/${videoId}/stream` : undefined}
+                        />
 
                         {/* Playback overlay */}
                         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 p-3">

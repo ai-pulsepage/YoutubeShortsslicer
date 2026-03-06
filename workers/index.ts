@@ -201,6 +201,16 @@ const transcriptionWorker = new Worker(
             data: { status: "READY" },
         });
 
+        // Chain to segmentation even without transcript
+        try {
+            const { Queue } = await import("bullmq");
+            const segQueue = new Queue(QUEUE_NAMES.SEGMENTATION, { connection: redis as any });
+            await segQueue.add(`segment-${videoId}`, { videoId, userId });
+            console.log("[Transcription] → Chained to segmentation queue");
+        } catch (chainErr: any) {
+            console.warn("[Transcription] Failed to chain to segmentation:", chainErr.message);
+        }
+
         await job.updateProgress(100);
         return { videoId, status: "transcription_skipped" };
     },

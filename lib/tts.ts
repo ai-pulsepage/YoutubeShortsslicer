@@ -13,7 +13,23 @@ export interface VoiceoverOptions {
  * Returns a Buffer of WAV audio
  */
 export async function generateVoiceover(options: VoiceoverOptions): Promise<Buffer> {
-    const apiKey = process.env.TOGETHER_API_KEY;
+    let apiKey = process.env.TOGETHER_API_KEY;
+
+    // Fallback: read from database if not in env
+    if (!apiKey) {
+        try {
+            const { prisma } = await import("@/lib/prisma");
+            const dbKey = await prisma.apiKey.findUnique({
+                where: { service: "together_api_key" },
+            });
+            if (dbKey?.key) {
+                apiKey = Buffer.from(dbKey.key, "base64").toString("utf8");
+            }
+        } catch (e) {
+            // DB not available
+        }
+    }
+
     if (!apiKey) throw new Error("TOGETHER_API_KEY not configured");
 
     const response = await fetch("https://api.together.xyz/v1/audio/speech", {
