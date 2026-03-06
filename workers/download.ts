@@ -39,6 +39,17 @@ if (!fs.existsSync(TEMP_DIR)) {
     fs.mkdirSync(TEMP_DIR, { recursive: true });
 }
 
+// Write YouTube cookies to temp file for authentication
+const COOKIES_PATH = path.join(TEMP_DIR, "cookies.txt");
+if (process.env.YOUTUBE_COOKIES) {
+    fs.writeFileSync(COOKIES_PATH, process.env.YOUTUBE_COOKIES);
+    console.log("  🍪 YouTube cookies loaded");
+}
+
+function ytdlpCookieFlag(): string {
+    return fs.existsSync(COOKIES_PATH) ? `--cookies "${COOKIES_PATH}"` : "";
+}
+
 async function processDownload(job: Job<VideoDownloadJobData>) {
     const { videoId, userId, sourceUrl, platform } = job.data;
     const videoDir = path.join(TEMP_DIR, videoId);
@@ -54,7 +65,7 @@ async function processDownload(job: Job<VideoDownloadJobData>) {
 
         // Step 1: Get metadata
         const metadataJson = execSync(
-            `yt-dlp --js-runtimes node --dump-json --no-download "${sourceUrl}"`,
+            `yt-dlp ${ytdlpCookieFlag()} --js-runtimes node --dump-json --no-download "${sourceUrl}"`,
             { encoding: "utf8", timeout: 30000 }
         );
         const metadata = JSON.parse(metadataJson);
@@ -63,7 +74,7 @@ async function processDownload(job: Job<VideoDownloadJobData>) {
         // Step 2: Download video (best quality, mp4 preferred)
         const outputTemplate = path.join(videoDir, "%(id)s.%(ext)s");
         execSync(
-            `yt-dlp --js-runtimes node -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4 -o "${outputTemplate}" "${sourceUrl}"`,
+            `yt-dlp ${ytdlpCookieFlag()} --js-runtimes node -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4 -o "${outputTemplate}" "${sourceUrl}"`,
             {
                 encoding: "utf8",
                 timeout: 600000, // 10 minute timeout

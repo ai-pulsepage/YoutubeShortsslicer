@@ -21,8 +21,20 @@ export async function POST(req: Request) {
     try {
         // Use yt-dlp to get metadata without downloading
         const { execSync } = require("child_process");
+        const fs = require("fs");
+        const os = require("os");
+        const path = require("path");
+
+        // Write cookies file if available
+        let cookieFlag = "";
+        if (process.env.YOUTUBE_COOKIES) {
+            const cookiePath = path.join(os.tmpdir(), "yt-cookies.txt");
+            fs.writeFileSync(cookiePath, process.env.YOUTUBE_COOKIES);
+            cookieFlag = `--cookies "${cookiePath}"`;
+        }
+
         const result = execSync(
-            `yt-dlp --dump-json --no-download "${url.trim()}"`,
+            `yt-dlp ${cookieFlag} --dump-json --no-download "${url.trim()}"`,
             {
                 encoding: "utf8",
                 timeout: 30000,

@@ -44,6 +44,17 @@ import os from "os";
 const TEMP_DIR = path.join(os.tmpdir(), "yt-shorts-slicer");
 if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 
+// Write YouTube cookies to temp file for authentication
+const COOKIES_PATH = path.join(TEMP_DIR, "cookies.txt");
+if (process.env.YOUTUBE_COOKIES) {
+    fs.writeFileSync(COOKIES_PATH, process.env.YOUTUBE_COOKIES);
+    console.log("  🍪 YouTube cookies loaded");
+}
+
+function ytdlpCookieFlag(): string {
+    return fs.existsSync(COOKIES_PATH) ? `--cookies "${COOKIES_PATH}"` : "";
+}
+
 const downloadWorker = new Worker(
     QUEUE_NAMES.VIDEO_DOWNLOAD,
     async (job: Job) => {
@@ -58,7 +69,7 @@ const downloadWorker = new Worker(
 
             // Get metadata
             const metadataJson = execSync(
-                `yt-dlp --js-runtimes node --remote-components ejs:github --dump-json --no-download "${sourceUrl}"`,
+                `yt-dlp ${ytdlpCookieFlag()} --js-runtimes node --remote-components ejs:github --dump-json --no-download "${sourceUrl}"`,
                 { encoding: "utf8", timeout: 30000 }
             );
             const metadata = JSON.parse(metadataJson);
@@ -67,7 +78,7 @@ const downloadWorker = new Worker(
             // Download video
             const outputTemplate = path.join(videoDir, "%(id)s.%(ext)s");
             execSync(
-                `yt-dlp --js-runtimes node --remote-components ejs:github -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4 -o "${outputTemplate}" "${sourceUrl}"`,
+                `yt-dlp ${ytdlpCookieFlag()} --js-runtimes node --remote-components ejs:github -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4 -o "${outputTemplate}" "${sourceUrl}"`,
                 { encoding: "utf8", timeout: 600000, maxBuffer: 50 * 1024 * 1024 }
             );
             await job.updateProgress(50);
