@@ -329,7 +329,7 @@ export default function IngestPage() {
                                     Auto-Transcribe
                                 </span>
                                 <p className="text-[10px] text-gray-500">
-                                    Extract audio and transcribe to text with word-level timestamps
+                                    Download YouTube captions and create a timestamped transcript
                                 </p>
                             </div>
                         </label>
@@ -352,7 +352,7 @@ export default function IngestPage() {
                                     Auto-Segment (AI)
                                 </span>
                                 <p className="text-[10px] text-gray-500">
-                                    AI analyzes transcript and suggests best 30–60s clips with scores
+                                    AI analyzes transcript and suggests best 30–60s clips with engagement scores
                                 </p>
                             </div>
                         </label>

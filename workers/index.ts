@@ -155,38 +155,40 @@ const downloadWorker = new Worker(
 
             // Download YouTube auto-captions (replaces whisper transcription)
             let transcriptId: string | null = null;
-            try {
-                console.log(`[Download] Fetching YouTube auto-captions...`);
-                execSync(
-                    `yt-dlp ${ytdlpCookieFlag()} --js-runtimes node --write-auto-sub --sub-lang "en.*" --sub-format vtt --skip-download -o "${path.join(videoDir, "%(id)s")}" "${sourceUrl}"`,
-                    { encoding: "utf8", timeout: 60000 }
-                );
+            if (autoTranscribe) {
+                try {
+                    console.log(`[Download] Fetching YouTube auto-captions...`);
+                    execSync(
+                        `yt-dlp ${ytdlpCookieFlag()} --js-runtimes node --write-auto-sub --sub-lang "en.*" --sub-format vtt --skip-download -o "${path.join(videoDir, "%(id)s")}" "${sourceUrl}"`,
+                        { encoding: "utf8", timeout: 60000 }
+                    );
 
-                // Find the downloaded VTT file
-                const vttFiles = fs.readdirSync(videoDir).filter((f: string) => f.endsWith(".vtt"));
-                if (vttFiles.length > 0) {
-                    const vttContent = fs.readFileSync(path.join(videoDir, vttFiles[0]), "utf8");
-                    const segments = parseVTT(vttContent);
-                    const fullText = segments.map((s: any) => s.text).join(" ");
+                    // Find the downloaded VTT file
+                    const vttFiles = fs.readdirSync(videoDir).filter((f: string) => f.endsWith(".vtt"));
+                    if (vttFiles.length > 0) {
+                        const vttContent = fs.readFileSync(path.join(videoDir, vttFiles[0]), "utf8");
+                        const segments = parseVTT(vttContent);
+                        const fullText = segments.map((s: any) => s.text).join(" ");
 
-                    if (segments.length > 0) {
-                        const transcript = await prisma.transcript.create({
-                            data: {
-                                videoId,
-                                content: fullText,
-                                segments: segments as any,
-                            },
-                        });
-                        transcriptId = transcript.id;
-                        console.log(`[Download] Captions saved: ${segments.length} segments, ${fullText.length} chars`);
+                        if (segments.length > 0) {
+                            const transcript = await prisma.transcript.create({
+                                data: {
+                                    videoId,
+                                    content: fullText,
+                                    segments: segments as any,
+                                },
+                            });
+                            transcriptId = transcript.id;
+                            console.log(`[Download] Captions saved: ${segments.length} segments, ${fullText.length} chars`);
+                        } else {
+                            console.warn("[Download] VTT parsed but no segments found");
+                        }
                     } else {
-                        console.warn("[Download] VTT parsed but no segments found");
+                        console.warn("[Download] No auto-captions available for this video");
                     }
-                } else {
-                    console.warn("[Download] No auto-captions available for this video");
+                } catch (captionErr: any) {
+                    console.warn(`[Download] Caption download failed: ${captionErr.message}`);
                 }
-            } catch (captionErr: any) {
-                console.warn(`[Download] Caption download failed: ${captionErr.message}`);
             }
             await job.updateProgress(85);
 
