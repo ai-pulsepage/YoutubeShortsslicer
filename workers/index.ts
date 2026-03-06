@@ -55,6 +55,58 @@ function ytdlpCookieFlag(): string {
     return fs.existsSync(COOKIES_PATH) ? `--cookies "${COOKIES_PATH}"` : "";
 }
 
+/**
+ * Parse WebVTT subtitle file into transcript segments
+ * YouTube auto-captions use VTT format with timestamps like:
+ * 00:00:01.000 --> 00:00:04.500
+ * Hello world this is a test
+ */
+function parseVTT(vttContent: string): { start: number; end: number; text: string }[] {
+    const segments: { start: number; end: number; text: string }[] = [];
+    const lines = vttContent.split("\n");
+    let i = 0;
+
+    while (i < lines.length) {
+        // Look for timestamp lines: 00:00:01.000 --> 00:00:04.500
+        const match = lines[i]?.match(/(\d{2}:\d{2}:\d{2}\.\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}\.\d{3})/);
+        if (match) {
+            const start = vttTimeToSeconds(match[1]);
+            const end = vttTimeToSeconds(match[2]);
+            i++;
+
+            // Collect text lines until blank line
+            const textLines: string[] = [];
+            while (i < lines.length && lines[i]?.trim() !== "") {
+                // Strip VTT tags like <c> and position metadata
+                const clean = lines[i].replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim();
+                if (clean) textLines.push(clean);
+                i++;
+            }
+
+            const text = textLines.join(" ").trim();
+            if (text && text.length > 0) {
+                // Deduplicate — YouTube auto-captions often repeat content
+                const lastSeg = segments[segments.length - 1];
+                if (!lastSeg || lastSeg.text !== text) {
+                    segments.push({ start, end, text });
+                }
+            }
+        } else {
+            i++;
+        }
+    }
+
+    return segments;
+}
+
+function vttTimeToSeconds(time: string): number {
+    const parts = time.split(":");
+    const hours = parseInt(parts[0], 10);
+    const minutes = parseInt(parts[1], 10);
+    const seconds = parseFloat(parts[2]);
+    return hours * 3600 + minutes * 60 + seconds;
+}
+
 const downloadWorker = new Worker(
     QUEUE_NAMES.VIDEO_DOWNLOAD,
     async (job: Job) => {
@@ -101,31 +153,44 @@ const downloadWorker = new Worker(
             }
             await job.updateProgress(70);
 
-            // Extract audio
-            let audioStoragePath: string | null = null;
-            const audioPath = path.join(videoDir, "audio.wav");
+            // Download YouTube auto-captions (replaces whisper transcription)
+            let transcriptId: string | null = null;
             try {
+                console.log(`[Download] Fetching YouTube auto-captions...`);
                 execSync(
-                    `ffmpeg -i "${localVideoPath}" -vn -acodec pcm_s16le -ar 16000 -ac 1 "${audioPath}" -y`,
-                    { timeout: 300000 }
+                    `yt-dlp ${ytdlpCookieFlag()} --js-runtimes node --write-auto-sub --sub-lang "en.*" --sub-format vtt --skip-download -o "${path.join(videoDir, "%(id)s")}" "${sourceUrl}"`,
+                    { encoding: "utf8", timeout: 60000 }
                 );
 
-                // Upload audio to R2
-                const audioR2Key = `videos/${userId}/${videoId}/audio.wav`;
-                try {
-                    const { uploadFileToR2 } = await import("../lib/storage");
-                    await uploadFileToR2(audioPath, audioR2Key, "audio/wav");
-                    audioStoragePath = audioR2Key;
-                } catch {
-                    audioStoragePath = audioPath;
+                // Find the downloaded VTT file
+                const vttFiles = fs.readdirSync(videoDir).filter((f: string) => f.endsWith(".vtt"));
+                if (vttFiles.length > 0) {
+                    const vttContent = fs.readFileSync(path.join(videoDir, vttFiles[0]), "utf8");
+                    const segments = parseVTT(vttContent);
+                    const fullText = segments.map((s: any) => s.text).join(" ");
+
+                    if (segments.length > 0) {
+                        const transcript = await prisma.transcript.create({
+                            data: {
+                                videoId,
+                                content: fullText,
+                                segments: segments as any,
+                            },
+                        });
+                        transcriptId = transcript.id;
+                        console.log(`[Download] Captions saved: ${segments.length} segments, ${fullText.length} chars`);
+                    } else {
+                        console.warn("[Download] VTT parsed but no segments found");
+                    }
+                } else {
+                    console.warn("[Download] No auto-captions available for this video");
                 }
-            } catch (ffErr) {
-                console.warn("[Download] Audio extraction failed, will retry later");
+            } catch (captionErr: any) {
+                console.warn(`[Download] Caption download failed: ${captionErr.message}`);
             }
             await job.updateProgress(85);
 
             // Update database
-            const newStatus = autoTranscribe ? "TRANSCRIBING" : "READY";
             await prisma.video.update({
                 where: { id: videoId },
                 data: {
@@ -133,26 +198,20 @@ const downloadWorker = new Worker(
                     thumbnail: metadata.thumbnail || null,
                     duration: Math.round(metadata.duration || 0),
                     storagePath,
-                    audioPath: audioStoragePath,
-                    status: newStatus,
+                    status: transcriptId ? "SEGMENTING" : "READY",
                 },
             });
 
-            // Chain: enqueue transcription if enabled
-            if (autoTranscribe && audioStoragePath) {
+            // Chain to segmentation if we have a transcript
+            if (transcriptId && autoSegment) {
                 const { Queue } = await import("bullmq");
-                const transcriptionQueue = new Queue(QUEUE_NAMES.TRANSCRIPTION, { connection: redis as any });
-                await transcriptionQueue.add(
-                    `transcribe-${videoId}`,
-                    {
-                        videoId,
-                        userId,
-                        audioStoragePath,
-                        autoSegment,  // pass through so transcription can chain into segmentation
-                    },
+                const segQueue = new Queue(QUEUE_NAMES.SEGMENTATION, { connection: redis as any });
+                await segQueue.add(
+                    `segment-${videoId}`,
+                    { videoId, userId, transcriptId },
                     { priority: 1 }
                 );
-                console.log(`[Download] → Chained to transcription queue`);
+                console.log(`[Download] → Chained to segmentation queue`);
             }
 
             console.log(`[Download] ✅ Complete: ${videoId}`);
@@ -160,7 +219,7 @@ const downloadWorker = new Worker(
 
             // Cleanup
             fs.rmSync(videoDir, { recursive: true, force: true });
-            return { videoId, storagePath, title: metadata.title };
+            return { videoId, storagePath, title: metadata.title, hasTranscript: !!transcriptId };
         } catch (error: any) {
             console.error(`[Download] ❌ Failed: ${videoId}`, error.message);
             await prisma.video.update({

@@ -224,7 +224,11 @@ export default function EditorPage() {
             if (res.ok) {
                 const segs = await fetch(`/api/videos/${videoId}/segment`).then((r) => r.json());
                 if (Array.isArray(segs)) setSegments(segs);
+            } else {
+                alert(data.error || "Segmentation failed");
             }
+        } catch (err: any) {
+            alert("Segmentation request failed: " + err.message);
         } finally {
             setSegmenting(false);
         }

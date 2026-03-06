@@ -63,9 +63,12 @@ export async function segmentWithDeepSeek(
     transcript: TranscriptSegment[],
     videoDuration: number
 ): Promise<SegmentSuggestion[]> {
-    const apiKey = process.env.DEEPSEEK_API_KEY;
+    let apiKey = process.env.DEEPSEEK_API_KEY;
     const apiBase = process.env.DEEPSEEK_API_BASE || "https://api.deepseek.com";
 
+    if (!apiKey) {
+        apiKey = await getDbApiKey("deepseek_api_key") || undefined;
+    }
     if (!apiKey) throw new Error("DEEPSEEK_API_KEY not configured");
 
     const transcriptText = formatTranscript(transcript);
@@ -111,7 +114,10 @@ export async function segmentWithGemini(
     transcript: TranscriptSegment[],
     videoDuration: number
 ): Promise<SegmentSuggestion[]> {
-    const apiKey = process.env.GEMINI_API_KEY;
+    let apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+        apiKey = await getDbApiKey("gemini_api_key") || undefined;
+    }
     if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
 
     const transcriptText = formatTranscript(transcript);
@@ -240,4 +246,16 @@ function parseSegments(
 
 function clamp(n: number, min: number, max: number): number {
     return Math.max(min, Math.min(max, n));
+}
+
+// Read API key from DB (admin panel saves keys here)
+async function getDbApiKey(service: string): Promise<string | null> {
+    try {
+        const { prisma } = await import("@/lib/prisma");
+        const dbKey = await prisma.apiKey.findUnique({ where: { service } });
+        if (dbKey?.key) {
+            return Buffer.from(dbKey.key, "base64").toString("utf8");
+        }
+    } catch { }
+    return null;
 }
