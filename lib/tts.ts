@@ -39,7 +39,7 @@ export async function generateVoiceover(options: VoiceoverOptions): Promise<Buff
             Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-            model: "kokoro",
+            model: "hexgrad/Kokoro-82M",
             input: options.text,
             voice: options.voiceId,
             speed: options.speed || 1.0,
