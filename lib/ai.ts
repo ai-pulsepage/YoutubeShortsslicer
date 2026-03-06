@@ -196,7 +196,7 @@ export async function segmentVideo(
     videoDuration: number
 ): Promise<SegmentSuggestion[]> {
     const CHUNK_DURATION = 600; // 10 minutes in seconds
-    const OVERLAP = 30; // 30 second overlap between chunks
+    const OVERLAP = 120; // 2 minute overlap — ensures stories spanning chunk boundaries are captured
 
     // For short videos (under 12 min), process in one shot
     if (videoDuration <= CHUNK_DURATION + OVERLAP * 2) {

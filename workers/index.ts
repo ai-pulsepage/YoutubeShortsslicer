@@ -309,34 +309,134 @@ const downloadWorker = new Worker(
     }
 );
 
-// ─── Transcription Worker ────────────────────────
+// ─── Transcription Worker (Whisper re-transcription) ─
 const transcriptionWorker = new Worker(
     QUEUE_NAMES.TRANSCRIPTION,
     async (job: Job) => {
-        const { videoId, userId, transcriptId } = job.data;
-        console.log(`[Transcription] Starting: video=${videoId}`);
-        // Passthrough — actual transcription requires faster-whisper (pip install faster-whisper)
-        // See workers/transcription.ts for the full implementation
-        console.warn("[Transcription] faster-whisper not installed — marking video as READY");
+        const { videoId, userId, storagePath, retranscribe } = job.data;
+        console.log(`[Transcription] Starting Whisper re-transcription: video=${videoId}`);
 
-        // Update video status to READY so it doesn't stay stuck at TRANSCRIBING
-        await prisma.video.update({
-            where: { id: videoId },
-            data: { status: "READY" },
-        });
-
-        // Chain to segmentation even without transcript
-        try {
-            const { Queue } = await import("bullmq");
-            const segQueue = new Queue(QUEUE_NAMES.SEGMENTATION, { connection: redis as any });
-            await segQueue.add(`segment-${videoId}`, { videoId, userId });
-            console.log("[Transcription] → Chained to segmentation queue");
-        } catch (chainErr: any) {
-            console.warn("[Transcription] Failed to chain to segmentation:", chainErr.message);
+        const togetherKey = process.env.TOGETHER_API_KEY;
+        if (!togetherKey) {
+            console.error("[Transcription] TOGETHER_API_KEY not set — skipping");
+            await prisma.video.update({ where: { id: videoId }, data: { status: "READY" } });
+            return { videoId, status: "skipped" };
         }
 
-        await job.updateProgress(100);
-        return { videoId, status: "transcription_skipped" };
+        const workDir = path.join(TEMP_DIR, "transcription", videoId);
+        fs.mkdirSync(workDir, { recursive: true });
+
+        try {
+            // Step 1: Download video from R2
+            const videoPath = path.join(workDir, "source.mp4");
+            const actualPath = storagePath || (await prisma.video.findUnique({ where: { id: videoId }, select: { storagePath: true } }))?.storagePath;
+            if (!actualPath) throw new Error("No video storage path found");
+
+            console.log(`[Transcription] Downloading from R2: ${actualPath}`);
+            const { S3Client: S3, GetObjectCommand: GetObj } = await import("@aws-sdk/client-s3");
+            const s3 = new S3({
+                region: "auto",
+                endpoint: process.env.R2_ENDPOINT || "",
+                credentials: {
+                    accessKeyId: process.env.R2_ACCESS_KEY_ID || "",
+                    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || "",
+                },
+            });
+            const resp = await s3.send(new GetObj({
+                Bucket: process.env.R2_BUCKET_NAME || "youtubeshorts",
+                Key: actualPath,
+            }));
+            const body = resp.Body as any;
+            const chunks: Buffer[] = [];
+            for await (const chunk of body) { chunks.push(Buffer.from(chunk)); }
+            fs.writeFileSync(videoPath, Buffer.concat(chunks));
+            console.log(`[Transcription] Downloaded: ${(fs.statSync(videoPath).size / 1024 / 1024).toFixed(1)}MB`);
+            await job.updateProgress(20);
+
+            // Step 2: Extract audio
+            const audioPath = path.join(workDir, "audio.mp3");
+            console.log(`[Transcription] Extracting audio...`);
+            execSync(
+                `ffmpeg -i "${videoPath}" -vn -acodec libmp3lame -ar 16000 -ac 1 -b:a 64k "${audioPath}" -y`,
+                { encoding: "utf8", timeout: 300000 }
+            );
+            console.log(`[Transcription] Audio: ${(fs.statSync(audioPath).size / 1024 / 1024).toFixed(1)}MB`);
+            await job.updateProgress(40);
+
+            // Step 3: Send to Together.ai Whisper
+            console.log(`[Transcription] Sending to Together.ai Whisper...`);
+            const FormData = (await import("form-data")).default;
+            const form = new FormData();
+            form.append("file", fs.createReadStream(audioPath));
+            form.append("model", "whisper-large-v3");
+            form.append("response_format", "verbose_json");
+            form.append("timestamp_granularities[]", "word");
+            form.append("timestamp_granularities[]", "segment");
+
+            const whisperRes = await fetch("https://api.together.xyz/v1/audio/transcriptions", {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${togetherKey}`,
+                    ...form.getHeaders(),
+                },
+                body: form as any,
+            });
+
+            if (!whisperRes.ok) {
+                const errText = await whisperRes.text();
+                throw new Error(`Whisper API ${whisperRes.status}: ${errText}`);
+            }
+
+            const whisperData = await whisperRes.json() as any;
+            console.log(`[Transcription] Whisper returned ${whisperData.segments?.length || 0} segments`);
+            await job.updateProgress(70);
+
+            // Step 4: Parse into transcript segments
+            const segments = (whisperData.segments || []).map((seg: any) => ({
+                start: seg.start,
+                end: seg.end,
+                text: seg.text?.trim() || "",
+                words: (seg.words || []).map((w: any) => ({
+                    start: w.start,
+                    end: w.end,
+                    text: w.word?.trim() || "",
+                })),
+            }));
+
+            if (segments.length === 0) throw new Error("Whisper returned no segments");
+
+            // Step 5: Delete old transcript, save new one
+            await prisma.transcript.deleteMany({ where: { videoId } });
+            const fullText = segments.map((s: any) => s.text).join(" ");
+            const transcript = await prisma.transcript.create({
+                data: { videoId, content: fullText, segments: segments as any },
+            });
+            console.log(`[Transcription] ✅ Whisper transcript saved: ${segments.length} segments (word-level)`);
+            await job.updateProgress(85);
+
+            // Step 6: Clear old segments + chain to segmentation
+            await prisma.video.update({ where: { id: videoId }, data: { status: "SEGMENTING" } });
+            const oldSegs = await prisma.segment.findMany({ where: { videoId }, select: { id: true } });
+            if (oldSegs.length > 0) {
+                await prisma.shortVideo.deleteMany({ where: { segmentId: { in: oldSegs.map(s => s.id) } } });
+                await prisma.segment.deleteMany({ where: { videoId } });
+                console.log(`[Transcription] Cleared ${oldSegs.length} old segments`);
+            }
+
+            const { Queue } = await import("bullmq");
+            const segQueue = new Queue(QUEUE_NAMES.SEGMENTATION, { connection: redis as any });
+            await segQueue.add(`segment-${videoId}`, { videoId, userId, transcriptId: transcript.id }, { priority: 1 });
+            console.log("[Transcription] → Chained to segmentation queue");
+
+            await job.updateProgress(100);
+            fs.rmSync(workDir, { recursive: true, force: true });
+            return { videoId, transcriptId: transcript.id, segmentCount: segments.length };
+        } catch (error: any) {
+            console.error(`[Transcription] ❌ Failed: ${videoId}`, error.message);
+            await prisma.video.update({ where: { id: videoId }, data: { status: "FAILED", errorMsg: error.message } });
+            if (fs.existsSync(workDir)) fs.rmSync(workDir, { recursive: true, force: true });
+            throw error;
+        }
     },
     { connection: redis as any, concurrency: 1 }
 );
