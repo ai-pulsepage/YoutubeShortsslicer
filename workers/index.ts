@@ -181,7 +181,14 @@ const transcriptionWorker = new Worker(
         const { videoId, userId, transcriptId } = job.data;
         console.log(`[Transcription] Starting: video=${videoId}`);
         // Placeholder — requires faster-whisper or Whisper API
-        console.warn("[Transcription] Service not yet configured");
+        console.warn("[Transcription] Service not yet configured — marking video as READY");
+
+        // Update video status to READY so it doesn't stay stuck at TRANSCRIBING
+        await prisma.video.update({
+            where: { id: videoId },
+            data: { status: "READY" },
+        });
+
         await job.updateProgress(100);
         return { videoId, status: "needs_configuration" };
     },
