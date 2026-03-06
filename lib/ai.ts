@@ -36,6 +36,8 @@ CRITICAL RULES:
 - Segments must start and end at natural speech boundaries
 - Never cut mid-sentence or mid-thought
 - Prefer segments with strong opening hooks (first 3 seconds matter most)
+- Start and end timestamps must be ABSOLUTE timestamps in SECONDS from the beginning of the FULL video
+- The transcript timestamps tell you the exact position in the full video — use them directly
 
 Score each segment 1-10 on:
 - hookStrength: How attention-grabbing is the first 3 seconds?
@@ -45,8 +47,8 @@ Score each segment 1-10 on:
 Respond ONLY with valid JSON array. No markdown, no explanation:
 [
   {
-    "start": 0.0,
-    "end": 45.5,
+    "start": 125.0,
+    "end": 170.5,
     "title": "Short descriptive title",
     "description": "Why this segment is compelling",
     "hookStrength": 8,
@@ -72,6 +74,9 @@ export async function segmentWithDeepSeek(
     if (!apiKey) throw new Error("DEEPSEEK_API_KEY not configured");
 
     const transcriptText = formatTranscript(transcript);
+    const timeRange = transcript.length > 0
+        ? `from ${formatTimeHMS(transcript[0].start)} to ${formatTimeHMS(transcript[transcript.length - 1].end)}`
+        : "";
 
     const response = await fetch(`${apiBase}/v1/chat/completions`, {
         method: "POST",
@@ -85,11 +90,11 @@ export async function segmentWithDeepSeek(
                 { role: "system", content: SEGMENTATION_PROMPT },
                 {
                     role: "user",
-                    content: `Video duration: ${videoDuration} seconds\n\nTranscript:\n${transcriptText}`,
+                    content: `Video total duration: ${videoDuration} seconds (${formatTimeHMS(videoDuration)})\nThis transcript chunk covers ${timeRange}.\n\nTranscript:\n${transcriptText}`,
                 },
             ],
             temperature: 0.3,
-            max_tokens: 4096,
+            max_tokens: 8192,
             response_format: { type: "json_object" },
         }),
     });
@@ -121,6 +126,9 @@ export async function segmentWithGemini(
     if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
 
     const transcriptText = formatTranscript(transcript);
+    const timeRange = transcript.length > 0
+        ? `from ${formatTimeHMS(transcript[0].start)} to ${formatTimeHMS(transcript[transcript.length - 1].end)}`
+        : "";
 
     const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
@@ -132,14 +140,14 @@ export async function segmentWithGemini(
                     {
                         parts: [
                             {
-                                text: `${SEGMENTATION_PROMPT}\n\nVideo duration: ${videoDuration} seconds\n\nTranscript:\n${transcriptText}`,
+                                text: `${SEGMENTATION_PROMPT}\n\nVideo total duration: ${videoDuration} seconds (${formatTimeHMS(videoDuration)})\nThis transcript chunk covers ${timeRange}.\n\nTranscript:\n${transcriptText}`,
                             },
                         ],
                     },
                 ],
                 generationConfig: {
                     temperature: 0.3,
-                    maxOutputTokens: 4096,
+                    maxOutputTokens: 8192,
                     responseMimeType: "application/json",
                 },
             }),
@@ -160,34 +168,114 @@ export async function segmentWithGemini(
 }
 
 /**
- * Unified segmentation: try DeepSeek, fallback to Gemini
+ * Unified segmentation with chunking for long videos.
+ * Splits transcript into ~10-minute windows, processes each independently,
+ * then merges and deduplicates results.
  */
 export async function segmentVideo(
     transcript: TranscriptSegment[],
     videoDuration: number
 ): Promise<SegmentSuggestion[]> {
-    try {
-        console.log("[AI] Attempting segmentation with DeepSeek V3.2...");
-        return await segmentWithDeepSeek(transcript, videoDuration);
-    } catch (deepSeekError: any) {
-        console.warn("[AI] DeepSeek failed, falling back to Gemini:", deepSeekError.message);
+    const CHUNK_DURATION = 600; // 10 minutes in seconds
+    const OVERLAP = 30; // 30 second overlap between chunks
+
+    // For short videos (under 12 min), process in one shot
+    if (videoDuration <= CHUNK_DURATION + OVERLAP * 2) {
+        return segmentChunk(transcript, videoDuration);
+    }
+
+    // Split transcript into chunks
+    const chunks: TranscriptSegment[][] = [];
+    let chunkStart = 0;
+
+    while (chunkStart < videoDuration) {
+        const chunkEnd = Math.min(chunkStart + CHUNK_DURATION + OVERLAP, videoDuration);
+        const chunkSegments = transcript.filter(
+            (s) => s.start >= chunkStart - OVERLAP && s.end <= chunkEnd + OVERLAP
+        );
+
+        if (chunkSegments.length > 0) {
+            chunks.push(chunkSegments);
+        }
+        chunkStart += CHUNK_DURATION;
+    }
+
+    console.log(`[AI] Video is ${formatTimeHMS(videoDuration)} long — splitting into ${chunks.length} chunks`);
+
+    // Process all chunks
+    const allSegments: SegmentSuggestion[] = [];
+
+    for (let i = 0; i < chunks.length; i++) {
+        console.log(`[AI] Processing chunk ${i + 1}/${chunks.length} (${formatTimeHMS(chunks[i][0].start)} → ${formatTimeHMS(chunks[i][chunks[i].length - 1].end)})`);
         try {
-            return await segmentWithGemini(transcript, videoDuration);
-        } catch (geminiError: any) {
-            console.error("[AI] Both providers failed:", geminiError.message);
-            throw new Error(
-                `Segmentation failed. DeepSeek: ${deepSeekError.message}. Gemini: ${geminiError.message}`
-            );
+            const chunkResults = await segmentChunk(chunks[i], videoDuration);
+            allSegments.push(...chunkResults);
+            console.log(`[AI] Chunk ${i + 1}: found ${chunkResults.length} segments`);
+        } catch (err: any) {
+            console.warn(`[AI] Chunk ${i + 1} failed: ${err.message}`);
         }
     }
+
+    // Deduplicate overlapping segments (from chunk overlap)
+    const deduped = deduplicateSegments(allSegments);
+    console.log(`[AI] Total: ${deduped.length} unique segments from ${allSegments.length} raw`);
+
+    return deduped.sort((a, b) => b.overallScore - a.overallScore);
+}
+
+/**
+ * Process a single chunk with DeepSeek → Gemini fallback
+ */
+async function segmentChunk(
+    transcript: TranscriptSegment[],
+    videoDuration: number
+): Promise<SegmentSuggestion[]> {
+    try {
+        return await segmentWithDeepSeek(transcript, videoDuration);
+    } catch (deepSeekError: any) {
+        console.warn("[AI] DeepSeek failed, trying Gemini:", deepSeekError.message);
+        return await segmentWithGemini(transcript, videoDuration);
+    }
+}
+
+/**
+ * Remove duplicate/overlapping segments from chunk boundaries
+ */
+function deduplicateSegments(segments: SegmentSuggestion[]): SegmentSuggestion[] {
+    const sorted = segments.sort((a, b) => a.start - b.start);
+    const result: SegmentSuggestion[] = [];
+
+    for (const seg of sorted) {
+        const isDuplicate = result.some((existing) => {
+            const overlapStart = Math.max(existing.start, seg.start);
+            const overlapEnd = Math.min(existing.end, seg.end);
+            const overlap = overlapEnd - overlapStart;
+            const segDuration = seg.end - seg.start;
+            // Consider duplicate if >60% overlap
+            return overlap > 0 && overlap / segDuration > 0.6;
+        });
+
+        if (!isDuplicate) {
+            result.push(seg);
+        }
+    }
+
+    return result;
 }
 
 // ─── Helpers ──────────────────────────────────────
 
 function formatTranscript(segments: TranscriptSegment[]): string {
     return segments
-        .map((s) => `[${formatTime(s.start)} → ${formatTime(s.end)}] ${s.text}`)
+        .map((s) => `[${formatTimeHMS(s.start)} → ${formatTimeHMS(s.end)}] ${s.text}`)
         .join("\n");
+}
+
+function formatTimeHMS(seconds: number): string {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 }
 
 function formatTime(seconds: number): string {
