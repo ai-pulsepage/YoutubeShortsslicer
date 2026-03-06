@@ -258,26 +258,43 @@ export default function EditorPage() {
         try {
             const res = await fetch(`/api/videos/${videoId}/segment`, { method: "POST" });
             const data = await res.json();
-            if (res.ok) {
-                const segs = await fetch(`/api/videos/${videoId}/segment`).then((r) => r.json());
-                if (Array.isArray(segs)) {
-                    setSegments(segs.map((s: any) => ({
-                        id: s.id,
-                        start: s.startTime ?? s.start ?? 0,
-                        end: s.endTime ?? s.end ?? 0,
-                        title: s.title || "Untitled",
-                        description: s.description || null,
-                        aiScore: s.aiScore || null,
-                        status: s.status || "AI_SUGGESTED",
-                        voiceoverEnabled: s.voiceoverEnabled || false,
-                    })));
-                }
-            } else {
+            if (!res.ok) {
                 alert(data.error || "Segmentation failed");
+                setSegmenting(false);
+                return;
             }
+
+            // Poll for results every 5 seconds
+            const poll = setInterval(async () => {
+                try {
+                    const segs = await fetch(`/api/videos/${videoId}/segment`).then((r) => r.json());
+                    if (Array.isArray(segs) && segs.length > 0) {
+                        clearInterval(poll);
+                        setSegments(segs.map((s: any) => ({
+                            id: s.id,
+                            start: s.startTime ?? s.start ?? 0,
+                            end: s.endTime ?? s.end ?? 0,
+                            title: s.title || "Untitled",
+                            description: s.description || null,
+                            aiScore: s.aiScore || null,
+                            status: s.status || "AI_SUGGESTED",
+                            voiceoverEnabled: s.voiceoverEnabled || false,
+                        })));
+                        setSegmenting(false);
+                    }
+                } catch { }
+            }, 5000);
+
+            // Timeout after 5 minutes
+            setTimeout(() => {
+                clearInterval(poll);
+                if (segmenting) {
+                    setSegmenting(false);
+                    alert("Segmentation is still processing. Refresh the page in a minute to see results.");
+                }
+            }, 300000);
         } catch (err: any) {
             alert("Segmentation request failed: " + err.message);
-        } finally {
             setSegmenting(false);
         }
     };

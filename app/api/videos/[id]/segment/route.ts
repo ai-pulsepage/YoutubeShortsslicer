@@ -1,11 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
-import { segmentVideo } from "@/lib/ai";
 
 /**
  * POST /api/videos/[id]/segment
- * Manually trigger AI segmentation for a video
+ * Queue AI segmentation as a background job (avoids HTTP timeout on long videos)
  */
 export async function POST(
     req: Request,
@@ -18,7 +17,7 @@ export async function POST(
 
     const { id } = await params;
 
-    // Load video + transcript (singular relation)
+    // Load video + transcript
     const video = await prisma.video.findFirst({
         where: { id, userId: session.user.id },
         include: { transcript: true },
@@ -54,47 +53,38 @@ export async function POST(
         await prisma.segment.deleteMany({
             where: { videoId: id },
         });
-        console.log(`[Segment API] Cleared ${existingSegments.length} old segments`);
     }
 
+    // Queue segmentation as background job
     try {
-        const segments = transcript.segments as any[];
-        const suggestions = await segmentVideo(segments, video.duration || 0);
+        const { Queue } = await import("bullmq");
+        const IORedis = (await import("ioredis")).default;
+        const redis = new IORedis(process.env.REDIS_URL || "", { maxRetriesPerRequest: null });
+        const segQueue = new Queue("segmentation", { connection: redis as any });
 
-        // Store segments — use startTime/endTime per schema
-        const created = await Promise.all(
-            suggestions.map((s) =>
-                prisma.segment.create({
-                    data: {
-                        videoId: id,
-                        startTime: s.start,
-                        endTime: s.end,
-                        title: s.title,
-                        description: s.description,
-                        aiScore: s.overallScore,
-                        status: "AI_SUGGESTED",
-                    },
-                })
-            )
+        await segQueue.add(
+            `segment-${id}`,
+            {
+                videoId: id,
+                userId: session.user.id,
+                transcriptId: transcript.id,
+            },
+            { priority: 1 }
         );
 
-        await prisma.video.update({
-            where: { id },
-            data: { status: "READY" },
-        });
+        await redis.quit();
 
         return NextResponse.json({
-            segments: created.length,
-            topScore: suggestions[0]?.overallScore || 0,
+            status: "queued",
+            message: `Segmentation queued. ${existingSegments.length} old segments cleared.`,
         });
-    } catch (error: any) {
+    } catch (err: any) {
         await prisma.video.update({
             where: { id },
-            data: { status: "FAILED" },
+            data: { status: "FAILED", errorMsg: err.message },
         });
-
         return NextResponse.json(
-            { error: "Segmentation failed", details: error.message },
+            { error: "Failed to queue segmentation", details: err.message },
             { status: 500 }
         );
     }
