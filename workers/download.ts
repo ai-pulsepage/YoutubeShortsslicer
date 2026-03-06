@@ -87,6 +87,7 @@ async function processDownload(job: Job<VideoDownloadJobData>) {
         await job.updateProgress(70);
 
         // Step 4: Extract audio for transcription
+        const audioR2Key = generateAudioR2Key(userId, videoId);
         const audioPath = path.join(videoDir, "audio.wav");
         try {
             execSync(
@@ -94,7 +95,6 @@ async function processDownload(job: Job<VideoDownloadJobData>) {
                 { timeout: 300000 }
             );
 
-            const audioR2Key = generateAudioR2Key(userId, videoId);
             await uploadFileToR2(audioPath, audioR2Key, "audio/wav");
             await job.updateProgress(85);
         } catch (ffmpegError) {
@@ -116,9 +116,9 @@ async function processDownload(job: Job<VideoDownloadJobData>) {
             },
         });
 
-        // Step 7: Enqueue transcription job (Phase 4)
-        // const transcriptionQueue = new Queue(QUEUE_NAMES.TRANSCRIPTION, { connection: redis });
-        // await transcriptionQueue.add(`transcribe-${videoId}`, { videoId, userId, audioStoragePath: audioR2Key });
+        // Step 7: Enqueue transcription job
+        const transcriptionQueue = new Queue(QUEUE_NAMES.TRANSCRIPTION, { connection: redis as any });
+        await transcriptionQueue.add(`transcribe-${videoId}`, { videoId, userId, audioStoragePath: audioR2Key });
 
         console.log(`[Download] Complete: ${videoId} → ${r2Key}`);
         await job.updateProgress(100);
@@ -150,7 +150,7 @@ const worker = new Worker<VideoDownloadJobData>(
     QUEUE_NAMES.VIDEO_DOWNLOAD,
     processDownload,
     {
-        connection: redis,
+        connection: redis as any,
         concurrency: 2,
         limiter: {
             max: 5,

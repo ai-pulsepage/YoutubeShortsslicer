@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
     Mic,
     Play,
+    Pause,
     Volume2,
     RefreshCw,
     Loader2,
@@ -38,16 +39,62 @@ const MIX_MODES = [
 export default function VoiceoverPage() {
     const [selectedVoice, setSelectedVoice] = useState<string>("bm_george");
     const [mixMode, setMixMode] = useState("mix");
-    const [balance, setBalance] = useState(70); // % voiceover volume
+    const [balance, setBalance] = useState(70);
     const [generating, setGenerating] = useState(false);
+    const [playing, setPlaying] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const [previewText, setPreviewText] = useState(
         "In the heart of the Amazon, a remarkable creature emerges from the shadows."
     );
+    const audioRef = useRef<HTMLAudioElement>(null);
+    const [audioUrl, setAudioUrl] = useState<string | null>(null);
 
     const generatePreview = async () => {
         setGenerating(true);
-        // Phase 7 wiring: call Together.ai Kokoro API
-        setTimeout(() => setGenerating(false), 2000);
+        setError(null);
+        setAudioUrl(null);
+
+        try {
+            const res = await fetch("/api/voiceover/preview", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    text: previewText,
+                    voiceId: selectedVoice,
+                    speed: 1.0,
+                }),
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.details || err.error || "Preview failed");
+            }
+
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            setAudioUrl(url);
+
+            // Auto-play
+            if (audioRef.current) {
+                audioRef.current.src = url;
+                audioRef.current.play();
+                setPlaying(true);
+            }
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setGenerating(false);
+        }
+    };
+
+    const togglePlayback = () => {
+        if (!audioRef.current || !audioUrl) return;
+        if (playing) {
+            audioRef.current.pause();
+        } else {
+            audioRef.current.play();
+        }
+        setPlaying(!playing);
     };
 
     return (
@@ -58,6 +105,12 @@ export default function VoiceoverPage() {
                     Add AI-generated narration using Together.ai Kokoro TTS
                 </p>
             </div>
+
+            <audio
+                ref={audioRef}
+                onEnded={() => setPlaying(false)}
+                className="hidden"
+            />
 
             <div className="grid grid-cols-2 gap-6">
                 {/* Voice Selection */}
@@ -142,18 +195,40 @@ export default function VoiceoverPage() {
                             rows={3}
                             className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 resize-none"
                         />
-                        <button
-                            onClick={generatePreview}
-                            disabled={generating}
-                            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-50 transition-colors"
-                        >
-                            {generating ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                                <Play className="w-4 h-4" />
+
+                        {error && (
+                            <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                                {error}
+                            </div>
+                        )}
+
+                        <div className="flex gap-2">
+                            <button
+                                onClick={generatePreview}
+                                disabled={generating || !previewText.trim()}
+                                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-50 transition-colors"
+                            >
+                                {generating ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                    <Mic className="w-4 h-4" />
+                                )}
+                                {generating ? "Generating..." : "Generate Preview"}
+                            </button>
+
+                            {audioUrl && (
+                                <button
+                                    onClick={togglePlayback}
+                                    className="px-4 py-2.5 rounded-xl text-sm font-medium bg-gray-800 hover:bg-gray-700 text-white transition-colors"
+                                >
+                                    {playing ? (
+                                        <Pause className="w-4 h-4" />
+                                    ) : (
+                                        <Play className="w-4 h-4" />
+                                    )}
+                                </button>
                             )}
-                            {generating ? "Generating..." : "Generate Preview"}
-                        </button>
+                        </div>
                     </div>
 
                     {/* Cost Estimate */}

@@ -218,16 +218,7 @@ export default function AdminPage() {
             )}
 
             {/* Users Tab */}
-            {activeTab === "users" && (
-                <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-8 text-center">
-                    <Users className="w-10 h-10 text-gray-600 mx-auto mb-3" />
-                    <h3 className="text-lg font-semibold text-white mb-2">User Management</h3>
-                    <p className="text-gray-400 text-sm">
-                        View and manage all registered users, roles, and permissions.
-                        Full user management will be wired in Phase 11.
-                    </p>
-                </div>
-            )}
+            {activeTab === "users" && <UserManager />}
 
             {/* System Tab */}
             {activeTab === "system" && (
@@ -358,6 +349,110 @@ function QueueManager() {
                     ))}
                 </div>
             )}
+        </div>
+    );
+}
+
+type UserData = {
+    id: string;
+    name: string | null;
+    email: string;
+    image: string | null;
+    role: string;
+    createdAt: string;
+    _count: { videos: number; channels: number };
+    subscription: { plan: string; status: string; currentPeriodEnd: string | null } | null;
+};
+
+function UserManager() {
+    const [users, setUsers] = useState<UserData[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [updating, setUpdating] = useState<string | null>(null);
+
+    const fetchUsers = () => {
+        fetch("/api/admin/users")
+            .then((r) => r.json())
+            .then(setUsers)
+            .catch(console.error)
+            .finally(() => setLoading(false));
+    };
+
+    useEffect(() => { fetchUsers(); }, []);
+
+    const toggleRole = async (userId: string, currentRole: string) => {
+        const newRole = currentRole === "ADMIN" ? "USER" : "ADMIN";
+        setUpdating(userId);
+        try {
+            await fetch("/api/admin/users", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId, role: newRole }),
+            });
+            fetchUsers();
+        } finally {
+            setUpdating(null);
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center py-8">
+                <RefreshCw className="w-4 h-4 text-gray-500 animate-spin" />
+                <span className="ml-2 text-sm text-gray-500">Loading users...</span>
+            </div>
+        );
+    }
+
+    return (
+        <div className="bg-gray-900/50 border border-gray-800 rounded-xl overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-800 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-white">{users.length} Registered Users</h3>
+                <button
+                    onClick={() => { setLoading(true); fetchUsers(); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-800 text-gray-300 hover:text-white transition-colors"
+                >
+                    <RefreshCw className="w-3 h-3" /> Refresh
+                </button>
+            </div>
+            <div className="divide-y divide-gray-800">
+                {users.map((user) => (
+                    <div key={user.id} className="flex items-center justify-between px-5 py-3">
+                        <div className="flex items-center gap-3">
+                            {user.image ? (
+                                <img src={user.image} alt="" className="w-8 h-8 rounded-full" />
+                            ) : (
+                                <div className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-xs text-gray-400">
+                                    {(user.name || user.email)[0]?.toUpperCase()}
+                                </div>
+                            )}
+                            <div>
+                                <p className="text-sm font-medium text-white">{user.name || "—"}</p>
+                                <p className="text-xs text-gray-500">{user.email}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            <div className="text-right">
+                                <span className="text-xs text-gray-400">{user._count.videos} videos · {user._count.channels} channels</span>
+                                {user.subscription && (
+                                    <p className="text-[10px] text-gray-600">{user.subscription.plan} ({user.subscription.status})</p>
+                                )}
+                            </div>
+                            <button
+                                onClick={() => toggleRole(user.id, user.role)}
+                                disabled={updating === user.id}
+                                className={cn(
+                                    "text-xs px-2.5 py-1.5 rounded-lg font-medium transition-colors",
+                                    user.role === "ADMIN"
+                                        ? "bg-violet-500/15 text-violet-400 border border-violet-500/30"
+                                        : "bg-gray-800 text-gray-300 border border-gray-700 hover:border-gray-600"
+                                )}
+                            >
+                                {updating === user.id ? "..." : user.role}
+                            </button>
+                        </div>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }

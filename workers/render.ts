@@ -21,7 +21,8 @@ import path from "path";
 import fs from "fs";
 import os from "os";
 import { QUEUE_NAMES, RenderJobData } from "../lib/queue";
-import { uploadFileToR2, generateShortR2Key } from "../lib/storage";
+import { uploadFileToR2, downloadFileFromR2, generateShortR2Key } from "../lib/storage";
+import { generateVoiceover } from "../lib/tts";
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
@@ -61,9 +62,10 @@ async function processRender(job: Job<RenderJobData>) {
         await job.updateProgress(10);
 
         // Step 1: Download source video from R2
-        // (In production, download from R2. For dev, use local path)
         const sourceVideo = path.join(renderDir, "source.mp4");
-        // TODO: Download from R2
+        console.log(`[Render] Downloading from R2: ${segment.video.storagePath}`);
+        await downloadFileFromR2(segment.video.storagePath, sourceVideo);
+        await job.updateProgress(20);
 
         // Step 2: Cut segment
         const cutVideo = path.join(renderDir, "cut.mp4");
@@ -83,7 +85,6 @@ async function processRender(job: Job<RenderJobData>) {
         });
 
         if (preset) {
-            // Build ASS subtitle filter from preset
             const fontName = preset.font || "Inter";
             const fontSize = preset.fontSize || 24;
             const primaryColor = hexToAss(preset.color || "#FFFFFF");
@@ -112,17 +113,26 @@ async function processRender(job: Job<RenderJobData>) {
         await job.updateProgress(70);
 
         // Step 5: Mix voiceover if enabled
-        if (segment.voiceoverEnabled) {
-            const voiceoverPath = path.join(renderDir, "voiceover.wav");
-            // TODO: Generate voiceover with Kokoro TTS and mix
+        if (segment.voiceoverEnabled && segment.voiceoverText) {
+            try {
+                console.log(`[Render] Generating voiceover for segment ${segmentId}`);
+                const audioBuffer = await generateVoiceover({
+                    text: segment.voiceoverText,
+                    voiceId: "bm_george",
+                });
 
-            if (fs.existsSync(voiceoverPath)) {
+                const voiceoverPath = path.join(renderDir, "voiceover.wav");
+                fs.writeFileSync(voiceoverPath, audioBuffer);
+
                 const mixedOutput = path.join(renderDir, "mixed.mp4");
                 execSync(
                     `ffmpeg -i "${outputPath}" -i "${voiceoverPath}" -filter_complex "[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=2[aout]" -map 0:v -map "[aout]" -c:v copy -c:a aac "${mixedOutput}" -y`,
                     { timeout: 300000 }
                 );
                 fs.renameSync(mixedOutput, outputPath);
+                console.log(`[Render] Voiceover mixed successfully`);
+            } catch (ttsErr: any) {
+                console.warn(`[Render] Voiceover skipped: ${ttsErr.message}`);
             }
         }
         await job.updateProgress(85);
@@ -161,7 +171,6 @@ async function processRender(job: Job<RenderJobData>) {
 }
 
 function hexToAss(hex: string): string {
-    // Convert #RRGGBB to ASS format (without alpha for drawtext)
     return hex.replace("#", "0x");
 }
 
@@ -170,7 +179,7 @@ const worker = new Worker<RenderJobData>(
     QUEUE_NAMES.RENDER,
     processRender,
     {
-        connection: redis,
+        connection: redis as any,
         concurrency: 2,
         limiter: { max: 5, duration: 60000 },
     }

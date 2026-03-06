@@ -99,11 +99,11 @@ print(json.dumps(result))
                 throw new Error("No transcription service available (faster-whisper not installed, no API key)");
             }
 
-            // Placeholder: use a compatible Whisper API endpoint
+            // Fallback: no transcription service available — return error message
             transcriptData = [{
                 start: 0,
                 end: 0,
-                text: "Transcription service not configured. Install faster-whisper: pip install faster-whisper",
+                text: "Transcription unavailable. Install faster-whisper: pip install faster-whisper",
                 words: [],
             }];
         }
@@ -128,7 +128,7 @@ print(json.dumps(result))
         });
 
         // Enqueue segmentation job
-        const segmentationQueue = new Queue(QUEUE_NAMES.SEGMENTATION, { connection: redis });
+        const segmentationQueue = new Queue(QUEUE_NAMES.SEGMENTATION, { connection: redis as any });
         await segmentationQueue.add(`segment-${videoId}`, {
             videoId,
             userId,
@@ -160,7 +160,7 @@ const worker = new Worker<TranscriptionJobData>(
     QUEUE_NAMES.TRANSCRIPTION,
     processTranscription,
     {
-        connection: redis,
+        connection: redis as any,
         concurrency: 1, // Transcription is CPU-heavy
         limiter: {
             max: 3,

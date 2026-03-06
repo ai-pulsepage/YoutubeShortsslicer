@@ -180,8 +180,9 @@ const transcriptionWorker = new Worker(
     async (job: Job) => {
         const { videoId, userId, transcriptId } = job.data;
         console.log(`[Transcription] Starting: video=${videoId}`);
-        // Placeholder — requires faster-whisper or Whisper API
-        console.warn("[Transcription] Service not yet configured — marking video as READY");
+        // Passthrough — actual transcription requires faster-whisper (pip install faster-whisper)
+        // See workers/transcription.ts for the full implementation
+        console.warn("[Transcription] faster-whisper not installed — marking video as READY");
 
         // Update video status to READY so it doesn't stay stuck at TRANSCRIBING
         await prisma.video.update({
@@ -190,7 +191,7 @@ const transcriptionWorker = new Worker(
         });
 
         await job.updateProgress(100);
-        return { videoId, status: "needs_configuration" };
+        return { videoId, status: "transcription_skipped" };
     },
     { connection: redis as any, concurrency: 1 }
 );
@@ -275,36 +276,64 @@ const renderWorker = new Worker(
             const renderDir = path.join(TEMP_DIR, "render", segmentId);
             if (!fs.existsSync(renderDir)) fs.mkdirSync(renderDir, { recursive: true });
 
-            const sourceVideo = segment.video.storagePath;
+            // Step 1: Download source video from R2
+            const sourceVideo = path.join(renderDir, "source.mp4");
+            console.log(`[Render] Downloading from R2: ${segment.video.storagePath}`);
+            const { downloadFileFromR2 } = await import("../lib/storage");
+            await downloadFileFromR2(segment.video.storagePath, sourceVideo);
+            await job.updateProgress(15);
+
             const cutVideo = path.join(renderDir, "cut.mp4");
             const outputPath = path.join(renderDir, "final.mp4");
             const duration = segment.endTime - segment.startTime;
 
-            // Cut segment
+            // Step 2: Cut segment
             execSync(
                 `ffmpeg -ss ${segment.startTime} -i "${sourceVideo}" -t ${duration} -c copy -avoid_negative_ts 1 "${cutVideo}" -y`,
                 { timeout: 300000 }
             );
             await job.updateProgress(30);
 
-            // Convert to 9:16
+            // Step 3: Convert to 9:16
             execSync(
                 `ffmpeg -i "${cutVideo}" -vf "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,setsar=1" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k -movflags +faststart "${outputPath}" -y`,
                 { timeout: 600000 }
             );
             await job.updateProgress(70);
 
-            // Upload to R2
-            const r2Key = `shorts/${userId}/${videoId}/${segmentId}.mp4`;
-            try {
-                const { uploadFileToR2 } = await import("../lib/storage");
-                await uploadFileToR2(outputPath, r2Key, "video/mp4");
-            } catch (r2Err: any) {
-                console.warn(`[Render] R2 upload skipped: ${r2Err.message}`);
+            // Step 4: Generate and mix voiceover if enabled
+            if (segment.voiceoverEnabled && segment.voiceoverText) {
+                try {
+                    console.log(`[Render] Generating voiceover for segment ${segmentId}`);
+                    const { generateVoiceover } = await import("../lib/tts");
+                    const audioBuffer = await generateVoiceover({
+                        text: segment.voiceoverText,
+                        voiceId: "bm_george",
+                    });
+
+                    const voiceoverPath = path.join(renderDir, "voiceover.wav");
+                    fs.writeFileSync(voiceoverPath, audioBuffer);
+
+                    const mixedOutput = path.join(renderDir, "mixed.mp4");
+                    execSync(
+                        `ffmpeg -i "${outputPath}" -i "${voiceoverPath}" -filter_complex "[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=2[aout]" -map 0:v -map "[aout]" -c:v copy -c:a aac "${mixedOutput}" -y`,
+                        { timeout: 300000 }
+                    );
+                    fs.renameSync(mixedOutput, outputPath);
+                    console.log(`[Render] Voiceover mixed successfully`);
+                } catch (ttsErr: any) {
+                    console.warn(`[Render] Voiceover skipped: ${ttsErr.message}`);
+                }
             }
+            await job.updateProgress(85);
+
+            // Step 5: Upload to R2
+            const r2Key = `shorts/${userId}/${videoId}/${segmentId}.mp4`;
+            const { uploadFileToR2 } = await import("../lib/storage");
+            await uploadFileToR2(outputPath, r2Key, "video/mp4");
             await job.updateProgress(95);
 
-            // Save to DB
+            // Step 6: Save to DB
             await prisma.shortVideo.create({
                 data: { segmentId, storagePath: r2Key, duration: Math.round(duration), status: "RENDERED" },
             });
@@ -339,7 +368,7 @@ for (const { name, worker } of workers) {
 }
 
 console.log("🚀 All workers started:");
-console.log("   📥 Download worker (concurrency: 2)");
+console.log("   📥 Download worker (concurrency: 1)");
 console.log("   🎤 Transcription worker (concurrency: 1)");
 console.log("   🧠 Segmentation worker (concurrency: 3)");
 console.log("   🎬 Render worker (concurrency: 2)");

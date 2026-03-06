@@ -184,7 +184,15 @@ export default function EditorPage() {
         setSegments((prev) =>
             prev.map((s) => (s.id === segmentId ? { ...s, status } : s))
         );
-        // TODO: persist to API
+        try {
+            await fetch(`/api/videos/${videoId}/segment/${segmentId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ status }),
+            });
+        } catch (err) {
+            console.error("Failed to persist segment status:", err);
+        }
     };
 
     const splitSegment = () => {

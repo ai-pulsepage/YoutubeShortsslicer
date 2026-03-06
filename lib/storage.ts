@@ -107,6 +107,40 @@ export async function deleteFromR2(r2Key: string): Promise<void> {
 }
 
 /**
+ * Download a file from R2 to a local path
+ */
+export async function downloadFileFromR2(
+    r2Key: string,
+    localPath: string
+): Promise<void> {
+    const response = await s3.send(
+        new GetObjectCommand({
+            Bucket: BUCKET,
+            Key: r2Key,
+        })
+    );
+
+    if (!response.Body) {
+        throw new Error(`No body returned for R2 key: ${r2Key}`);
+    }
+
+    const dir = path.dirname(localPath);
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
+
+    const writeStream = fs.createWriteStream(localPath);
+    const readable = response.Body as Readable;
+
+    await new Promise<void>((resolve, reject) => {
+        readable.pipe(writeStream);
+        writeStream.on("finish", resolve);
+        writeStream.on("error", reject);
+        readable.on("error", reject);
+    });
+}
+
+/**
  * Generate a unique R2 key for a video file
  */
 export function generateR2Key(
