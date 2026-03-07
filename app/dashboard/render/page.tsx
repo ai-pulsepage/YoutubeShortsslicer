@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Film, Download, Play, Loader2, RefreshCw, Clock, CheckCircle, XCircle } from "lucide-react";
+import { Film, Download, Play, Loader2, RefreshCw, Clock, CheckCircle, XCircle, Tag, Filter } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+type TagType = { id: string; name: string; color: string };
 
 type ShortVideo = {
     id: string;
@@ -28,9 +30,12 @@ export default function RenderPage() {
     const [shorts, setShorts] = useState<ShortVideo[]>([]);
     const [loading, setLoading] = useState(true);
     const [playingId, setPlayingId] = useState<string | null>(null);
+    const [tags, setTags] = useState<TagType[]>([]);
+    const [selectedTag, setSelectedTag] = useState<string>("");
 
-    const loadShorts = () => {
-        fetch("/api/shorts")
+    const loadShorts = (tagId?: string) => {
+        const url = tagId ? `/api/shorts?tag=${tagId}` : "/api/shorts";
+        fetch(url)
             .then((r) => r.json())
             .then((data) => {
                 if (Array.isArray(data)) setShorts(data);
@@ -41,9 +46,15 @@ export default function RenderPage() {
 
     useEffect(() => {
         loadShorts();
-        // Auto-refresh every 10 seconds if any shorts are still rendering
+        // Load tags for filter
+        fetch("/api/tags")
+            .then(r => r.ok ? r.json() : [])
+            .then(data => setTags(Array.isArray(data) ? data : []))
+            .catch(() => { });
+        // Auto-refresh every 10 seconds
         const interval = setInterval(() => {
-            fetch("/api/shorts")
+            const url = selectedTag ? `/api/shorts?tag=${selectedTag}` : "/api/shorts";
+            fetch(url)
                 .then((r) => r.json())
                 .then((data) => {
                     if (Array.isArray(data)) setShorts(data);
@@ -88,16 +99,32 @@ export default function RenderPage() {
                         {shorts.length} short{shorts.length !== 1 ? "s" : ""} rendered and ready to publish
                     </p>
                 </div>
-                <button
-                    onClick={() => {
-                        setLoading(true);
-                        loadShorts();
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-gray-800 hover:bg-gray-700 text-white transition-colors"
-                >
-                    <RefreshCw className="w-4 h-4" />
-                    Refresh
-                </button>
+                <div className="flex items-center gap-2">
+                    {/* Tag filter */}
+                    <select
+                        value={selectedTag}
+                        onChange={(e) => {
+                            setSelectedTag(e.target.value);
+                            loadShorts(e.target.value || undefined);
+                        }}
+                        className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:border-violet-500 focus:outline-none"
+                    >
+                        <option value="">All Batches</option>
+                        {tags.map(t => (
+                            <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                    </select>
+                    <button
+                        onClick={() => {
+                            setLoading(true);
+                            loadShorts(selectedTag || undefined);
+                        }}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-gray-800 hover:bg-gray-700 text-white transition-colors"
+                    >
+                        <RefreshCw className="w-4 h-4" />
+                        Refresh
+                    </button>
+                </div>
             </div>
 
             {shorts.length === 0 ? (

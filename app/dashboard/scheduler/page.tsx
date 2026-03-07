@@ -81,6 +81,7 @@ export default function SchedulerPage() {
     const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
     const [loading, setLoading] = useState(true);
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const [showAssignModal, setShowAssignModal] = useState(false);
 
     useEffect(() => {
         Promise.all([
@@ -271,6 +272,14 @@ export default function SchedulerPage() {
                         </p>
                     </div>
                     <div className="flex items-center gap-2">
+                        {selectedScheduleId && (
+                            <button
+                                onClick={() => setShowAssignModal(true)}
+                                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-violet-600 hover:bg-violet-500 text-white transition-colors"
+                            >
+                                <Film className="w-4 h-4" /> Assign Videos
+                            </button>
+                        )}
                         <div className="flex items-center bg-gray-900/50 border border-gray-800 rounded-xl overflow-hidden">
                             <button
                                 onClick={() => setViewMode("calendar")}
@@ -446,6 +455,21 @@ export default function SchedulerPage() {
                     }}
                 />
             )}
+
+            {/* Assign Videos Modal */}
+            {showAssignModal && selectedScheduleId && (
+                <AssignVideosModal
+                    scheduleId={selectedScheduleId}
+                    onClose={() => setShowAssignModal(false)}
+                    onAssigned={() => {
+                        setShowAssignModal(false);
+                        // Reload jobs
+                        fetch("/api/publish").then(r => r.json()).then(data => {
+                            if (Array.isArray(data)) setJobs(data);
+                        });
+                    }}
+                />
+            )}
         </div>
     );
 }
@@ -613,6 +637,163 @@ function CreateScheduleModal({
                     >
                         {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                         Create
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ─── Assign Videos Modal ─────────────────────────
+
+function AssignVideosModal({
+    scheduleId,
+    onClose,
+    onAssigned,
+}: {
+    scheduleId: string;
+    onClose: () => void;
+    onAssigned: () => void;
+}) {
+    const [shorts, setShorts] = useState<any[]>([]);
+    const [tags, setTags] = useState<any[]>([]);
+    const [selectedTag, setSelectedTag] = useState("");
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [assigning, setAssigning] = useState(false);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        Promise.all([
+            fetch("/api/shorts").then(r => r.json()),
+            fetch("/api/tags").then(r => r.json()),
+        ]).then(([s, t]) => {
+            setShorts(Array.isArray(s) ? s.filter((v: any) => v.status === "RENDERED") : []);
+            setTags(Array.isArray(t) ? t : []);
+            setLoading(false);
+        });
+    }, []);
+
+    const filteredShorts = selectedTag
+        ? shorts.filter((s: any) => s.segment?.video?.videoTags?.some((vt: any) => vt.tagId === selectedTag))
+        : shorts;
+
+    const toggleSelect = (id: string) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const selectAll = () => {
+        if (selectedIds.size === filteredShorts.length) {
+            setSelectedIds(new Set());
+        } else {
+            setSelectedIds(new Set(filteredShorts.map((s: any) => s.id)));
+        }
+    };
+
+    const handleAssign = async () => {
+        if (selectedIds.size === 0) return;
+        setAssigning(true);
+        try {
+            await fetch(`/api/schedules/${scheduleId}/assign`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ shortVideoIds: Array.from(selectedIds) }),
+            });
+            onAssigned();
+        } catch { }
+        setAssigning(false);
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl max-h-[80vh] flex flex-col">
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-semibold text-white">Assign Videos to Schedule</h2>
+                    <button onClick={onClose} className="text-gray-500 hover:text-white">
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+
+                {/* Tag filter */}
+                <div className="flex items-center gap-2 mb-3">
+                    <select
+                        value={selectedTag}
+                        onChange={(e) => setSelectedTag(e.target.value)}
+                        className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:border-violet-500 focus:outline-none flex-1"
+                    >
+                        <option value="">All Batches</option>
+                        {tags.map((t: any) => (
+                            <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                    </select>
+                    <button
+                        onClick={selectAll}
+                        className="px-3 py-1.5 text-xs font-medium text-violet-400 hover:text-violet-300 bg-gray-800 rounded-lg border border-gray-700"
+                    >
+                        {selectedIds.size === filteredShorts.length ? "Deselect All" : "Select All"}
+                    </button>
+                </div>
+
+                {/* Video list */}
+                <div className="flex-1 overflow-y-auto space-y-1 min-h-0">
+                    {loading ? (
+                        <div className="flex items-center justify-center py-12">
+                            <Loader2 className="w-5 h-5 text-gray-500 animate-spin" />
+                        </div>
+                    ) : filteredShorts.length === 0 ? (
+                        <p className="text-gray-500 text-sm text-center py-8">No rendered shorts found</p>
+                    ) : (
+                        filteredShorts.map((s: any) => (
+                            <button
+                                key={s.id}
+                                onClick={() => toggleSelect(s.id)}
+                                className={cn(
+                                    "w-full text-left px-3 py-2.5 rounded-lg border transition-colors flex items-center gap-3",
+                                    selectedIds.has(s.id)
+                                        ? "bg-violet-500/10 border-violet-500/30"
+                                        : "bg-gray-800/50 border-gray-800 hover:border-gray-700"
+                                )}
+                            >
+                                <div className={cn(
+                                    "w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0",
+                                    selectedIds.has(s.id)
+                                        ? "border-violet-500 bg-violet-500"
+                                        : "border-gray-600"
+                                )}>
+                                    {selectedIds.has(s.id) && <Check className="w-3 h-3 text-white" />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm text-white truncate">
+                                        {s.segment?.title || "Untitled"}
+                                    </p>
+                                    <p className="text-[10px] text-gray-500">
+                                        {s.segment?.video?.title || "Unknown"}
+                                    </p>
+                                </div>
+                            </button>
+                        ))
+                    )}
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-2 mt-4 pt-3 border-t border-gray-800">
+                    <button
+                        onClick={onClose}
+                        className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium bg-gray-800 hover:bg-gray-700 text-white transition-colors"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={handleAssign}
+                        disabled={selectedIds.size === 0 || assigning}
+                        className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium bg-violet-600 hover:bg-violet-700 text-white transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                        {assigning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                        Assign {selectedIds.size > 0 ? `(${selectedIds.size})` : ""}
                     </button>
                 </div>
             </div>
