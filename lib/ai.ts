@@ -336,7 +336,7 @@ function parseSegments(
     return parsed
         .filter((s: any) => {
             const duration = (s.end || 0) - (s.start || 0);
-            return duration > 5 && duration <= 60 && s.start >= 0 && s.end <= videoDuration;
+            return duration > 15 && duration <= 65 && s.start >= 0 && s.end <= videoDuration;
         })
         .map((s: any) => ({
             start: Math.max(0, s.start),

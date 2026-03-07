@@ -494,21 +494,53 @@ export default function EditorPage() {
 
                         {/* Playback overlay */}
                         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 p-3">
+                            {/* Scrub bar */}
+                            <div
+                                className="w-full h-1.5 bg-white/20 rounded-full cursor-pointer mb-2 group hover:h-2.5 transition-all"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    const pct = (e.clientX - rect.left) / rect.width;
+                                    seekTo(pct * duration);
+                                }}
+                                onMouseDown={(e) => {
+                                    e.stopPropagation();
+                                    const bar = e.currentTarget;
+                                    const onMove = (ev: MouseEvent) => {
+                                        const rect = bar.getBoundingClientRect();
+                                        const pct = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+                                        seekTo(pct * duration);
+                                    };
+                                    const onUp = () => {
+                                        window.removeEventListener('mousemove', onMove);
+                                        window.removeEventListener('mouseup', onUp);
+                                    };
+                                    window.addEventListener('mousemove', onMove);
+                                    window.addEventListener('mouseup', onUp);
+                                }}
+                            >
+                                <div
+                                    className="h-full bg-violet-500 rounded-full relative"
+                                    style={{ width: duration ? `${(currentTime / duration) * 100}%` : '0%' }}
+                                >
+                                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow opacity-0 group-hover:opacity-100 transition-opacity" />
+                                </div>
+                            </div>
                             <div className="flex items-center gap-3">
-                                <button onClick={togglePlay} className="text-white hover:text-violet-400 transition-colors">
+                                <button onClick={(e) => { e.stopPropagation(); togglePlay(); }} className="text-white hover:text-violet-400 transition-colors">
                                     {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
                                 </button>
-                                <button onClick={() => seekBy(-10)} className="text-white/70 hover:text-white transition-colors">
+                                <button onClick={(e) => { e.stopPropagation(); seekBy(-10); }} className="text-white/70 hover:text-white transition-colors">
                                     <SkipBack className="w-4 h-4" />
                                 </button>
-                                <button onClick={() => seekBy(10)} className="text-white/70 hover:text-white transition-colors">
+                                <button onClick={(e) => { e.stopPropagation(); seekBy(10); }} className="text-white/70 hover:text-white transition-colors">
                                     <SkipForward className="w-4 h-4" />
                                 </button>
                                 <span className="text-xs text-white/70 font-mono">
                                     {formatTime(currentTime)} / {formatTime(duration)}
                                 </span>
                                 <div className="flex-1" />
-                                <button onClick={() => setMuted(!muted)} className="text-white/70 hover:text-white transition-colors">
+                                <button onClick={(e) => { e.stopPropagation(); setMuted(!muted); }} className="text-white/70 hover:text-white transition-colors">
                                     {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
                                 </button>
                             </div>
