@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 /**
  * POST /api/videos/[id]/segment
  * Queue AI segmentation as a background job (avoids HTTP timeout on long videos)
+ * Add ?retranscribe=true to re-transcribe with Whisper first
  */
 export async function POST(
     req: Request,
@@ -16,6 +17,8 @@ export async function POST(
     }
 
     const { id } = await params;
+    const url = new URL(req.url);
+    const retranscribe = url.searchParams.get("retranscribe") === "true";
 
     // Load video + transcript
     const video = await prisma.video.findFirst({
@@ -27,6 +30,55 @@ export async function POST(
         return NextResponse.json({ error: "Video not found" }, { status: 404 });
     }
 
+    // For re-transcription, we need storagePath but NOT a transcript
+    if (retranscribe) {
+        if (!video.storagePath) {
+            return NextResponse.json({ error: "No video file in storage" }, { status: 400 });
+        }
+        if (!process.env.TOGETHER_API_KEY) {
+            return NextResponse.json({ error: "TOGETHER_API_KEY not configured" }, { status: 500 });
+        }
+
+        await prisma.video.update({
+            where: { id },
+            data: { status: "TRANSCRIBING" },
+        });
+
+        try {
+            const { Queue } = await import("bullmq");
+            const IORedis = (await import("ioredis")).default;
+            const redis = new IORedis(process.env.REDIS_URL || "", { maxRetriesPerRequest: null });
+            const transQueue = new Queue("transcription", { connection: redis as any });
+
+            await transQueue.add(
+                `retranscribe-${id}`,
+                {
+                    videoId: id,
+                    userId: session.user.id,
+                    storagePath: video.storagePath,
+                    retranscribe: true,
+                },
+                { priority: 1 }
+            );
+
+            await redis.quit();
+            return NextResponse.json({
+                status: "queued",
+                message: "Re-transcription with Whisper queued. Will auto-segment when done.",
+            });
+        } catch (err: any) {
+            await prisma.video.update({
+                where: { id },
+                data: { status: "FAILED", errorMsg: err.message },
+            });
+            return NextResponse.json(
+                { error: "Failed to queue re-transcription", details: err.message },
+                { status: 500 }
+            );
+        }
+    }
+
+    // Normal segmentation flow
     const transcript = video.transcript;
     if (!transcript) {
         return NextResponse.json(
