@@ -5,39 +5,39 @@ import { NextResponse } from "next/server";
 /**
  * POST /api/videos/[id]/retranscribe
  * Re-transcribe an existing video using Whisper (without re-downloading).
- * Extracts audio from R2, sends to Together.ai Whisper, replaces old transcript.
+ * Queues a background job in the transcription worker.
  */
 export async function POST(
     req: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const session = await auth();
-    if (!session?.user?.id) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { id } = await params;
-
-    const video = await prisma.video.findFirst({
-        where: { id, userId: session.user.id },
-        select: { id: true, storagePath: true, duration: true },
-    });
-
-    if (!video) {
-        return NextResponse.json({ error: "Video not found" }, { status: 404 });
-    }
-
-    if (!video.storagePath) {
-        return NextResponse.json({ error: "No video file in storage" }, { status: 400 });
-    }
-
-    const togetherKey = process.env.TOGETHER_API_KEY;
-    if (!togetherKey) {
-        return NextResponse.json({ error: "TOGETHER_API_KEY not configured" }, { status: 500 });
-    }
-
-    // Queue re-transcription as background job
     try {
+        const session = await auth();
+        if (!session?.user?.id) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        const { id } = await params;
+
+        const video = await prisma.video.findFirst({
+            where: { id, userId: session.user.id },
+            select: { id: true, storagePath: true, duration: true },
+        });
+
+        if (!video) {
+            return NextResponse.json({ error: "Video not found" }, { status: 404 });
+        }
+
+        if (!video.storagePath) {
+            return NextResponse.json({ error: "No video file in storage" }, { status: 400 });
+        }
+
+        const togetherKey = process.env.TOGETHER_API_KEY;
+        if (!togetherKey) {
+            return NextResponse.json({ error: "TOGETHER_API_KEY not configured" }, { status: 500 });
+        }
+
+        // Queue re-transcription as background job
         const { Queue } = await import("bullmq");
         const IORedis = (await import("ioredis")).default;
         const redis = new IORedis(process.env.REDIS_URL || "", { maxRetriesPerRequest: null });
@@ -67,8 +67,9 @@ export async function POST(
             message: "Re-transcription with Whisper queued. This will take 1-2 minutes.",
         });
     } catch (err: any) {
+        console.error("[Retranscribe] Error:", err);
         return NextResponse.json(
-            { error: "Failed to queue re-transcription", details: err.message },
+            { error: "Failed to queue re-transcription", details: err.message, stack: err.stack?.split("\n").slice(0, 3) },
             { status: 500 }
         );
     }
