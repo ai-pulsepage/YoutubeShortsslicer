@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
+import { getQueue, QUEUE_NAMES } from "@/lib/queue";
 
 /**
  * POST /api/videos/[id]/retranscribe
@@ -32,17 +33,12 @@ export async function POST(
             return NextResponse.json({ error: "No video file in storage" }, { status: 400 });
         }
 
-        const togetherKey = process.env.TOGETHER_API_KEY;
-        if (!togetherKey) {
+        if (!process.env.TOGETHER_API_KEY) {
             return NextResponse.json({ error: "TOGETHER_API_KEY not configured" }, { status: 500 });
         }
 
-        // Queue re-transcription as background job
-        const { Queue } = await import("bullmq");
-        const IORedis = (await import("ioredis")).default;
-        const redis = new IORedis(process.env.REDIS_URL || "", { maxRetriesPerRequest: null });
-        const queue = new Queue("transcription", { connection: redis as any });
-
+        // Queue re-transcription using existing queue helper
+        const queue = getQueue(QUEUE_NAMES.TRANSCRIPTION);
         await queue.add(
             `retranscribe-${id}`,
             {
@@ -53,8 +49,6 @@ export async function POST(
             },
             { priority: 1 }
         );
-
-        await redis.quit();
 
         // Update status
         await prisma.video.update({
@@ -69,7 +63,7 @@ export async function POST(
     } catch (err: any) {
         console.error("[Retranscribe] Error:", err);
         return NextResponse.json(
-            { error: "Failed to queue re-transcription", details: err.message, stack: err.stack?.split("\n").slice(0, 3) },
+            { error: "Failed to queue re-transcription", details: err.message },
             { status: 500 }
         );
     }
