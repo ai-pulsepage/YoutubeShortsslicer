@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
     Mic,
     Play,
@@ -37,18 +37,19 @@ const MIX_MODES = [
 ];
 
 export default function VoiceoverPage() {
-    const [selectedVoice, setSelectedVoice] = useState<string>(() => {
-        if (typeof window !== "undefined") return localStorage.getItem("vo_voice") || "bm_george";
-        return "bm_george";
-    });
-    const [mixMode, setMixMode] = useState(() => {
-        if (typeof window !== "undefined") return localStorage.getItem("vo_mixMode") || "mix";
-        return "mix";
-    });
-    const [balance, setBalance] = useState(() => {
-        if (typeof window !== "undefined") return parseInt(localStorage.getItem("vo_balance") || "70");
-        return 70;
-    });
+    const [selectedVoice, setSelectedVoice] = useState<string>("bm_george");
+    const [mixMode, setMixMode] = useState("mix");
+    const [balance, setBalance] = useState(70);
+
+    // Load saved settings on mount (SSR-safe)
+    useEffect(() => {
+        const v = localStorage.getItem("vo_voice");
+        const m = localStorage.getItem("vo_mixMode");
+        const b = localStorage.getItem("vo_balance");
+        if (v) setSelectedVoice(v);
+        if (m) setMixMode(m);
+        if (b) setBalance(parseInt(b));
+    }, []);
     const [generating, setGenerating] = useState(false);
     const [playing, setPlaying] = useState(false);
     const [error, setError] = useState<string | null>(null);

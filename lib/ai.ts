@@ -264,32 +264,56 @@ async function segmentChunk(
 }
 
 /**
- * Remove duplicate/overlapping segments from chunk boundaries
+ * Remove duplicate/overlapping segments from chunk boundaries.
+ * Two-pass: (1) same-title dedup, (2) time-overlap dedup
  */
 function deduplicateSegments(segments: SegmentSuggestion[]): SegmentSuggestion[] {
     const sorted = segments.sort((a, b) => a.start - b.start);
-    const result: SegmentSuggestion[] = [];
 
+    // Pass 1: Deduplicate by title similarity (same story from different chunks)
+    const titleDeduped: SegmentSuggestion[] = [];
     for (const seg of sorted) {
+        const titleBase = seg.title.replace(/\s*\(Part \d+ of \d+\)\s*$/i, "").toLowerCase().trim();
+        const partMatch = seg.title.match(/\(Part (\d+) of (\d+)\)/i);
+        const partNum = partMatch ? parseInt(partMatch[1]) : 0;
+
+        const dupeIndex = titleDeduped.findIndex((existing) => {
+            const existingBase = existing.title.replace(/\s*\(Part \d+ of \d+\)\s*$/i, "").toLowerCase().trim();
+            const existingPart = existing.title.match(/\(Part (\d+) of (\d+)\)/i);
+            const existingPartNum = existingPart ? parseInt(existingPart[1]) : 0;
+
+            // Same base title + same part number + timestamps within 60s of each other
+            return titleBase === existingBase
+                && partNum === existingPartNum
+                && Math.abs(existing.start - seg.start) < 60;
+        });
+
+        if (dupeIndex === -1) {
+            titleDeduped.push(seg);
+        } else if (seg.overallScore > titleDeduped[dupeIndex].overallScore) {
+            titleDeduped[dupeIndex] = seg;
+        }
+    }
+
+    // Pass 2: Deduplicate by time overlap (different titles covering same time)
+    const result: SegmentSuggestion[] = [];
+    for (const seg of titleDeduped) {
         const dupeIndex = result.findIndex((existing) => {
             const overlapStart = Math.max(existing.start, seg.start);
             const overlapEnd = Math.min(existing.end, seg.end);
             const overlap = Math.max(0, overlapEnd - overlapStart);
             const minDuration = Math.min(existing.end - existing.start, seg.end - seg.start);
-            // Consider duplicate if >40% of the shorter segment overlaps
-            return overlap > 0 && overlap / minDuration > 0.4;
+            return overlap > 0 && minDuration > 0 && overlap / minDuration > 0.3;
         });
 
         if (dupeIndex === -1) {
             result.push(seg);
-        } else {
-            // Keep the higher-scored version
-            if (seg.overallScore > result[dupeIndex].overallScore) {
-                result[dupeIndex] = seg;
-            }
+        } else if (seg.overallScore > result[dupeIndex].overallScore) {
+            result[dupeIndex] = seg;
         }
     }
 
+    console.log(`[AI] Dedup: ${segments.length} → ${titleDeduped.length} (title) → ${result.length} (overlap)`);
     return result;
 }
 

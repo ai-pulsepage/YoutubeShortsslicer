@@ -576,15 +576,15 @@ const renderWorker = new Worker(
 
                     const mixedOutput = path.join(renderDir, "mixed.mp4");
                     if (mixMode === "replace") {
-                        // Replace original audio entirely with voiceover
+                        // Replace original audio entirely with voiceover (boost volume 3x)
                         execSync(
-                            `ffmpeg -i "${outputPath}" -i "${voiceoverPath}" -map 0:v -map 1:a -c:v copy -c:a aac -shortest "${mixedOutput}" -y`,
+                            `ffmpeg -i "${outputPath}" -i "${voiceoverPath}" -filter_complex "[1:a]volume=3.0[vo]" -map 0:v -map "[vo]" -c:v copy -c:a aac -shortest "${mixedOutput}" -y`,
                             { timeout: 300000 }
                         );
                     } else {
-                        // Mix: blend both audio tracks
+                        // Mix: original at 60%, voiceover at 250% so it's clearly audible
                         execSync(
-                            `ffmpeg -i "${outputPath}" -i "${voiceoverPath}" -filter_complex "[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=2[aout]" -map 0:v -map "[aout]" -c:v copy -c:a aac "${mixedOutput}" -y`,
+                            `ffmpeg -i "${outputPath}" -i "${voiceoverPath}" -filter_complex "[0:a]volume=0.6[orig];[1:a]volume=2.5[vo];[orig][vo]amix=inputs=2:duration=first:dropout_transition=2[aout]" -map 0:v -map "[aout]" -c:v copy -c:a aac "${mixedOutput}" -y`,
                             { timeout: 300000 }
                         );
                     }

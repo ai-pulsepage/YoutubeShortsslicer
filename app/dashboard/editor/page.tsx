@@ -764,7 +764,9 @@ export default function EditorPage() {
                                         // Persist toggle + voiceover settings from Voiceover Studio
                                         const body: any = { voiceoverEnabled: newVal };
                                         if (newVal) {
-                                            body.voiceoverText = selected.title || "Check this out";
+                                            // Use title + description for richer voiceover
+                                            const desc = (selected as any).description || "";
+                                            body.voiceoverText = desc ? `${selected.title}. ${desc}` : (selected.title || "Check this out");
                                             body.voiceoverVoice = localStorage.getItem("vo_voice") || "bm_george";
                                             body.voiceoverMixMode = localStorage.getItem("vo_mixMode") || "mix";
                                         }
