@@ -139,47 +139,37 @@ export default function EditorPage() {
         return () => window.removeEventListener("keydown", handleKeyDown);
     }, [currentTime, selected, isPlaying]);
 
-    // Video time update — RAF for smooth tracking + timeupdate fallback
+    // Video time update — poll currentTime every 100ms + timeupdate fallback
     useEffect(() => {
         const video = videoRef.current;
         if (!video) return;
 
-        let rafId: number;
         let lastTime = -1;
-        const tick = () => {
-            if (video) {
-                const t = video.currentTime;
-                // Only update state if time actually changed (avoid unnecessary re-renders)
-                if (Math.abs(t - lastTime) > 0.05) {
-                    lastTime = t;
-                    setCurrentTime(t);
-                }
+        const update = () => {
+            if (video && video.currentTime !== lastTime) {
+                lastTime = video.currentTime;
+                setCurrentTime(video.currentTime);
             }
-            rafId = requestAnimationFrame(tick);
         };
-        rafId = requestAnimationFrame(tick);
 
-        // Fallback: timeupdate fires ~4x/sec as backup
-        const onTimeUpdate = () => {
-            lastTime = video.currentTime;
-            setCurrentTime(video.currentTime);
-        };
+        // Primary: poll every 100ms (10fps — smooth enough, reliable everywhere)
+        const intervalId = setInterval(update, 100);
+
+        // Backup: browser's native timeupdate event
+        video.addEventListener("timeupdate", update);
+
         const onPlay = () => setIsPlaying(true);
         const onPause = () => {
             setIsPlaying(false);
-            setCurrentTime(video.currentTime);
+            update();
         };
-        const onSeeked = () => {
-            lastTime = video.currentTime;
-            setCurrentTime(video.currentTime);
-        };
+        const onSeeked = () => update();
 
-        video.addEventListener("timeupdate", onTimeUpdate);
         video.addEventListener("play", onPlay);
         video.addEventListener("pause", onPause);
         video.addEventListener("seeked", onSeeked);
 
-        // Get actual duration from loaded video
+        // Get duration from loaded video metadata
         const onMeta = () => {
             if (video.duration && isFinite(video.duration)) {
                 setVideoDuration(video.duration);
@@ -191,14 +181,14 @@ export default function EditorPage() {
         }
 
         return () => {
-            cancelAnimationFrame(rafId);
-            video.removeEventListener("timeupdate", onTimeUpdate);
+            clearInterval(intervalId);
+            video.removeEventListener("timeupdate", update);
             video.removeEventListener("play", onPlay);
             video.removeEventListener("pause", onPause);
             video.removeEventListener("seeked", onSeeked);
             video.removeEventListener("loadedmetadata", onMeta);
         };
-    }, []);
+    }, [videoId]);
 
     const togglePlay = () => {
         if (!videoRef.current) return;
