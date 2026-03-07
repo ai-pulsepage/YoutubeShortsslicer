@@ -560,10 +560,10 @@ const renderWorker = new Worker(
             await job.updateProgress(70);
 
             // Step 4: Generate and mix voiceover if enabled
-            const mixMode = segment.voiceoverMixMode || "mix";
+            const mixMode = (segment as any).voiceoverMixMode || "mix";
             if (segment.voiceoverEnabled && segment.voiceoverText && mixMode !== "original") {
                 try {
-                    const voiceId = segment.voiceoverVoice || "bm_george";
+                    const voiceId = (segment as any).voiceoverVoice || "bm_george";
                     console.log(`[Render] Generating voiceover: voice=${voiceId}, mode=${mixMode}`);
                     const { generateVoiceover } = await import("../lib/tts");
                     const audioBuffer = await generateVoiceover({
@@ -576,20 +576,21 @@ const renderWorker = new Worker(
 
                     const mixedOutput = path.join(renderDir, "mixed.mp4");
                     if (mixMode === "replace") {
-                        // Replace original audio entirely with voiceover (boost volume 3x)
+                        // "Replace": mute original narrator to 5% (keeps ambient sound/tone hint)
+                        // Overlay AI voice at full volume. Uses duration=first to keep full video length.
                         execSync(
-                            `ffmpeg -i "${outputPath}" -i "${voiceoverPath}" -filter_complex "[1:a]volume=3.0[vo]" -map 0:v -map "[vo]" -c:v copy -c:a aac -shortest "${mixedOutput}" -y`,
+                            `ffmpeg -i "${outputPath}" -i "${voiceoverPath}" -filter_complex "[0:a]volume=0.05[orig];[1:a]volume=3.0[vo];[orig][vo]amix=inputs=2:duration=first:dropout_transition=2[aout]" -map 0:v -map "[aout]" -c:v copy -c:a aac "${mixedOutput}" -y`,
                             { timeout: 300000 }
                         );
                     } else {
-                        // Mix: original at 60%, voiceover at 250% so it's clearly audible
+                        // "Mix": original at 30% (narrator quieter), AI voice at 200% (clearly dominant)
                         execSync(
-                            `ffmpeg -i "${outputPath}" -i "${voiceoverPath}" -filter_complex "[0:a]volume=0.6[orig];[1:a]volume=2.5[vo];[orig][vo]amix=inputs=2:duration=first:dropout_transition=2[aout]" -map 0:v -map "[aout]" -c:v copy -c:a aac "${mixedOutput}" -y`,
+                            `ffmpeg -i "${outputPath}" -i "${voiceoverPath}" -filter_complex "[0:a]volume=0.3[orig];[1:a]volume=2.0[vo];[orig][vo]amix=inputs=2:duration=first:dropout_transition=2[aout]" -map 0:v -map "[aout]" -c:v copy -c:a aac "${mixedOutput}" -y`,
                             { timeout: 300000 }
                         );
                     }
                     fs.renameSync(mixedOutput, outputPath);
-                    console.log(`[Render] Voiceover ${mixMode === "replace" ? "replaced" : "mixed"} successfully`);
+                    console.log(`[Render] Voiceover ${mixMode} applied successfully`);
                 } catch (ttsErr: any) {
                     console.warn(`[Render] Voiceover skipped: ${ttsErr.message}`);
                 }
