@@ -17,8 +17,7 @@ export async function POST(
     }
 
     const { id } = await params;
-    const url = new URL(req.url);
-    const retranscribe = url.searchParams.get("retranscribe") === "true";
+    const retranscribe = req.url?.includes("retranscribe=true") || false;
 
     // Load video + transcript
     const video = await prisma.video.findFirst({
