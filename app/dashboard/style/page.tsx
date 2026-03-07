@@ -107,27 +107,57 @@ export default function StylePage() {
     const [savedPresets, setSavedPresets] = useState<Preset[]>([]);
     const [previewText, setPreviewText] = useState("The world's most incredible creatures");
 
-    // Load saved presets from localStorage
+    // Load saved presets from database
     useEffect(() => {
-        try {
-            const saved = localStorage.getItem("subtitle-presets");
-            if (saved) setSavedPresets(JSON.parse(saved));
-        } catch { }
+        fetch("/api/subtitle-presets")
+            .then(r => r.ok ? r.json() : [])
+            .then(data => {
+                if (Array.isArray(data)) setSavedPresets(data.map((p: any) => ({
+                    id: p.id,
+                    name: p.name,
+                    font: p.font,
+                    size: p.fontSize,
+                    color: p.color,
+                    outline: p.outline,
+                    shadow: p.shadow,
+                    position: p.position,
+                    animation: p.animation,
+                })));
+            })
+            .catch(() => { });
     }, []);
 
-    const savePreset = () => {
+    const savePreset = async () => {
         const name = prompt("Preset name:", active.name || "My Preset");
         if (!name) return;
-        const preset: Preset = { ...active, name, id: `custom-${Date.now()}` };
-        const updated = [...savedPresets, preset];
-        setSavedPresets(updated);
-        localStorage.setItem("subtitle-presets", JSON.stringify(updated));
+        try {
+            const res = await fetch("/api/subtitle-presets", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    name,
+                    font: active.font,
+                    fontSize: active.size,
+                    color: active.color,
+                    outline: active.outline,
+                    shadow: active.shadow,
+                    position: active.position,
+                    animation: active.animation,
+                }),
+            });
+            if (res.ok) {
+                const created = await res.json();
+                const preset: Preset = { ...active, name, id: created.id };
+                setSavedPresets(prev => [...prev, preset]);
+            }
+        } catch { }
     };
 
-    const deletePreset = (id: string) => {
-        const updated = savedPresets.filter((p) => p.id !== id);
-        setSavedPresets(updated);
-        localStorage.setItem("subtitle-presets", JSON.stringify(updated));
+    const deletePreset = async (id: string) => {
+        setSavedPresets(prev => prev.filter((p) => p.id !== id));
+        try {
+            await fetch(`/api/subtitle-presets/${id}`, { method: "DELETE" });
+        } catch { }
     };
 
     return (

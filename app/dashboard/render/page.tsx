@@ -29,7 +29,7 @@ export default function RenderPage() {
     const [loading, setLoading] = useState(true);
     const [playingId, setPlayingId] = useState<string | null>(null);
 
-    useEffect(() => {
+    const loadShorts = () => {
         fetch("/api/shorts")
             .then((r) => r.json())
             .then((data) => {
@@ -37,6 +37,20 @@ export default function RenderPage() {
                 setLoading(false);
             })
             .catch(() => setLoading(false));
+    };
+
+    useEffect(() => {
+        loadShorts();
+        // Auto-refresh every 10 seconds if any shorts are still rendering
+        const interval = setInterval(() => {
+            fetch("/api/shorts")
+                .then((r) => r.json())
+                .then((data) => {
+                    if (Array.isArray(data)) setShorts(data);
+                })
+                .catch(() => { });
+        }, 10000);
+        return () => clearInterval(interval);
     }, []);
 
     const formatTime = (secs: number) => {
@@ -77,12 +91,7 @@ export default function RenderPage() {
                 <button
                     onClick={() => {
                         setLoading(true);
-                        fetch("/api/shorts")
-                            .then((r) => r.json())
-                            .then((data) => {
-                                if (Array.isArray(data)) setShorts(data);
-                                setLoading(false);
-                            });
+                        loadShorts();
                     }}
                     className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-gray-800 hover:bg-gray-700 text-white transition-colors"
                 >
@@ -139,6 +148,9 @@ export default function RenderPage() {
                             <div className="p-3 space-y-2">
                                 <p className="text-sm text-white font-medium truncate">
                                     {short.segment?.title || "Untitled"}
+                                </p>
+                                <p className="text-[10px] text-gray-500 truncate">
+                                    from: {short.segment?.video?.title || "Unknown video"}
                                 </p>
 
                                 <div className="flex items-center justify-between">
