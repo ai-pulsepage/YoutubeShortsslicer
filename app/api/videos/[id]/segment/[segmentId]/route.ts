@@ -44,6 +44,9 @@ export async function PATCH(
     if (typeof body.endTime === "number") {
         allowedFields.endTime = body.endTime;
     }
+    if (typeof body.voiceoverText === "string") {
+        allowedFields.voiceoverText = body.voiceoverText;
+    }
 
     if (Object.keys(allowedFields).length === 0) {
         return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });

@@ -139,18 +139,30 @@ export default function EditorPage() {
         return () => window.removeEventListener("keydown", handleKeyDown);
     }, [currentTime, selected, isPlaying]);
 
-    // Video time update
+    // Video time update — use RAF for smooth 60fps tracking
     useEffect(() => {
         const video = videoRef.current;
         if (!video) return;
 
-        const onTimeUpdate = () => setCurrentTime(video.currentTime);
-        const onPlay = () => setIsPlaying(true);
-        const onPause = () => setIsPlaying(false);
+        let rafId: number;
+        const tick = () => {
+            if (video && !video.paused) {
+                setCurrentTime(video.currentTime);
+            }
+            rafId = requestAnimationFrame(tick);
+        };
+        rafId = requestAnimationFrame(tick);
 
-        video.addEventListener("timeupdate", onTimeUpdate);
+        const onPlay = () => setIsPlaying(true);
+        const onPause = () => {
+            setIsPlaying(false);
+            setCurrentTime(video.currentTime); // sync on pause
+        };
+        const onSeeked = () => setCurrentTime(video.currentTime);
+
         video.addEventListener("play", onPlay);
         video.addEventListener("pause", onPause);
+        video.addEventListener("seeked", onSeeked);
 
         // Get actual duration from loaded video
         const onMeta = () => {
@@ -159,15 +171,15 @@ export default function EditorPage() {
             }
         };
         video.addEventListener("loadedmetadata", onMeta);
-        // If already loaded
         if (video.duration && isFinite(video.duration)) {
             setVideoDuration(video.duration);
         }
 
         return () => {
-            video.removeEventListener("timeupdate", onTimeUpdate);
+            cancelAnimationFrame(rafId);
             video.removeEventListener("play", onPlay);
             video.removeEventListener("pause", onPause);
+            video.removeEventListener("seeked", onSeeked);
             video.removeEventListener("loadedmetadata", onMeta);
         };
     }, []);
@@ -740,15 +752,29 @@ export default function EditorPage() {
                                     <Mic className="w-3 h-3" /> Voiceover
                                 </span>
                                 <button
-                                    onClick={() =>
+                                    onClick={async () => {
+                                        const newVal = !selected.voiceoverEnabled;
                                         setSegments((prev) =>
                                             prev.map((s) =>
                                                 s.id === selected.id
-                                                    ? { ...s, voiceoverEnabled: !s.voiceoverEnabled }
+                                                    ? { ...s, voiceoverEnabled: newVal }
                                                     : s
                                             )
-                                        )
-                                    }
+                                        );
+                                        // Persist toggle + auto-generate voiceover text
+                                        const body: any = { voiceoverEnabled: newVal };
+                                        if (newVal) {
+                                            // Auto-generate voiceover text from segment title/description
+                                            body.voiceoverText = selected.title || "Check this out";
+                                        }
+                                        try {
+                                            await fetch(`/api/videos/${videoId}/segment/${selected.id}`, {
+                                                method: "PATCH",
+                                                headers: { "Content-Type": "application/json" },
+                                                body: JSON.stringify(body),
+                                            });
+                                        } catch { }
+                                    }}
                                     className={cn(
                                         "w-9 h-5 rounded-full transition-colors relative",
                                         selected.voiceoverEnabled ? "bg-violet-600" : "bg-gray-700"
