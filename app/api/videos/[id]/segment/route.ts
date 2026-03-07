@@ -34,7 +34,15 @@ export async function POST(
         if (!video.storagePath) {
             return NextResponse.json({ error: "No video file in storage" }, { status: 400 });
         }
-        if (!process.env.TOGETHER_API_KEY) {
+        // Get Together API key (DB first, env fallback — same as TTS)
+        let togetherKey = process.env.TOGETHER_API_KEY;
+        if (!togetherKey) {
+            try {
+                const dbKey = await prisma.apiKey.findUnique({ where: { service: "together_api_key" } });
+                if (dbKey?.key) togetherKey = Buffer.from(dbKey.key, "base64").toString("utf8");
+            } catch { }
+        }
+        if (!togetherKey) {
             return NextResponse.json({ error: "TOGETHER_API_KEY not configured" }, { status: 500 });
         }
 

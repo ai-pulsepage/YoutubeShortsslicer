@@ -158,7 +158,13 @@ const downloadWorker = new Worker(
             if (autoTranscribe) {
                 try {
                     // Try Together.ai Whisper first for word-level timestamps
-                    const togetherKey = process.env.TOGETHER_API_KEY;
+                    let togetherKey = process.env.TOGETHER_API_KEY;
+                    if (!togetherKey) {
+                        try {
+                            const dbKey = await prisma.apiKey.findUnique({ where: { service: "together_api_key" } });
+                            if (dbKey?.key) togetherKey = Buffer.from(dbKey.key, "base64").toString("utf8");
+                        } catch { }
+                    }
                     if (togetherKey) {
                         console.log(`[Download] Extracting audio for Whisper transcription...`);
                         const audioPath = path.join(videoDir, "audio.mp3");
@@ -316,7 +322,14 @@ const transcriptionWorker = new Worker(
         const { videoId, userId, storagePath, retranscribe } = job.data;
         console.log(`[Transcription] Starting Whisper re-transcription: video=${videoId}`);
 
-        const togetherKey = process.env.TOGETHER_API_KEY;
+        // Get Together API key (DB first, env fallback)
+        let togetherKey = process.env.TOGETHER_API_KEY;
+        if (!togetherKey) {
+            try {
+                const dbKey = await prisma.apiKey.findUnique({ where: { service: "together_api_key" } });
+                if (dbKey?.key) togetherKey = Buffer.from(dbKey.key, "base64").toString("utf8");
+            } catch { }
+        }
         if (!togetherKey) {
             console.error("[Transcription] TOGETHER_API_KEY not set — skipping");
             await prisma.video.update({ where: { id: videoId }, data: { status: "READY" } });
