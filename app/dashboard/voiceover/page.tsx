@@ -37,9 +37,18 @@ const MIX_MODES = [
 ];
 
 export default function VoiceoverPage() {
-    const [selectedVoice, setSelectedVoice] = useState<string>("bm_george");
-    const [mixMode, setMixMode] = useState("mix");
-    const [balance, setBalance] = useState(70);
+    const [selectedVoice, setSelectedVoice] = useState<string>(() => {
+        if (typeof window !== "undefined") return localStorage.getItem("vo_voice") || "bm_george";
+        return "bm_george";
+    });
+    const [mixMode, setMixMode] = useState(() => {
+        if (typeof window !== "undefined") return localStorage.getItem("vo_mixMode") || "mix";
+        return "mix";
+    });
+    const [balance, setBalance] = useState(() => {
+        if (typeof window !== "undefined") return parseInt(localStorage.getItem("vo_balance") || "70");
+        return 70;
+    });
     const [generating, setGenerating] = useState(false);
     const [playing, setPlaying] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -48,6 +57,11 @@ export default function VoiceoverPage() {
     );
     const audioRef = useRef<HTMLAudioElement>(null);
     const [audioUrl, setAudioUrl] = useState<string | null>(null);
+
+    // Persist settings to localStorage for editor to read
+    const updateVoice = (v: string) => { setSelectedVoice(v); localStorage.setItem("vo_voice", v); };
+    const updateMix = (m: string) => { setMixMode(m); localStorage.setItem("vo_mixMode", m); };
+    const updateBalance = (b: number) => { setBalance(b); localStorage.setItem("vo_balance", String(b)); };
 
     const generatePreview = async () => {
         setGenerating(true);
@@ -120,7 +134,7 @@ export default function VoiceoverPage() {
                         {KOKORO_VOICES.map((voice) => (
                             <button
                                 key={voice.id}
-                                onClick={() => setSelectedVoice(voice.id)}
+                                onClick={() => updateVoice(voice.id)}
                                 className={cn(
                                     "p-3 rounded-xl border text-left transition-all relative group",
                                     selectedVoice === voice.id
@@ -135,7 +149,7 @@ export default function VoiceoverPage() {
                                         <span
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                setSelectedVoice(voice.id);
+                                                updateVoice(voice.id);
                                                 // Small delay so state updates before generatePreview reads it
                                                 setTimeout(() => {
                                                     const btn = document.getElementById("generate-preview-btn");
@@ -163,7 +177,7 @@ export default function VoiceoverPage() {
                         {MIX_MODES.map((mode) => (
                             <button
                                 key={mode.value}
-                                onClick={() => setMixMode(mode.value)}
+                                onClick={() => updateMix(mode.value)}
                                 className={cn(
                                     "w-full flex items-center justify-between p-3 rounded-xl border transition-all",
                                     mixMode === mode.value
@@ -196,7 +210,7 @@ export default function VoiceoverPage() {
                                 min="0"
                                 max="100"
                                 value={balance}
-                                onChange={(e) => setBalance(parseInt(e.target.value))}
+                                onChange={(e) => updateBalance(parseInt(e.target.value))}
                                 className="w-full accent-violet-500"
                             />
                         </div>

@@ -761,11 +761,12 @@ export default function EditorPage() {
                                                     : s
                                             )
                                         );
-                                        // Persist toggle + auto-generate voiceover text
+                                        // Persist toggle + voiceover settings from Voiceover Studio
                                         const body: any = { voiceoverEnabled: newVal };
                                         if (newVal) {
-                                            // Auto-generate voiceover text from segment title/description
                                             body.voiceoverText = selected.title || "Check this out";
+                                            body.voiceoverVoice = localStorage.getItem("vo_voice") || "bm_george";
+                                            body.voiceoverMixMode = localStorage.getItem("vo_mixMode") || "mix";
                                         }
                                         try {
                                             await fetch(`/api/videos/${videoId}/segment/${selected.id}`, {

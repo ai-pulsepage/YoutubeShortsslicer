@@ -560,25 +560,36 @@ const renderWorker = new Worker(
             await job.updateProgress(70);
 
             // Step 4: Generate and mix voiceover if enabled
-            if (segment.voiceoverEnabled && segment.voiceoverText) {
+            const mixMode = segment.voiceoverMixMode || "mix";
+            if (segment.voiceoverEnabled && segment.voiceoverText && mixMode !== "original") {
                 try {
-                    console.log(`[Render] Generating voiceover for segment ${segmentId}`);
+                    const voiceId = segment.voiceoverVoice || "bm_george";
+                    console.log(`[Render] Generating voiceover: voice=${voiceId}, mode=${mixMode}`);
                     const { generateVoiceover } = await import("../lib/tts");
                     const audioBuffer = await generateVoiceover({
                         text: segment.voiceoverText,
-                        voiceId: "bm_george",
+                        voiceId,
                     });
 
                     const voiceoverPath = path.join(renderDir, "voiceover.wav");
                     fs.writeFileSync(voiceoverPath, audioBuffer);
 
                     const mixedOutput = path.join(renderDir, "mixed.mp4");
-                    execSync(
-                        `ffmpeg -i "${outputPath}" -i "${voiceoverPath}" -filter_complex "[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=2[aout]" -map 0:v -map "[aout]" -c:v copy -c:a aac "${mixedOutput}" -y`,
-                        { timeout: 300000 }
-                    );
+                    if (mixMode === "replace") {
+                        // Replace original audio entirely with voiceover
+                        execSync(
+                            `ffmpeg -i "${outputPath}" -i "${voiceoverPath}" -map 0:v -map 1:a -c:v copy -c:a aac -shortest "${mixedOutput}" -y`,
+                            { timeout: 300000 }
+                        );
+                    } else {
+                        // Mix: blend both audio tracks
+                        execSync(
+                            `ffmpeg -i "${outputPath}" -i "${voiceoverPath}" -filter_complex "[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=2[aout]" -map 0:v -map "[aout]" -c:v copy -c:a aac "${mixedOutput}" -y`,
+                            { timeout: 300000 }
+                        );
+                    }
                     fs.renameSync(mixedOutput, outputPath);
-                    console.log(`[Render] Voiceover mixed successfully`);
+                    console.log(`[Render] Voiceover ${mixMode === "replace" ? "replaced" : "mixed"} successfully`);
                 } catch (ttsErr: any) {
                     console.warn(`[Render] Voiceover skipped: ${ttsErr.message}`);
                 }
