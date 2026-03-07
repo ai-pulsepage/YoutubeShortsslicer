@@ -53,6 +53,9 @@ export async function PATCH(
     if (typeof body.voiceoverMixMode === "string" && ["replace", "mix", "original"].includes(body.voiceoverMixMode)) {
         allowedFields.voiceoverMixMode = body.voiceoverMixMode;
     }
+    if (typeof body.subtitlePresetId === "string" || body.subtitlePresetId === null) {
+        allowedFields.subtitlePresetId = body.subtitlePresetId;
+    }
 
     if (Object.keys(allowedFields).length === 0) {
         return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });

@@ -525,7 +525,11 @@ const renderWorker = new Worker(
         try {
             const segment = await prisma.segment.findUnique({
                 where: { id: segmentId },
-                include: { video: true },
+                include: {
+                    video: {
+                        include: { transcript: true },
+                    },
+                },
             });
 
             if (!segment) throw new Error(`Segment ${segmentId} not found`);
@@ -557,6 +561,68 @@ const renderWorker = new Worker(
                 `ffmpeg -i "${cutVideo}" -vf "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,setsar=1" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k -movflags +faststart "${outputPath}" -y`,
                 { timeout: 600000 }
             );
+            await job.updateProgress(50);
+
+            // Step 3.5: Burn subtitles if transcript has word-level timestamps
+            const transcript = (segment.video as any).transcript;
+            if (transcript?.segments) {
+                try {
+                    const { generateASS } = await import("../lib/subtitles");
+
+                    // Load subtitle preset if set, otherwise use defaults
+                    let subtitleStyle: any = {};
+                    const presetId = (segment as any).subtitlePresetId;
+                    if (presetId) {
+                        const preset = await prisma.subtitlePreset.findUnique({ where: { id: presetId } });
+                        if (preset) {
+                            subtitleStyle = {
+                                font: preset.font,
+                                fontSize: preset.fontSize,
+                                color: preset.color,
+                                outline: preset.outline,
+                                shadow: preset.shadow,
+                                position: preset.position,
+                                animation: preset.animation,
+                            };
+                        }
+                    }
+
+                    // Parse word timestamps — stored as JSON array [{word, start, end}]
+                    let wordTimestamps: any[] = [];
+                    try {
+                        wordTimestamps = typeof transcript.segments === "string"
+                            ? JSON.parse(transcript.segments)
+                            : transcript.segments;
+                    } catch { }
+
+                    if (wordTimestamps.length > 0) {
+                        const assContent = generateASS(
+                            wordTimestamps,
+                            segment.startTime,
+                            segment.endTime,
+                            subtitleStyle
+                        );
+
+                        if (assContent) {
+                            const assPath = path.join(renderDir, "subs.ass");
+                            fs.writeFileSync(assPath, assContent, "utf8");
+
+                            // Burn subtitles — re-encode with ASS filter
+                            const subtitledOutput = path.join(renderDir, "subtitled.mp4");
+                            // Escape path for ffmpeg filter (Windows backslashes)
+                            const escapedAssPath = assPath.replace(/\\/g, "/").replace(/:/g, "\\:");
+                            execSync(
+                                `ffmpeg -i "${outputPath}" -vf "ass='${escapedAssPath}'" -c:v libx264 -preset fast -crf 23 -c:a copy "${subtitledOutput}" -y`,
+                                { timeout: 600000 }
+                            );
+                            fs.renameSync(subtitledOutput, outputPath);
+                            console.log(`[Render] Subtitles burned successfully (${wordTimestamps.length} words)`);
+                        }
+                    }
+                } catch (subErr: any) {
+                    console.warn(`[Render] Subtitle burn skipped: ${subErr.message}`);
+                }
+            }
             await job.updateProgress(70);
 
             // Step 4: Generate and mix voiceover if enabled

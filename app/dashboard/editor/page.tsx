@@ -26,6 +26,7 @@ import {
     RefreshCw,
     ArrowLeft,
     Film,
+    Type,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -38,6 +39,17 @@ type Segment = {
     aiScore: number | null;
     status: string;
     voiceoverEnabled: boolean;
+    subtitlePresetId: string | null;
+};
+
+type SubtitlePreset = {
+    id: string;
+    name: string;
+    font: string;
+    fontSize: number;
+    color: string;
+    position: string;
+    animation: string;
 };
 
 type Video = {
@@ -68,6 +80,8 @@ export default function EditorPage() {
     const [videos, setVideos] = useState<Video[]>([]);
     const videoRef = useRef<HTMLVideoElement>(null);
     const timelineRef = useRef<HTMLDivElement>(null);
+    const [transcriptWords, setTranscriptWords] = useState<any[]>([]);
+    const [subtitlePresets, setSubtitlePresets] = useState<SubtitlePreset[]>([]);
 
     const duration = videoDuration || video?.duration || 0;
     const selected = segments.find((s) => s.id === selectedSegment);
@@ -92,10 +106,28 @@ export default function EditorPage() {
                     aiScore: s.aiScore || null,
                     status: s.status || "AI_SUGGESTED",
                     voiceoverEnabled: s.voiceoverEnabled || false,
+                    subtitlePresetId: s.subtitlePresetId || null,
                 })));
             }
             setLoading(false);
         });
+
+        // Load transcript word timestamps
+        fetch(`/api/videos/${videoId}/transcript`)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (data?.segments) {
+                    const words = typeof data.segments === "string" ? JSON.parse(data.segments) : data.segments;
+                    setTranscriptWords(Array.isArray(words) ? words : []);
+                }
+            })
+            .catch(() => { });
+
+        // Load subtitle presets
+        fetch("/api/subtitle-presets")
+            .then(r => r.ok ? r.json() : [])
+            .then(data => setSubtitlePresets(Array.isArray(data) ? data : []))
+            .catch(() => { });
     }, [videoId]);
 
     // Keyboard shortcuts
@@ -253,6 +285,7 @@ export default function EditorPage() {
             aiScore: selected.aiScore,
             status: "SUGGESTED",
             voiceoverEnabled: false,
+            subtitlePresetId: null,
         };
         setSegments((prev) => [
             ...prev.map((s) =>
@@ -297,6 +330,7 @@ export default function EditorPage() {
                             aiScore: s.aiScore || null,
                             status: s.status || "AI_SUGGESTED",
                             voiceoverEnabled: s.voiceoverEnabled || false,
+                            subtitlePresetId: s.subtitlePresetId || null,
                         })));
                         setSegmenting(false);
                     }
@@ -796,6 +830,48 @@ export default function EditorPage() {
                                         )}
                                     />
                                 </button>
+                            </div>
+
+                            {/* Transcript for this segment */}
+                            {transcriptWords.length > 0 && (
+                                <div className="border-t border-gray-800 pt-2">
+                                    <label className="text-[10px] text-gray-500 uppercase mb-1 block">Transcript</label>
+                                    <p className="text-xs text-gray-300 leading-relaxed max-h-20 overflow-y-auto">
+                                        {transcriptWords
+                                            .filter(w => w.start >= selected.start - 0.5 && w.end <= selected.end + 0.5)
+                                            .map(w => w.word)
+                                            .join(" ") || "No transcript for this range"}
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Subtitle Preset */}
+                            <div className="flex items-center justify-between py-2 border-t border-gray-800">
+                                <span className="text-xs text-gray-400 flex items-center gap-1.5">
+                                    <Type className="w-3 h-3" /> Subtitles
+                                </span>
+                                <select
+                                    value={selected.subtitlePresetId || "auto"}
+                                    onChange={async (e) => {
+                                        const val = e.target.value === "auto" ? null : e.target.value;
+                                        setSegments(prev => prev.map(s =>
+                                            s.id === selected.id ? { ...s, subtitlePresetId: val } : s
+                                        ));
+                                        try {
+                                            await fetch(`/api/videos/${videoId}/segment/${selected.id}`, {
+                                                method: "PATCH",
+                                                headers: { "Content-Type": "application/json" },
+                                                body: JSON.stringify({ subtitlePresetId: val }),
+                                            });
+                                        } catch { }
+                                    }}
+                                    className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:border-violet-500 focus:outline-none"
+                                >
+                                    <option value="auto">Default Style</option>
+                                    {subtitlePresets.map(p => (
+                                        <option key={p.id} value={p.id}>{p.name}</option>
+                                    ))}
+                                </select>
                             </div>
                         </div>
                     ) : (
