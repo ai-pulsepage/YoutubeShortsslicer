@@ -139,27 +139,42 @@ export default function EditorPage() {
         return () => window.removeEventListener("keydown", handleKeyDown);
     }, [currentTime, selected, isPlaying]);
 
-    // Video time update — use RAF for smooth 60fps tracking
+    // Video time update — RAF for smooth tracking + timeupdate fallback
     useEffect(() => {
         const video = videoRef.current;
         if (!video) return;
 
         let rafId: number;
+        let lastTime = -1;
         const tick = () => {
-            if (video && !video.paused) {
-                setCurrentTime(video.currentTime);
+            if (video) {
+                const t = video.currentTime;
+                // Only update state if time actually changed (avoid unnecessary re-renders)
+                if (Math.abs(t - lastTime) > 0.05) {
+                    lastTime = t;
+                    setCurrentTime(t);
+                }
             }
             rafId = requestAnimationFrame(tick);
         };
         rafId = requestAnimationFrame(tick);
 
+        // Fallback: timeupdate fires ~4x/sec as backup
+        const onTimeUpdate = () => {
+            lastTime = video.currentTime;
+            setCurrentTime(video.currentTime);
+        };
         const onPlay = () => setIsPlaying(true);
         const onPause = () => {
             setIsPlaying(false);
-            setCurrentTime(video.currentTime); // sync on pause
+            setCurrentTime(video.currentTime);
         };
-        const onSeeked = () => setCurrentTime(video.currentTime);
+        const onSeeked = () => {
+            lastTime = video.currentTime;
+            setCurrentTime(video.currentTime);
+        };
 
+        video.addEventListener("timeupdate", onTimeUpdate);
         video.addEventListener("play", onPlay);
         video.addEventListener("pause", onPause);
         video.addEventListener("seeked", onSeeked);
@@ -177,6 +192,7 @@ export default function EditorPage() {
 
         return () => {
             cancelAnimationFrame(rafId);
+            video.removeEventListener("timeupdate", onTimeUpdate);
             video.removeEventListener("play", onPlay);
             video.removeEventListener("pause", onPause);
             video.removeEventListener("seeked", onSeeked);
