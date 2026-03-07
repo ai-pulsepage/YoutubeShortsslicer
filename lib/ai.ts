@@ -22,24 +22,28 @@ interface TranscriptSegment {
     text: string;
 }
 
-const SEGMENTATION_PROMPT = `You are a viral short-form content expert. Analyze this video transcript and identify COMPLETE STORIES or SCENES that would make compelling YouTube Shorts.
+const SEGMENTATION_PROMPT = `You are a viral short-form content expert. Analyze this video transcript and identify EVERY distinct story, scene, or topic that would make compelling YouTube Shorts.
 
-YOUR PRIMARY OBJECTIVE: Find every distinct story, scene, or topic in the video. Each story must be captured in full — never cut a story short.
+YOUR PRIMARY OBJECTIVE: Find EVERY distinct story, scene, or topic transition in the transcript. Do NOT skip sections — cover the ENTIRE transcript from beginning to end.
 
 STORY RULES:
-1. **Capture the COMPLETE story** — from its natural beginning to its natural end
-2. **If a story is ≤60 seconds** → create ONE segment covering it entirely
-3. **If a story is >60 seconds** → split it into sequential parts:
-   - "Story Title (Part 1 of 2)" covering seconds 0-58
-   - "Story Title (Part 2 of 2)" covering seconds 58-115
+1. **Capture COMPLETE stories** — from natural beginning to natural end
+2. **If a story is ≤60 seconds** → ONE segment covering it entirely
+3. **If a story is >60 seconds** → split into sequential parts:
+   - Count the total parts FIRST, then name them correctly
+   - "Story Title (Part 1 of 3)" → "Story Title (Part 2 of 3)" → "Story Title (Part 3 of 3)"
    - Parts should overlap by ~2 seconds for smooth transitions
-4. **Each part must be 15-60 seconds** (sweet spot: 30-55s)
+   - The "of N" number MUST match the actual total number of parts
+4. **Each segment must be 30-60 seconds** (sweet spot: 40-55s)
 5. **NO OVERLAP between different stories** — each story's time range is exclusive
-6. **Cover the ENTIRE video** — identify stories throughout, not just the beginning
+6. **Cover the ENTIRE transcript** — do NOT skip any section. Every minute of content should be analyzed
+7. **If content seems transitional**, still identify it as a segment with a descriptive title
+
+IMPORTANT: You MUST find segments throughout the ENTIRE time range provided. If the transcript covers 0:00 to 10:00, you should have segments spread across that full range, not clustered at the start or end.
 
 IDENTIFICATION CRITERIA:
+- Topic shifts — when a new animal, scene, location, or subject begins
 - Self-contained narrative arcs (mini-stories with beginning, middle, end)
-- Topic shifts — when a new animal, scene, or subject begins
 - Emotional moments — surprising, dramatic, or heartwarming scenes
 - Natural speech boundaries — never cut mid-sentence
 
@@ -58,7 +62,7 @@ Respond ONLY with valid JSON array. No markdown, no explanation:
   {
     "start": 125.0,
     "end": 170.5,
-    "title": "Killer Whales Hunt Grey Whale Calf",
+    "title": "Killer Whales Hunt Grey Whale Calf (Part 1 of 3)",
     "description": "A pod of killer whales coordinates to separate a grey whale calf from its mother",
     "hookStrength": 9,
     "emotionalArc": 8,
@@ -68,8 +72,8 @@ Respond ONLY with valid JSON array. No markdown, no explanation:
   {
     "start": 170.5,
     "end": 225.0,
-    "title": "Killer Whales Hunt Grey Whale Calf (Part 2 of 2)",
-    "description": "The hunt reaches its climax as the pod closes in",
+    "title": "Killer Whales Hunt Grey Whale Calf (Part 2 of 3)",
+    "description": "The hunt intensifies as the pod coordinates their attack",
     "hookStrength": 7,
     "emotionalArc": 9,
     "completeness": 8,
@@ -208,13 +212,15 @@ export async function segmentVideo(
     let chunkStart = 0;
 
     while (chunkStart < videoDuration) {
-        const chunkEnd = Math.min(chunkStart + CHUNK_DURATION + OVERLAP, videoDuration);
+        const chunkEnd = Math.min(chunkStart + CHUNK_DURATION, videoDuration);
+        // Include all transcript segments that START within this chunk's range (with overlap buffer)
         const chunkSegments = transcript.filter(
-            (s) => s.start >= chunkStart - OVERLAP && s.end <= chunkEnd + OVERLAP
+            (s) => s.start >= Math.max(0, chunkStart - OVERLAP) && s.start < chunkEnd + OVERLAP
         );
 
         if (chunkSegments.length > 0) {
             chunks.push(chunkSegments);
+            console.log(`[AI] Chunk: ${formatTimeHMS(chunkSegments[0].start)} → ${formatTimeHMS(chunkSegments[chunkSegments.length - 1].end)} (${chunkSegments.length} transcript segments)`);
         }
         chunkStart += CHUNK_DURATION;
     }
@@ -239,7 +245,7 @@ export async function segmentVideo(
     const deduped = deduplicateSegments(allSegments);
     console.log(`[AI] Total: ${deduped.length} unique segments from ${allSegments.length} raw`);
 
-    return deduped.sort((a, b) => b.overallScore - a.overallScore);
+    return deduped.sort((a, b) => a.start - b.start);
 }
 
 /**
@@ -265,17 +271,22 @@ function deduplicateSegments(segments: SegmentSuggestion[]): SegmentSuggestion[]
     const result: SegmentSuggestion[] = [];
 
     for (const seg of sorted) {
-        const isDuplicate = result.some((existing) => {
+        const dupeIndex = result.findIndex((existing) => {
             const overlapStart = Math.max(existing.start, seg.start);
             const overlapEnd = Math.min(existing.end, seg.end);
-            const overlap = overlapEnd - overlapStart;
-            const segDuration = seg.end - seg.start;
-            // Consider duplicate if >60% overlap
-            return overlap > 0 && overlap / segDuration > 0.6;
+            const overlap = Math.max(0, overlapEnd - overlapStart);
+            const minDuration = Math.min(existing.end - existing.start, seg.end - seg.start);
+            // Consider duplicate if >40% of the shorter segment overlaps
+            return overlap > 0 && overlap / minDuration > 0.4;
         });
 
-        if (!isDuplicate) {
+        if (dupeIndex === -1) {
             result.push(seg);
+        } else {
+            // Keep the higher-scored version
+            if (seg.overallScore > result[dupeIndex].overallScore) {
+                result[dupeIndex] = seg;
+            }
         }
     }
 
@@ -336,7 +347,7 @@ function parseSegments(
     return parsed
         .filter((s: any) => {
             const duration = (s.end || 0) - (s.start || 0);
-            return duration > 15 && duration <= 65 && s.start >= 0 && s.end <= videoDuration;
+            return duration > 15 && duration <= 65 && s.start >= 0;
         })
         .map((s: any) => ({
             start: Math.max(0, s.start),
