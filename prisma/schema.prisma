@@ -82,6 +82,7 @@ model User {
   subtitlePresets SubtitlePreset[]
   subscription  Subscription?
   schedules     ContentSchedule[]
+  documentaries Documentary[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -379,4 +380,162 @@ model Subscription {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// ─── Documentary Factory ─────────────────────────────────
+
+enum DocStatus {
+  DRAFT
+  SCENES_PLANNED
+  ASSETS_READY
+  GENERATING
+  ASSEMBLING
+  REVIEW
+  APPROVED
+  PUBLISHED
+  FAILED
+}
+
+enum AssetType {
+  CHARACTER
+  PROP
+  CONCEPT
+  ENVIRONMENT
+  FILLER
+}
+
+enum GenJobStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model Documentary {
+  id             String    @id @default(cuid())
+  userId         String
+  title          String?
+  sourceUrls     String[]
+  rawArticles    Json?
+  script         String?   @db.Text
+  style          String    @default("cinematic")
+  styleGuide     Json?
+  voiceId        String    @default("bf_emma")
+  status         DocStatus @default(DRAFT)
+  totalDuration  Float?
+  finalVideoPath String?
+  errorMsg       String?   @db.Text
+
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scenes         DocScene[]
+  assets         DocAsset[]
+  genJobs        GenJob[]
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model DocScene {
+  id             String   @id @default(cuid())
+  documentaryId  String
+  sceneIndex     Int
+  title          String?
+  narrationText  String?  @db.Text
+  narrationPath  String?
+  duration       Float?
+  assembledPath  String?
+
+  documentary    Documentary @relation(fields: [documentaryId], references: [id], onDelete: Cascade)
+  shots          DocShot[]
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([documentaryId, sceneIndex])
+}
+
+model DocShot {
+  id              String   @id @default(cuid())
+  sceneId         String
+  shotIndex       Int
+
+  // Camera
+  shotType        String
+  cameraAngle     String?
+  cameraMovement  String?
+
+  // Content
+  action          String?  @db.Text
+  dialogue        String?  @db.Text
+
+  // Mood & Atmosphere
+  mood            String?
+  lighting        String?
+  colorPalette    String?
+
+  // Transition
+  transitionIn    String?  @default("cut")
+  transitionOut   String?  @default("cut")
+
+  // Generation
+  compositePrompt String?  @db.Text
+  lastFramePath   String?
+  clipPath        String?
+  duration        Float?
+
+  scene           DocScene      @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  shotAssets      DocShotAsset[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([sceneId, shotIndex])
+}
+
+model DocAsset {
+  id             String    @id @default(cuid())
+  documentaryId  String
+  type           AssetType
+  label          String
+  description    String?   @db.Text
+  attire         String?
+  imagePath      String?
+  altImages      String[]
+  prompt         String?   @db.Text
+
+  documentary    Documentary    @relation(fields: [documentaryId], references: [id], onDelete: Cascade)
+  shotAssets     DocShotAsset[]
+
+  createdAt      DateTime @default(now())
+}
+
+model DocShotAsset {
+  id        String  @id @default(cuid())
+  shotId    String
+  assetId   String
+  role      String?
+
+  shot      DocShot  @relation(fields: [shotId], references: [id], onDelete: Cascade)
+  asset     DocAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([shotId, assetId])
+}
+
+model GenJob {
+  id              String       @id @default(cuid())
+  documentaryId   String
+  jobType         String
+  prompt          String?      @db.Text
+  referenceImages String[]
+  outputPath      String?
+  status          GenJobStatus @default(QUEUED)
+  shotId          String?
+  assetId         String?
+  errorMsg        String?      @db.Text
+  metadata        Json?
+
+  documentary     Documentary @relation(fields: [documentaryId], references: [id], onDelete: Cascade)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }

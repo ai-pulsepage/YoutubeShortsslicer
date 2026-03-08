@@ -22,6 +22,7 @@ import {
     ChevronLeft,
     ChevronRight,
     HelpCircle,
+    Video,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -35,6 +36,7 @@ const navItems = [
     { label: "Voiceover", href: "/dashboard/voiceover", icon: Mic },
     { label: "Channels", href: "/dashboard/channels", icon: Share2 },
     { label: "Scheduler", href: "/dashboard/scheduler", icon: Calendar },
+    { label: "Documentary", href: "/dashboard/documentary", icon: Video },
     { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
     { label: "Whop", href: "/dashboard/whop", icon: DollarSign },
     { label: "Help", href: "/dashboard/help", icon: HelpCircle },
