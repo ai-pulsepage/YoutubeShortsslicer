@@ -297,3 +297,93 @@ export async function scrapeArticles(urls: string[]): Promise<ScrapedArticle[]> 
 
     return results;
 }
+
+/**
+ * Research a topic using DeepSeek's knowledge — no URLs needed.
+ * Returns structured article objects as if they were scraped.
+ */
+export async function researchTopic(topic: string): Promise<ScrapedArticle[]> {
+    const apiKey = await getApiKey();
+
+    console.log(`[Researcher] Researching topic: "${topic}"...`);
+
+    const prompt = `You are a world-class science journalist and researcher. A documentary filmmaker wants to create a documentary about:
+
+"${topic}"
+
+Your job is to provide comprehensive research material by synthesizing the most important, recent, and groundbreaking findings on this topic. Create 3-5 "virtual articles" — each representing a major angle or discovery related to this topic.
+
+For each article, provide:
+{
+  "articles": [
+    {
+      "title": "Compelling article headline",
+      "url": "https://example.com/placeholder",
+      "keyFacts": ["5-8 specific, verifiable factual claims"],
+      "quotes": ["2-3 real or realistic quotes from leading scientists in this field"],
+      "scientificConcepts": ["Key scientific concepts involved"],
+      "emotionalHooks": ["2-3 aspects that create wonder, surprise, or fascination"],
+      "noveltyScore": 8,
+      "summary": "2-3 sentence summary of this angle/discovery"
+    }
+  ]
+}
+
+Rules:
+- Each article should cover a DIFFERENT angle of the topic
+- Include the most recent breakthroughs and discoveries you know about
+- Be factually accurate — use real scientist names, real institutions, real experiments where possible
+- Include at least one article about the history/origins of the field
+- Include at least one article about cutting-edge recent developments
+- Include at least one article about future implications or open questions
+- Novelty scores should reflect how surprising/novel each angle is
+- Return ONLY valid JSON`;
+
+    const response = await fetch("https://api.deepseek.com/chat/completions", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+            model: "deepseek-chat",
+            messages: [
+                {
+                    role: "system",
+                    content: "You are an expert science researcher. Provide comprehensive, accurate research data. Return only valid JSON.",
+                },
+                { role: "user", content: prompt },
+            ],
+            temperature: 0.7,
+            max_tokens: 8000,
+            response_format: { type: "json_object" },
+        }),
+    });
+
+    if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`DeepSeek API error: ${response.status} - ${errText}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+
+    if (!content) {
+        throw new Error("Empty response from DeepSeek researcher");
+    }
+
+    const parsed = JSON.parse(content);
+    const articles: ScrapedArticle[] = (parsed.articles || []).map((a: any) => ({
+        url: a.url || "https://ai-researched",
+        title: a.title || "Untitled",
+        keyFacts: a.keyFacts || a.key_facts || [],
+        quotes: a.quotes || [],
+        scientificConcepts: a.scientificConcepts || a.scientific_concepts || [],
+        emotionalHooks: a.emotionalHooks || a.emotional_hooks || [],
+        noveltyScore: a.noveltyScore || a.novelty_score || 5,
+        summary: a.summary || "",
+    }));
+
+    console.log(`[Researcher] ✅ Generated ${articles.length} research articles for "${topic}"`);
+    return articles;
+}

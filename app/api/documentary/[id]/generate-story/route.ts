@@ -12,7 +12,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { scrapeArticles } from "@/lib/documentary/scraper";
+import { scrapeArticles, researchTopic } from "@/lib/documentary/scraper";
 import { generateStoryScript, saveScriptToDocumentary } from "@/lib/documentary/story-writer";
 import { planScenes } from "@/lib/documentary/scene-planner";
 
@@ -45,8 +45,17 @@ export async function POST(
         data: { status: "GENERATING", errorMsg: null },
     });
 
+    // Determine mode: topic-based (no URLs) or URL-based
+    const isTopicMode = documentary.sourceUrls.length === 0 && !!documentary.title;
+
     // Run the pipeline in the background (don't block the HTTP response)
-    runStoryPipeline(id, documentary.sourceUrls, documentary.style, targetDuration).catch(
+    runStoryPipeline(
+        id,
+        documentary.sourceUrls,
+        documentary.style,
+        targetDuration,
+        isTopicMode ? documentary.title! : undefined
+    ).catch(
         async (err) => {
             console.error(`[GenerateStory] Pipeline failed for ${id}:`, err);
             await prisma.documentary.update({
@@ -67,16 +76,27 @@ async function runStoryPipeline(
     documentaryId: string,
     sourceUrls: string[],
     style: string,
-    targetDuration: number
+    targetDuration: number,
+    topicTitle?: string
 ): Promise<void> {
     console.log(`[StoryPipeline] Starting for ${documentaryId}...`);
 
-    // Step 1: Scrape articles
-    console.log(`[StoryPipeline] Step 1/3: Scraping ${sourceUrls.length} articles...`);
-    const articles = await scrapeArticles(sourceUrls);
+    let articles;
+
+    if (topicTitle) {
+        // Topic mode — DeepSeek researches the topic
+        console.log(`[StoryPipeline] Step 1/3: AI researching topic "${topicTitle}"...`);
+        articles = await researchTopic(topicTitle);
+    } else {
+        // URL mode — scrape provided articles
+        console.log(`[StoryPipeline] Step 1/3: Scraping ${sourceUrls.length} articles...`);
+        articles = await scrapeArticles(sourceUrls);
+    }
 
     if (articles.length === 0) {
-        throw new Error("No articles could be scraped from the provided URLs");
+        throw new Error(topicTitle
+            ? "AI could not generate research for this topic. Try a more specific title."
+            : "No articles could be scraped from the provided URLs");
     }
 
     // Save raw articles to documentary

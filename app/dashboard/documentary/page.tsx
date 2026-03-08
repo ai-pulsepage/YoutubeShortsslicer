@@ -269,65 +269,127 @@ function CreateDocumentaryModal({
     onClose: () => void;
     onCreated: (id: string) => void;
 }) {
+    const [mode, setMode] = useState<"topic" | "urls">("topic");
     const [title, setTitle] = useState("");
     const [urlsText, setUrlsText] = useState("");
     const [style, setStyle] = useState("cinematic");
     const [creating, setCreating] = useState(false);
 
     const handleCreate = async () => {
-        const urls = urlsText.split("\n").map((u) => u.trim()).filter(Boolean);
-        if (urls.length === 0) return;
-
-        setCreating(true);
-        const res = await fetch("/api/documentary", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                title: title || undefined,
-                sourceUrls: urls,
-                style,
-            }),
-        });
-        const data = await res.json();
-        setCreating(false);
-        if (data.id) onCreated(data.id);
+        if (mode === "urls") {
+            const urls = urlsText.split("\n").map((u) => u.trim()).filter(Boolean);
+            if (urls.length === 0) return;
+            setCreating(true);
+            const res = await fetch("/api/documentary", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    title: title || undefined,
+                    sourceUrls: urls,
+                    style,
+                }),
+            });
+            const data = await res.json();
+            setCreating(false);
+            if (data.id) onCreated(data.id);
+        } else {
+            // Topic mode: title is required, no URLs
+            if (!title.trim()) return;
+            setCreating(true);
+            const res = await fetch("/api/documentary", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    title: title.trim(),
+                    sourceUrls: [],
+                    style,
+                }),
+            });
+            const data = await res.json();
+            setCreating(false);
+            if (data.id) onCreated(data.id);
+        }
     };
+
+    const canCreate = mode === "topic" ? !!title.trim() : !!urlsText.trim();
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
             <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-lg mx-4 shadow-2xl">
                 <div className="px-6 py-4 border-b border-gray-800">
                     <h2 className="text-lg font-semibold text-white">New Documentary Project</h2>
-                    <p className="text-sm text-gray-400 mt-0.5">Paste article URLs to begin</p>
+                    <p className="text-sm text-gray-400 mt-0.5">
+                        {mode === "topic" ? "Describe a topic and AI will research it" : "Paste article URLs to begin"}
+                    </p>
                 </div>
 
                 <div className="p-6 space-y-4">
+                    {/* Mode Toggle */}
+                    <div className="flex items-center gap-1 bg-gray-800 rounded-xl p-1">
+                        <button
+                            onClick={() => setMode("topic")}
+                            className={cn(
+                                "flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                                mode === "topic" ? "bg-violet-600 text-white" : "text-gray-400 hover:text-white"
+                            )}
+                        >
+                            <Sparkles className="w-3.5 h-3.5" />
+                            AI Research
+                        </button>
+                        <button
+                            onClick={() => setMode("urls")}
+                            className={cn(
+                                "flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                                mode === "urls" ? "bg-violet-600 text-white" : "text-gray-400 hover:text-white"
+                            )}
+                        >
+                            <Search className="w-3.5 h-3.5" />
+                            From URLs
+                        </button>
+                    </div>
+
                     {/* Title */}
                     <div>
-                        <label className="block text-xs font-medium text-gray-400 mb-1.5">Title (optional)</label>
+                        <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                            {mode === "topic" ? (
+                                <>Documentary Topic <span className="text-red-400">*</span></>
+                            ) : (
+                                "Title (optional)"
+                            )}
+                        </label>
                         <input
                             type="text"
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
-                            placeholder="e.g. Dark Matter Mysteries"
+                            placeholder={mode === "topic"
+                                ? "e.g. The newest frontiers on quantum physics and entanglement"
+                                : "e.g. Dark Matter Mysteries"
+                            }
                             className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 transition-colors"
                         />
+                        {mode === "topic" && (
+                            <p className="text-xs text-gray-600 mt-1">
+                                AI will research the most popular and up-to-date publications on this topic.
+                            </p>
+                        )}
                     </div>
 
-                    {/* Source URLs */}
-                    <div>
-                        <label className="block text-xs font-medium text-gray-400 mb-1.5">
-                            Source Article URLs <span className="text-red-400">*</span>
-                        </label>
-                        <textarea
-                            value={urlsText}
-                            onChange={(e) => setUrlsText(e.target.value)}
-                            rows={4}
-                            placeholder={"https://example.com/article-1\nhttps://example.com/article-2\nhttps://example.com/article-3"}
-                            className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 transition-colors resize-none font-mono"
-                        />
-                        <p className="text-xs text-gray-600 mt-1">One URL per line. AI will scrape and synthesize these into a narrated documentary.</p>
-                    </div>
+                    {/* Source URLs — only shown in URL mode */}
+                    {mode === "urls" && (
+                        <div>
+                            <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                                Source Article URLs <span className="text-red-400">*</span>
+                            </label>
+                            <textarea
+                                value={urlsText}
+                                onChange={(e) => setUrlsText(e.target.value)}
+                                rows={4}
+                                placeholder={"https://example.com/article-1\nhttps://example.com/article-2\nhttps://example.com/article-3"}
+                                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 transition-colors resize-none font-mono"
+                            />
+                            <p className="text-xs text-gray-600 mt-1">One URL per line. AI will scrape and synthesize these into a narrated documentary.</p>
+                        </div>
+                    )}
 
                     {/* Style */}
                     <div>
@@ -357,11 +419,11 @@ function CreateDocumentaryModal({
                     </button>
                     <button
                         onClick={handleCreate}
-                        disabled={creating || !urlsText.trim()}
+                        disabled={creating || !canCreate}
                         className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-medium bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-50 transition-colors"
                     >
                         {creating && <Loader2 className="w-4 h-4 animate-spin" />}
-                        Create Project
+                        {mode === "topic" ? "Create & Research" : "Create Project"}
                     </button>
                 </div>
             </div>
