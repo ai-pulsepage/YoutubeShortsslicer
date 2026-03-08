@@ -70,18 +70,41 @@ def download_from_r2(r2_key: str, local_path: str):
 _flux_pipe = None
 
 def get_flux_pipeline():
-    """Lazy-load Flux.1 pipeline."""
+    """Lazy-load Flux.1 pipeline. Tries FLUX.1-dev first (gated), falls back to schnell (open)."""
     global _flux_pipe
     if _flux_pipe is None:
-        print("🔄 Loading Flux.1 pipeline...")
         from diffusers import FluxPipeline
-        _flux_pipe = FluxPipeline.from_pretrained(
-            "black-forest-labs/FLUX.1-dev",
-            torch_dtype=torch.bfloat16,
-        ).to("cuda")
-        # Enable memory optimizations
-        _flux_pipe.enable_model_cpu_offload()
-        print("✅ Flux.1 loaded")
+        import os
+
+        # Read token from HF_HOME or default cache
+        hf_token = None
+        for token_path in [
+            os.path.join(os.environ.get("HF_HOME", ""), "token"),
+            os.path.expanduser("~/.cache/huggingface/token"),
+        ]:
+            if os.path.exists(token_path):
+                with open(token_path) as f:
+                    hf_token = f.read().strip()
+                break
+
+        # Try FLUX.1-dev first (higher quality, gated)
+        try:
+            print("🔄 Loading Flux.1-dev pipeline...")
+            _flux_pipe = FluxPipeline.from_pretrained(
+                "black-forest-labs/FLUX.1-dev",
+                torch_dtype=torch.bfloat16,
+                token=hf_token,
+            )
+            _flux_pipe.enable_model_cpu_offload()
+            print("✅ Flux.1-dev loaded")
+        except Exception as e:
+            print(f"⚠️  Flux.1-dev failed ({e}), falling back to Flux.1-schnell...")
+            _flux_pipe = FluxPipeline.from_pretrained(
+                "black-forest-labs/FLUX.1-schnell",
+                torch_dtype=torch.bfloat16,
+            )
+            _flux_pipe.enable_model_cpu_offload()
+            print("✅ Flux.1-schnell loaded (open model, no auth needed)")
     return _flux_pipe
 
 
