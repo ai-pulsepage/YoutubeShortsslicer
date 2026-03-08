@@ -2,43 +2,35 @@
  * Scene Planner — The AI Filmmaker
  * 
  * Takes a documentary script and breaks it into scenes, each with a
- * professional shot list. Acts as both director and cinematographer,
- * planning camera angles, movements, mood, lighting, and transitions.
+ * simplified shot list optimized for image generation.
  * 
- * Also identifies all unique assets (characters, props, concepts, environments)
- * and maps them to shots via the DocShotAsset junction.
+ * Phase 1: Lean shots (action + mood + assets) for Flux.1 image gen
+ * Phase 2 (future): Detailed cinematography for Wan2.1 video clips
  */
 
 import { prisma } from "@/lib/prisma";
-import type { StoryScript, ScriptSegment } from "./story-writer";
+import type { StoryScript } from "./story-writer";
 
-// Types for the AI response
+// Types for the AI response — kept lean for token efficiency
 interface PlannedScene {
     title: string;
     narrationText: string;
-    estimatedDuration: number;
+    duration: number; // seconds
     shots: PlannedShot[];
 }
 
 interface PlannedShot {
-    shotType: string;
-    cameraAngle: string;
-    cameraMovement: string;
-    action: string;
-    mood: string;
-    lighting: string;
-    colorPalette: string;
-    transitionIn: string;
-    transitionOut: string;
-    duration: number;
-    assetsUsed: string[]; // labels referencing the asset list
+    action: string;          // What happens in this shot
+    mood: string;            // Emotional tone
+    assetsUsed: string[];    // Asset labels
+    duration: number;        // seconds
 }
 
 interface PlannedAsset {
     label: string;
     type: "CHARACTER" | "PROP" | "CONCEPT" | "ENVIRONMENT" | "FILLER";
-    description: string;
-    attire?: string;
+    description: string;     // Visual description for image generation
+    attire?: string;         // For CHARACTER type
 }
 
 interface ScenePlan {
@@ -46,63 +38,44 @@ interface ScenePlan {
     assets: PlannedAsset[];
 }
 
-const SCENE_PLANNER_PROMPT = `You are an expert filmmaker and cinematographer planning a documentary.
+const SCENE_PLANNER_PROMPT = `You are an expert filmmaker planning a documentary.
 
-Given the following script, break it into scenes and create a professional shot list.
+Break the script into scenes with a shot list and identify all visual assets needed.
 
 SCRIPT:
 {script}
 
-STYLE GUIDE: {style}
+STYLE: {style}
 
-Create a detailed production plan in JSON format:
-
+Return JSON in this EXACT compact format:
 {
   "assets": [
-    {
-      "label": "Unique name (e.g. 'Astronomer Dr. Chen', 'CERN Control Room')",
-      "type": "CHARACTER | PROP | CONCEPT | ENVIRONMENT | FILLER",
-      "description": "Detailed visual description for image generation",
-      "attire": "Clothing/appearance details (for CHARACTER type only)"
-    }
+    {"label": "Dr. Chen", "type": "CHARACTER", "description": "Female physicist, 40s, kind eyes, silver-streaked black hair", "attire": "White lab coat over blue blouse"},
+    {"label": "Quantum Field", "type": "CONCEPT", "description": "Swirling energy field of blue and purple light particles"},
+    {"label": "Observatory", "type": "ENVIRONMENT", "description": "Modern observatory dome at night with stars visible"}
   ],
   "scenes": [
     {
-      "title": "Scene title",
-      "narrationText": "Full narration for this scene",
-      "estimatedDuration": 45,
+      "title": "The Awakening",
+      "narrationText": "Full narration text for this scene...",
+      "duration": 60,
       "shots": [
-        {
-          "shotType": "establishing | wide | medium | close-up | extreme-close-up | over-shoulder | POV | insert | reaction | aerial",
-          "cameraAngle": "eye-level | low-angle | high-angle | bird's-eye | dutch-angle | worm's-eye",
-          "cameraMovement": "static | pan-left | pan-right | tilt-up | tilt-down | dolly-in | dolly-out | tracking | crane-up | crane-down | handheld | steadicam",
-          "action": "Brief description of what happens in this shot",
-          "mood": "mysterious | tense | awe | wonder | calm | dramatic | playful | ominous | reverent | hopeful",
-          "lighting": "natural | dramatic | low-key | high-key | neon | golden-hour | fluorescent | moonlit | starlit | cinematic",
-          "colorPalette": "Dominant colors (e.g. 'deep blues and silver')",
-          "transitionIn": "cut | fade-in | dissolve | wipe",
-          "transitionOut": "cut | fade-out | dissolve | wipe",
-          "duration": 5,
-          "assetsUsed": ["Asset Label 1", "Asset Label 2"]
-        }
+        {"action": "Wide view of observatory under starry sky", "mood": "wonder", "assetsUsed": ["Observatory"], "duration": 5},
+        {"action": "Dr. Chen peers through telescope", "mood": "curiosity", "assetsUsed": ["Dr. Chen", "Observatory"], "duration": 4}
       ]
     }
   ]
 }
 
-RULES FOR SHOT PLANNING:
-1. Each scene should have 3-8 shots for visual variety
-2. Start scenes with establishing/wide shots, then move closer
-3. Use insert shots for key objects and concepts
-4. Use reaction shots after revelations
-5. Vary camera movements — don't make everything static
-6. Match mood/lighting to the emotional tone of the narration
-7. Transitions: use dissolves between scenes, cuts within scenes
-8. Abstract concepts (dark matter, quantum) should get CONCEPT assets with creative visual descriptions
-9. Characters should be consistent — reuse the same asset label across scenes
-10. Environments can have multiple variations (e.g., "CERN Exterior" vs "CERN Lab Interior")
-11. Include filler assets for scene transitions (abstract art, particle effects, starfields)
-12. Each shot should be 3-8 seconds for documentary pacing
+RULES:
+1. Keep 2-4 shots per scene (not more!) for compact output
+2. Reuse the same asset labels across scenes for consistency
+3. Asset descriptions must be detailed enough for AI image generation
+4. Include FILLER assets for transitions (abstract art, particles, starfields)
+5. Each shot 3-8 seconds
+6. Aim for 8-15 total unique assets
+7. Group every 2-3 script segments into one scene
+8. IMPORTANT: Keep total output under 6000 characters to avoid truncation
 
 Return ONLY valid JSON.`;
 
@@ -116,16 +89,21 @@ export async function planScenes(
 ): Promise<void> {
     const apiKey = await getApiKey();
 
-    // Compile script text for the prompt
+    // Compile script text — truncate if too long for prompt
     const scriptText = script.segments
         .map((seg) => `[${seg.timestamp}] ${seg.narration}\n[VISUAL: ${seg.visualCue}]`)
         .join("\n\n");
 
+    // Limit script text to ~4000 chars to leave room for response
+    const trimmedScript = scriptText.length > 4000
+        ? scriptText.substring(0, 4000) + "\n\n[...remaining segments condensed for brevity]"
+        : scriptText;
+
     const prompt = SCENE_PLANNER_PROMPT
-        .replace("{script}", scriptText)
+        .replace("{script}", trimmedScript)
         .replace("{style}", style);
 
-    console.log(`[ScenePlanner] Planning scenes for "${script.title}"...`);
+    console.log(`[ScenePlanner] Planning scenes for "${script.title}" (${scriptText.length} chars of script)...`);
 
     // Retry wrapper for DeepSeek API
     const MAX_RETRIES = 3;
@@ -144,7 +122,7 @@ export async function planScenes(
                         {
                             role: "system",
                             content:
-                                "You are an expert documentary filmmaker and cinematographer. Plan each scene with professional shot lists. Return ONLY valid JSON with double-quoted property names.",
+                                "You are an expert filmmaker. Create a compact scene plan with shot lists. Return ONLY valid JSON. Keep output under 6000 characters.",
                         },
                         { role: "user", content: prompt },
                     ],
@@ -176,32 +154,23 @@ export async function planScenes(
         throw new Error("Empty response from DeepSeek scene planner");
     }
 
-    // Attempt JSON parse with repair fallback
+    console.log(`[ScenePlanner] Received ${content.length} chars of JSON`);
+
+    // Parse with truncation repair
     let plan: ScenePlan;
     try {
         plan = JSON.parse(content);
     } catch (parseError) {
-        console.warn(`[ScenePlanner] JSON parse failed, attempting repair...`);
-        // Common fixes: single quotes → double quotes, trailing commas, control chars
-        const repaired = content
-            .replace(/[\x00-\x1F\x7F]/g, ' ')           // Remove control characters
-            .replace(/,\s*([}\]])/g, '$1')                // Remove trailing commas
-            .replace(/(['"])?([a-zA-Z_]\w*)\1\s*:/g, '"$2":') // Ensure double-quoted keys
-            .replace(/:\s*'([^']*)'/g, ': "$1"');         // Single-quoted values → double
-        try {
-            plan = JSON.parse(repaired);
-            console.log(`[ScenePlanner] ✅ JSON repair succeeded`);
-        } catch (repairError) {
-            // Last resort: try to extract JSON from markdown code blocks
-            const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-            if (jsonMatch) {
-                plan = JSON.parse(jsonMatch[1].trim());
-                console.log(`[ScenePlanner] ✅ Extracted JSON from code block`);
-            } else {
-                throw new Error(`Scene planner returned unparseable JSON (${content.length} chars). First 200: ${content.substring(0, 200)}`);
-            }
-        }
+        console.warn(`[ScenePlanner] JSON parse failed, attempting truncation repair...`);
+        plan = repairTruncatedJSON(content);
     }
+
+    // Validate we have required structure
+    if (!plan.assets || !plan.scenes) {
+        throw new Error("Scene plan missing required 'assets' or 'scenes' arrays");
+    }
+
+    console.log(`[ScenePlanner] Parsed: ${plan.scenes.length} scenes, ${plan.assets.length} assets`);
 
     // Save to database
     await savePlanToDatabase(documentaryId, plan);
@@ -218,7 +187,80 @@ export async function planScenes(
 }
 
 /**
- * Saves the scene plan to the database, creating all related records
+ * Repairs truncated JSON by closing open arrays/objects
+ */
+function repairTruncatedJSON(content: string): ScenePlan {
+    // Remove any control characters
+    let cleaned = content.replace(/[\x00-\x1F\x7F]/g, ' ');
+
+    // Try to find the last valid point and close the JSON
+    // Count open/close braces and brackets
+    let braces = 0;
+    let brackets = 0;
+    let inString = false;
+    let lastValidIdx = 0;
+
+    for (let i = 0; i < cleaned.length; i++) {
+        const char = cleaned[i];
+        if (char === '"' && (i === 0 || cleaned[i - 1] !== '\\')) {
+            inString = !inString;
+            continue;
+        }
+        if (inString) continue;
+
+        if (char === '{') braces++;
+        if (char === '}') { braces--; lastValidIdx = i; }
+        if (char === '[') brackets++;
+        if (char === ']') { brackets--; lastValidIdx = i; }
+    }
+
+    // If we have unclosed structures, truncate to last valid close and add closers
+    if (braces > 0 || brackets > 0) {
+        // Find the last complete array element or object
+        let truncated = cleaned.substring(0, lastValidIdx + 1);
+
+        // Remove any trailing comma
+        truncated = truncated.replace(/,\s*$/, '');
+
+        // Close any open structures
+        for (let i = 0; i < brackets; i++) truncated += ']';
+        for (let i = 0; i < braces; i++) truncated += '}';
+
+        console.log(`[ScenePlanner] Repaired truncated JSON: closed ${braces} braces, ${brackets} brackets`);
+
+        try {
+            return JSON.parse(truncated);
+        } catch (e) {
+            // Still failed — try more aggressive truncation
+        }
+    }
+
+    // Last resort: find the assets array at minimum
+    const assetsMatch = cleaned.match(/"assets"\s*:\s*(\[[\s\S]*?\])/);
+    if (assetsMatch) {
+        console.warn(`[ScenePlanner] Extracting assets-only from truncated response`);
+        const assets = JSON.parse(assetsMatch[1]);
+        return {
+            assets,
+            scenes: [{
+                title: "Full Documentary",
+                narrationText: "",
+                duration: 300,
+                shots: assets.map((a: PlannedAsset) => ({
+                    action: a.description,
+                    mood: "wonder",
+                    assetsUsed: [a.label],
+                    duration: 5,
+                })),
+            }],
+        };
+    }
+
+    throw new Error(`Scene planner returned unparseable JSON (${content.length} chars). First 200: ${content.substring(0, 200)}`);
+}
+
+/**
+ * Saves the scene plan to the database
  */
 async function savePlanToDatabase(
     documentaryId: string,
@@ -250,27 +292,27 @@ async function savePlanToDatabase(
                 sceneIndex: sceneIdx,
                 title: scene.title,
                 narrationText: scene.narrationText,
-                duration: scene.estimatedDuration,
+                duration: scene.duration,
             },
         });
 
         // Create shots for this scene
-        for (let shotIdx = 0; shotIdx < scene.shots.length; shotIdx++) {
+        for (let shotIdx = 0; shotIdx < (scene.shots || []).length; shotIdx++) {
             const shot = scene.shots[shotIdx];
 
             const createdShot = await prisma.docShot.create({
                 data: {
                     sceneId: createdScene.id,
                     shotIndex: shotIdx,
-                    shotType: shot.shotType || "wide",
-                    cameraAngle: shot.cameraAngle || "eye-level",
-                    cameraMovement: shot.cameraMovement || "static",
+                    shotType: "wide",
+                    cameraAngle: "eye-level",
+                    cameraMovement: "static",
                     action: shot.action || "",
                     mood: shot.mood || "calm",
-                    lighting: shot.lighting || "natural",
-                    colorPalette: shot.colorPalette || "",
-                    transitionIn: shot.transitionIn || "cut",
-                    transitionOut: shot.transitionOut || "cut",
+                    lighting: "natural",
+                    colorPalette: "",
+                    transitionIn: "cut",
+                    transitionOut: "cut",
                     duration: shot.duration || 5,
                 },
             });
@@ -283,7 +325,7 @@ async function savePlanToDatabase(
                         data: {
                             shotId: createdShot.id,
                             assetId,
-                            role: deriveAssetRole(shot, assetLabel, plan.assets),
+                            role: deriveAssetRole(assetLabel, plan.assets),
                         },
                     });
                 }
@@ -293,40 +335,20 @@ async function savePlanToDatabase(
 }
 
 /**
- * Infers the role of an asset in a shot based on context
+ * Infers the role of an asset in a shot
  */
-function deriveAssetRole(
-    shot: PlannedShot,
-    assetLabel: string,
-    allAssets: PlannedAsset[]
-): string {
+function deriveAssetRole(assetLabel: string, allAssets: PlannedAsset[]): string {
     const asset = allAssets.find((a) => a.label === assetLabel);
     if (!asset) return "background";
 
-    if (asset.type === "CHARACTER") {
-        if (shot.shotType === "close-up" || shot.shotType === "reaction") {
-            return "focus";
-        }
-        return "foreground";
+    switch (asset.type) {
+        case "CHARACTER": return "foreground";
+        case "PROP": return "prop-in-hand";
+        case "CONCEPT": return "focus";
+        case "ENVIRONMENT": return "background";
+        case "FILLER": return "background";
+        default: return "background";
     }
-
-    if (asset.type === "PROP") {
-        if (shot.shotType === "insert") return "focus";
-        return "prop-in-hand";
-    }
-
-    if (asset.type === "CONCEPT") {
-        return "focus";
-    }
-
-    if (asset.type === "ENVIRONMENT") {
-        if (shot.shotType === "establishing" || shot.shotType === "wide") {
-            return "background";
-        }
-        return "background";
-    }
-
-    return "background";
 }
 
 async function getApiKey(): Promise<string> {
