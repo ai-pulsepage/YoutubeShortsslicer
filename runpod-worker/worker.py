@@ -138,13 +138,12 @@ def get_wan_pipeline():
             model_id,
             torch_dtype=torch.bfloat16,
         )
-        # Sequential offload: moves individual layers to GPU one at a time
-        # Uses ~3-5GB VRAM instead of 23GB (much slower but fits 24GB card)
-        _wan_pipe.enable_sequential_cpu_offload()
-        # VAE optimizations to reduce memory during decode
+        # model_cpu_offload: keeps submodels in RAM, moves to GPU when needed
+        # Fast on 48GB GPUs (RTX 6000 Ada, A6000, etc.)
+        _wan_pipe.enable_model_cpu_offload()
         _wan_pipe.vae.enable_slicing()
         _wan_pipe.vae.enable_tiling()
-        print(f"✅ {model_id} loaded (sequential CPU offload)")
+        print(f"✅ {model_id} loaded")
     return _wan_pipe
 
 
@@ -152,9 +151,9 @@ def generate_video(
     prompt: str,
     reference_image_path: str,
     output_path: str,
-    num_frames: int = 33,  # ~2 seconds at 16fps (saves VRAM)
-    width: int = 480,
-    height: int = 272,
+    num_frames: int = 81,  # ~5 seconds at 16fps
+    width: int = 848,
+    height: int = 480,
 ):
     """Generate a video clip with Wan2.1 image-to-video."""
     from PIL import Image
@@ -164,8 +163,6 @@ def generate_video(
     height = (height // 16) * 16
 
     pipe = get_wan_pipeline()
-
-    # Clear any leftover GPU memory
     torch.cuda.empty_cache()
 
     ref_image = Image.open(reference_image_path).convert("RGB").resize((width, height))
@@ -176,7 +173,7 @@ def generate_video(
         num_frames=num_frames,
         width=width,
         height=height,
-        num_inference_steps=20,  # Fewer steps to save time (sequential offload is slow)
+        num_inference_steps=30,
         guidance_scale=5.0,
     )
 
