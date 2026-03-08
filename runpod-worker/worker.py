@@ -130,14 +130,28 @@ def get_wan_pipeline():
     """Lazy-load Wan2.1 image-to-video pipeline."""
     global _wan_pipe
     if _wan_pipe is None:
-        print("🔄 Loading Wan2.1 pipeline...")
         from diffusers import WanImageToVideoPipeline
-        _wan_pipe = WanImageToVideoPipeline.from_pretrained(
-            "Wan-AI/Wan2.1-I2V-14B-480P",
-            torch_dtype=torch.bfloat16,
-        ).to("cuda")
-        _wan_pipe.enable_model_cpu_offload()
-        print("✅ Wan2.1 loaded")
+
+        # Try 14B first, fall back to 1.3B if OOM or unavailable
+        for model_id in [
+            "Wan-AI/Wan2.1-I2V-14B-480P-Diffusers",
+            "Wan-AI/Wan2.1-I2V-1.3B-480P-Diffusers",
+        ]:
+            try:
+                print(f"🔄 Loading {model_id}...")
+                _wan_pipe = WanImageToVideoPipeline.from_pretrained(
+                    model_id,
+                    torch_dtype=torch.bfloat16,
+                )
+                _wan_pipe.enable_model_cpu_offload()
+                print(f"✅ {model_id} loaded")
+                break
+            except Exception as e:
+                print(f"⚠️  {model_id} failed ({e}), trying next...")
+                _wan_pipe = None
+
+        if _wan_pipe is None:
+            raise RuntimeError("Could not load any Wan2.1 model")
     return _wan_pipe
 
 
