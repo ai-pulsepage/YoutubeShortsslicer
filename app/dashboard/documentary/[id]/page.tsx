@@ -942,8 +942,8 @@ function ProgressTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
 /* ────── Tab 5: Scene Preview ────── */
 function PreviewTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
     const [regeneratingIds, setRegeneratingIds] = useState<Set<string>>(new Set());
-    const r2Base = process.env.NEXT_PUBLIC_R2_PUBLIC_URL || "";
-    const r2Url = (path: string | null) => path ? `${r2Base}/${path}` : "";
+    const r2Base = process.env.NEXT_PUBLIC_R2_PUBLIC_URL || "https://pub-1dd40b8f57a8493ebc23552a93ea62bd.r2.dev";
+    const r2Url = (path: string | null) => path ? (path.startsWith("http") ? path : `${r2Base}/${path}`) : "";
 
     // Gather all shots with their scene info
     const allShots = (doc.scenes || []).flatMap((scene: any) =>
