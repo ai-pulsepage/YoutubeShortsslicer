@@ -664,31 +664,32 @@ function ShotMatrixTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) 
                                                 <td className="px-4 py-2 text-gray-500">{shot.shotIndex + 1}</td>
                                                 <td className="px-2 py-1.5">
                                                     <input value={editForm.shotType} onChange={(e) => setEditForm({ ...editForm, shotType: e.target.value })}
-                                                        className="w-20 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-violet-500" />
+                                                        className="w-full min-w-[80px] bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-violet-500" />
                                                 </td>
                                                 <td className="px-2 py-1.5">
                                                     <input value={editForm.cameraAngle} onChange={(e) => setEditForm({ ...editForm, cameraAngle: e.target.value })}
-                                                        className="w-20 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-violet-500" />
+                                                        className="w-full min-w-[80px] bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-violet-500" />
                                                 </td>
                                                 <td className="px-2 py-1.5">
                                                     <input value={editForm.cameraMovement} onChange={(e) => setEditForm({ ...editForm, cameraMovement: e.target.value })}
-                                                        className="w-20 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-violet-500" />
+                                                        className="w-full min-w-[80px] bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-violet-500" />
                                                 </td>
                                                 <td className="px-2 py-1.5">
-                                                    <input value={editForm.action} onChange={(e) => setEditForm({ ...editForm, action: e.target.value })}
-                                                        className="w-32 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-violet-500" />
+                                                    <textarea value={editForm.action} onChange={(e) => setEditForm({ ...editForm, action: e.target.value })}
+                                                        rows={3}
+                                                        className="w-full min-w-[200px] bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-violet-500 resize-y" />
                                                 </td>
                                                 <td className="px-2 py-1.5">
                                                     <input value={editForm.mood} onChange={(e) => setEditForm({ ...editForm, mood: e.target.value })}
-                                                        className="w-20 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-violet-500" />
+                                                        className="w-full min-w-[80px] bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-violet-500" />
                                                 </td>
                                                 <td className="px-2 py-1.5">
                                                     <input value={editForm.lighting} onChange={(e) => setEditForm({ ...editForm, lighting: e.target.value })}
-                                                        className="w-20 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-violet-500" />
+                                                        className="w-full min-w-[80px] bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-violet-500" />
                                                 </td>
                                                 <td className="px-2 py-1.5">
                                                     <input type="number" value={editForm.duration} onChange={(e) => setEditForm({ ...editForm, duration: Number(e.target.value) })}
-                                                        className="w-12 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-violet-500" />
+                                                        className="w-16 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-violet-500" />
                                                 </td>
                                                 <td className="px-2 py-1.5" colSpan={2}>
                                                     <div className="flex items-center gap-1">
@@ -712,7 +713,7 @@ function ShotMatrixTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) 
                                                 <td className="px-4 py-2.5 text-white capitalize">{shot.shotType}</td>
                                                 <td className="px-4 py-2.5 text-gray-300">{shot.cameraAngle || "-"}</td>
                                                 <td className="px-4 py-2.5 text-gray-300">{shot.cameraMovement || "static"}</td>
-                                                <td className="px-4 py-2.5 text-gray-300 max-w-[200px] truncate">{shot.action || "-"}</td>
+                                                <td className="px-4 py-2.5 text-gray-300">{shot.action || "-"}</td>
                                                 <td className="px-4 py-2.5">
                                                     <span className="px-2 py-0.5 rounded-full bg-gray-800 text-gray-300">{shot.mood || "-"}</span>
                                                 </td>
@@ -1040,7 +1041,7 @@ function PreviewTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
                             {shot.narration && (
                                 <div className="mt-2 p-2 bg-gray-800/50 rounded-lg border border-gray-700/50">
                                     <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Narration</p>
-                                    <p className="text-xs text-gray-300 leading-relaxed line-clamp-4">
+                                    <p className="text-xs text-gray-300 leading-relaxed">
                                         {shot.narration}
                                     </p>
                                 </div>
