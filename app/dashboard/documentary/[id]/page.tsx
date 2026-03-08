@@ -65,7 +65,7 @@ export default function DocumentaryDetailPage({ params }: { params: Promise<{ id
 
     // Auto-refresh during generation
     useEffect(() => {
-        if (!doc || !["GENERATING", "ASSEMBLING"].includes(doc.status)) return;
+        if (!doc || !["GENERATING", "ASSEMBLING", "SCENES_PLANNED"].includes(doc.status)) return;
         const interval = setInterval(fetchDoc, 5000);
         return () => clearInterval(interval);
     }, [doc, fetchDoc]);
@@ -121,6 +121,9 @@ export default function DocumentaryDetailPage({ params }: { params: Promise<{ id
                 </div>
             )}
 
+            {/* Pipeline Overview */}
+            <PipelineOverview doc={doc} />
+
             {/* Tabs */}
             <div className="flex items-center gap-1 bg-gray-900/50 border border-gray-800 rounded-xl p-1">
                 {TABS.map((tab) => (
@@ -169,6 +172,172 @@ function StatusBadge({ status }: { status: string }) {
     };
     const c = config[status] || config.DRAFT;
     return <span className={cn("text-xs font-medium px-3 py-1.5 rounded-full", c.class)}>{c.label}</span>;
+}
+
+/* ────── Pipeline Overview ────── */
+function PipelineOverview({ doc }: { doc: any }) {
+    const articles = doc.rawArticles ? (Array.isArray(doc.rawArticles) ? doc.rawArticles : []) : [];
+    const scriptWords = doc.script ? doc.script.split(/\s+/).length : 0;
+    const sceneCount = doc.scenes?.length || 0;
+    const assetCount = doc.assets?.length || 0;
+    const jobs = doc.genJobs || [];
+
+    const assetJobs = jobs.filter((j: any) => j.jobType === "ref_image");
+    const clipJobs = jobs.filter((j: any) => j.jobType === "shot_video");
+    const completedAssets = assetJobs.filter((j: any) => j.status === "COMPLETED").length;
+    const failedAssets = assetJobs.filter((j: any) => j.status === "FAILED").length;
+    const completedClips = clipJobs.filter((j: any) => j.status === "COMPLETED").length;
+
+    // Determine step states
+    type StepState = "done" | "active" | "pending" | "failed";
+    const STATUS_ORDER = ["DRAFT", "GENERATING", "SCENES_PLANNED", "ASSETS_READY", "ASSEMBLING", "REVIEW", "APPROVED", "PUBLISHED"];
+    const statusIdx = STATUS_ORDER.indexOf(doc.status);
+
+    const getStepState = (stepMinStatus: string, activeCheck?: boolean): StepState => {
+        if (doc.status === "FAILED") return "failed";
+        const minIdx = STATUS_ORDER.indexOf(stepMinStatus);
+        if (statusIdx > minIdx) return "done";
+        if (statusIdx === minIdx || activeCheck) return "active";
+        return "pending";
+    };
+
+    const steps: { label: string; icon: any; state: StepState; detail: string }[] = [
+        {
+            label: "Research",
+            icon: Sparkles,
+            state: articles.length > 0 ? "done" : (doc.status === "GENERATING" ? "active" : "pending"),
+            detail: articles.length > 0 ? `${articles.length} articles synthesized` : "Waiting to start",
+        },
+        {
+            label: "Script",
+            icon: FileText,
+            state: doc.script ? "done" : (doc.status === "GENERATING" && articles.length > 0 ? "active" : "pending"),
+            detail: doc.script ? `${scriptWords.toLocaleString()} words • ~${Math.round(scriptWords / 150)} min` : "Pending research",
+        },
+        {
+            label: "Scenes",
+            icon: Grid3X3,
+            state: sceneCount > 0 ? "done" : (doc.status === "GENERATING" && doc.script ? "active" : "pending"),
+            detail: sceneCount > 0 ? `${sceneCount} scenes planned` : "Pending script",
+        },
+        {
+            label: "Assets",
+            icon: Image,
+            state: assetJobs.length > 0
+                ? (completedAssets === assetJobs.length ? "done" : (completedAssets > 0 || doc.status === "SCENES_PLANNED" ? "active" : "pending"))
+                : (sceneCount > 0 ? "pending" : "pending"),
+            detail: assetJobs.length > 0
+                ? `${completedAssets}/${assetJobs.length} images${failedAssets > 0 ? ` • ${failedAssets} failed` : ""}`
+                : (assetCount > 0 ? `${assetCount} assets defined` : "Pending scenes"),
+        },
+        {
+            label: "Clips",
+            icon: Film,
+            state: clipJobs.length > 0
+                ? (completedClips === clipJobs.length ? "done" : "active")
+                : "pending",
+            detail: clipJobs.length > 0 ? `${completedClips}/${clipJobs.length} clips` : "After assets",
+        },
+        {
+            label: "Assembly",
+            icon: Wrench,
+            state: getStepState("ASSEMBLING"),
+            detail: doc.finalVideoPath ? "Complete" : (doc.status === "ASSEMBLING" ? "In progress..." : "Final step"),
+        },
+    ];
+
+    const stateColors: Record<StepState, string> = {
+        done: "text-emerald-400 bg-emerald-500/15 border-emerald-500/30",
+        active: "text-violet-400 bg-violet-500/15 border-violet-500/30",
+        pending: "text-gray-600 bg-gray-800/50 border-gray-700/30",
+        failed: "text-red-400 bg-red-500/15 border-red-500/30",
+    };
+
+    const stateIcons: Record<StepState, any> = {
+        done: CheckCircle2,
+        active: Loader2,
+        pending: Clock,
+        failed: XCircle,
+    };
+
+    return (
+        <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-5">
+            <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+                <Activity className="w-4 h-4 text-violet-400" />
+                Pipeline
+            </h3>
+
+            {/* Step indicators */}
+            <div className="flex items-start gap-2">
+                {steps.map((step, i) => {
+                    const StateIcon = stateIcons[step.state];
+                    return (
+                        <div key={step.label} className="flex items-start flex-1 min-w-0">
+                            <div className="flex flex-col items-center flex-1 min-w-0">
+                                <div className={cn(
+                                    "w-9 h-9 rounded-xl border flex items-center justify-center mb-2",
+                                    stateColors[step.state]
+                                )}>
+                                    {step.state === "active" ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : step.state === "done" ? (
+                                        <CheckCircle2 className="w-4 h-4" />
+                                    ) : step.state === "failed" ? (
+                                        <XCircle className="w-4 h-4" />
+                                    ) : (
+                                        <step.icon className="w-4 h-4" />
+                                    )}
+                                </div>
+                                <p className={cn("text-xs font-medium mb-0.5 text-center",
+                                    step.state === "done" ? "text-emerald-400" :
+                                        step.state === "active" ? "text-violet-400" :
+                                            step.state === "failed" ? "text-red-400" : "text-gray-500"
+                                )}>{step.label}</p>
+                                <p className="text-[10px] text-gray-600 text-center leading-tight">{step.detail}</p>
+                            </div>
+                            {i < steps.length - 1 && (
+                                <div className={cn(
+                                    "w-6 h-px mt-[18px] flex-shrink-0",
+                                    steps[i + 1].state !== "pending" ? "bg-emerald-500/40" : "bg-gray-700"
+                                )} />
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* Job Activity Feed — show when there are active jobs */}
+            {jobs.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-gray-800">
+                    <p className="text-xs font-medium text-gray-400 mb-2">Job Activity</p>
+                    <div className="space-y-1 max-h-32 overflow-y-auto">
+                        {jobs.slice(0, 12).map((job: any) => (
+                            <div key={job.id} className="flex items-center gap-2 text-xs py-1">
+                                {job.status === "COMPLETED" && <CheckCircle2 className="w-3 h-3 text-emerald-400 flex-shrink-0" />}
+                                {job.status === "PROCESSING" && <Loader2 className="w-3 h-3 text-violet-400 animate-spin flex-shrink-0" />}
+                                {job.status === "QUEUED" && <Clock className="w-3 h-3 text-gray-500 flex-shrink-0" />}
+                                {job.status === "FAILED" && <XCircle className="w-3 h-3 text-red-400 flex-shrink-0" />}
+                                <span className={cn("truncate flex-1",
+                                    job.status === "COMPLETED" ? "text-gray-400" :
+                                        job.status === "FAILED" ? "text-red-400" :
+                                            job.status === "PROCESSING" ? "text-violet-300" : "text-gray-500"
+                                )}>
+                                    {job.jobType === "ref_image" ? "🖼️" : "🎬"} {job.prompt?.slice(0, 60) || "Job"}...
+                                </span>
+                                <span className={cn("text-[10px] flex-shrink-0",
+                                    job.status === "COMPLETED" ? "text-emerald-500" :
+                                        job.status === "FAILED" ? "text-red-500" :
+                                            job.status === "PROCESSING" ? "text-violet-500" : "text-gray-600"
+                                )}>
+                                    {job.status}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
 }
 
 /* ────── Pipeline Action Buttons ────── */
