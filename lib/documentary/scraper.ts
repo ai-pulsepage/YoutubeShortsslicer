@@ -339,26 +339,42 @@ Rules:
 - Novelty scores should reflect how surprising/novel each angle is
 - Return ONLY valid JSON`;
 
-    const response = await fetch("https://api.deepseek.com/chat/completions", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-            model: "deepseek-chat",
-            messages: [
-                {
-                    role: "system",
-                    content: "You are an expert science researcher. Provide comprehensive, accurate research data. Return only valid JSON.",
+    // Retry wrapper for DeepSeek API (handles ECONNRESET, timeouts)
+    const MAX_RETRIES = 3;
+    let response: Response | undefined;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+            response = await fetch("https://api.deepseek.com/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${apiKey}`,
                 },
-                { role: "user", content: prompt },
-            ],
-            temperature: 0.7,
-            max_tokens: 8000,
-            response_format: { type: "json_object" },
-        }),
-    });
+                body: JSON.stringify({
+                    model: "deepseek-chat",
+                    messages: [
+                        {
+                            role: "system",
+                            content: "You are an expert science researcher. Provide comprehensive, accurate research data. Return only valid JSON.",
+                        },
+                        { role: "user", content: prompt },
+                    ],
+                    temperature: 0.7,
+                    max_tokens: 8000,
+                    response_format: { type: "json_object" },
+                }),
+            });
+            break;
+        } catch (err: any) {
+            console.error(`[Researcher] Fetch attempt ${attempt}/${MAX_RETRIES} failed: ${err.message}`);
+            if (attempt === MAX_RETRIES) throw err;
+            const delay = Math.pow(2, attempt) * 1000;
+            console.log(`[Researcher] Retrying in ${delay / 1000}s...`);
+            await new Promise(r => setTimeout(r, delay));
+        }
+    }
+
+    if (!response) throw new Error("Failed to get response from DeepSeek after retries");
 
     if (!response.ok) {
         const errText = await response.text();

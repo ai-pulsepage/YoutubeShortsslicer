@@ -90,27 +90,43 @@ Novelty Score: ${a.noveltyScore}/10
 
     console.log(`[StoryWriter] Generating ${targetDurationMinutes}-min script from ${articles.length} articles...`);
 
-    const response = await fetch("https://api.deepseek.com/chat/completions", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-            model: "deepseek-chat",
-            messages: [
-                {
-                    role: "system",
-                    content:
-                        "You are a master documentary scriptwriter. Write engaging, calming narration with rich visual descriptions. Return only valid JSON.",
+    // Retry wrapper for DeepSeek API (handles ECONNRESET, timeouts)
+    const MAX_RETRIES = 3;
+    let response: Response | undefined;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+            response = await fetch("https://api.deepseek.com/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${apiKey}`,
                 },
-                { role: "user", content: prompt },
-            ],
-            temperature: 0.8,
-            max_tokens: 8192,
-            response_format: { type: "json_object" },
-        }),
-    });
+                body: JSON.stringify({
+                    model: "deepseek-chat",
+                    messages: [
+                        {
+                            role: "system",
+                            content:
+                                "You are a master documentary scriptwriter. Write engaging, calming narration with rich visual descriptions. Return only valid JSON.",
+                        },
+                        { role: "user", content: prompt },
+                    ],
+                    temperature: 0.8,
+                    max_tokens: 8192,
+                    response_format: { type: "json_object" },
+                }),
+            });
+            break; // Success
+        } catch (err: any) {
+            console.error(`[StoryWriter] Fetch attempt ${attempt}/${MAX_RETRIES} failed: ${err.message}`);
+            if (attempt === MAX_RETRIES) throw err;
+            const delay = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s
+            console.log(`[StoryWriter] Retrying in ${delay / 1000}s...`);
+            await new Promise(r => setTimeout(r, delay));
+        }
+    }
+
+    if (!response) throw new Error("Failed to get response from DeepSeek after retries");
 
     if (!response.ok) {
         const errText = await response.text();
