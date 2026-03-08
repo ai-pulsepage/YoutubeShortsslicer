@@ -116,9 +116,24 @@ async function runStoryPipeline(
     }
 
     // ── Step 2: Generate Script ───────────────────────────
-    if (current?.script) {
+    if (current?.script && current.script.length > 50) {
         console.log(`[StoryPipeline] Step 2/3: ⏩ Skipping script (already generated)`);
-        script = JSON.parse(current.script);
+        // Script is stored as formatted text, reconstruct a minimal StoryScript
+        // Parse the "[timestamp] narration\n[VISUAL: cue]" format
+        const segments = current.script.split("\n\n").filter(Boolean).map((block: string) => {
+            const tsMatch = block.match(/^\[([^\]]+)\]\s*([\s\S]*)/);
+            const visualMatch = block.match(/\[VISUAL:\s*(.*)\]/);
+            return {
+                timestamp: tsMatch?.[1] || "00:00",
+                narration: tsMatch?.[2]?.replace(/\n\[VISUAL:.*\]/, "").trim() || block,
+                visualCue: visualMatch?.[1] || "Documentary footage",
+            };
+        });
+        script = {
+            title: current.title || "Untitled",
+            segments,
+            estimatedDurationMinutes: (current.totalDuration || 1800) / 60,
+        };
     } else {
         console.log(`[StoryPipeline] Step 2/3: Writing ${targetDuration}-min script...`);
         script = await generateStoryScript(articles, targetDuration);
