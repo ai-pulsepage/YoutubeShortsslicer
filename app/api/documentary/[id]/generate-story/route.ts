@@ -39,22 +39,27 @@ export async function POST(
     const body = await req.json().catch(() => ({}));
     const targetDuration = body.targetDurationMinutes || 30;
 
+    // Set status to GENERATING immediately so the UI shows progress
+    await prisma.documentary.update({
+        where: { id },
+        data: { status: "GENERATING", errorMsg: null },
+    });
+
     // Run the pipeline in the background (don't block the HTTP response)
-    // In production, this should be a proper queue worker
     runStoryPipeline(id, documentary.sourceUrls, documentary.style, targetDuration).catch(
-        (err) => {
+        async (err) => {
             console.error(`[GenerateStory] Pipeline failed for ${id}:`, err);
-            prisma.documentary.update({
+            await prisma.documentary.update({
                 where: { id },
                 data: { status: "FAILED", errorMsg: String(err) },
-            });
+            }).catch(() => { });
         }
     );
 
     return NextResponse.json({
         message: "Story generation started",
         documentaryId: id,
-        status: "DRAFT",
+        status: "GENERATING",
     });
 }
 
@@ -88,6 +93,12 @@ async function runStoryPipeline(
     // Step 3: Plan scenes + shots
     console.log(`[StoryPipeline] Step 3/3: Planning scenes and shots...`);
     await planScenes(documentaryId, script, style);
+
+    // Update status to SCENES_PLANNED on success
+    await prisma.documentary.update({
+        where: { id: documentaryId },
+        data: { status: "SCENES_PLANNED" },
+    });
 
     console.log(`[StoryPipeline] ✅ Complete for ${documentaryId}`);
 }

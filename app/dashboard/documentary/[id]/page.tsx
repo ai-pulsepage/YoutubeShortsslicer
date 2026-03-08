@@ -102,6 +102,25 @@ export default function DocumentaryDetailPage({ params }: { params: Promise<{ id
                 <PipelineActions doc={doc} onRefresh={fetchDoc} />
             </div>
 
+            {/* Error Banner */}
+            {doc.errorMsg && (
+                <div className="flex items-start gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
+                    <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-red-400">Pipeline Error</p>
+                        <p className="text-xs text-red-300/70 mt-0.5 break-words">{doc.errorMsg}</p>
+                    </div>
+                </div>
+            )}
+
+            {/* Generating indicator */}
+            {doc.status === "GENERATING" && (
+                <div className="flex items-center gap-3 p-3 bg-violet-500/10 border border-violet-500/20 rounded-xl">
+                    <Loader2 className="w-4 h-4 text-violet-400 animate-spin" />
+                    <p className="text-sm text-violet-300">AI is generating your documentary script and planning scenes... This takes 1-2 minutes.</p>
+                </div>
+            )}
+
             {/* Tabs */}
             <div className="flex items-center gap-1 bg-gray-900/50 border border-gray-800 rounded-xl p-1">
                 {TABS.map((tab) => (
@@ -191,6 +210,13 @@ function PipelineActions({ doc, onRefresh }: { doc: any; onRefresh: () => void }
                     className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-50 transition-colors">
                     {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wrench className="w-4 h-4" />}
                     Assemble
+                </button>
+            )}
+            {doc.status === "FAILED" && (
+                <button onClick={() => runAction("generate-story")} disabled={running}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-red-600 hover:bg-red-500 text-white disabled:opacity-50 transition-colors">
+                    {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                    Retry
                 </button>
             )}
         </div>
