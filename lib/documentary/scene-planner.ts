@@ -266,14 +266,34 @@ async function savePlanToDatabase(
     documentaryId: string,
     plan: ScenePlan
 ): Promise<void> {
+    // Valid Prisma AssetType values
+    const VALID_TYPES = new Set(["CHARACTER", "PROP", "CONCEPT", "ENVIRONMENT", "FILLER"]);
+    const TYPE_MAP: Record<string, string> = {
+        // Common alternatives DeepSeek might return
+        "VISUAL": "CONCEPT",
+        "OBJECT": "PROP",
+        "SCENE": "ENVIRONMENT",
+        "LOCATION": "ENVIRONMENT",
+        "LANDSCAPE": "ENVIRONMENT",
+        "PERSON": "CHARACTER",
+        "ABSTRACT": "CONCEPT",
+        "TRANSITION": "FILLER",
+        "EFFECT": "FILLER",
+        "BACKGROUND": "ENVIRONMENT",
+    };
+
     // First, create all assets and build a label → id map
     const assetMap = new Map<string, string>();
 
     for (const asset of plan.assets) {
+        // Normalize the type to a valid enum value
+        const rawType = (asset.type || "CONCEPT").toUpperCase();
+        const normalizedType = VALID_TYPES.has(rawType) ? rawType : (TYPE_MAP[rawType] || "CONCEPT");
+
         const created = await prisma.docAsset.create({
             data: {
                 documentaryId,
-                type: asset.type,
+                type: normalizedType as any,
                 label: asset.label,
                 description: asset.description,
                 attire: asset.attire || null,
