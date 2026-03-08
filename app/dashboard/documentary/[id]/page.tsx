@@ -1057,6 +1057,27 @@ function PreviewTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
 /* ────── Tab 6: Final Assembly ────── */
 function AssemblyTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
     const [assembling, setAssembling] = useState(false);
+    const [fillerMode, setFillerMode] = useState(doc.fillerMode || "kenburns");
+    const [savingMode, setSavingMode] = useState(false);
+    const r2Base = process.env.NEXT_PUBLIC_R2_PUBLIC_URL || "https://pub-1dd40b8f57a8493ebc23552a93ea62bd.r2.dev";
+
+    const fillerOptions = [
+        { value: "kenburns", label: "Ken Burns", desc: "Slow zoom/pan on asset images" },
+        { value: "procedural", label: "Abstract Animations", desc: "Procedural fractal/particle effects" },
+        { value: "stock", label: "Stock Video (Pexels)", desc: "Context-matched stock footage" },
+        { value: "kenburns+stock", label: "Ken Burns + Stock", desc: "Mix of assets and stock footage" },
+    ];
+
+    const updateFillerMode = async (mode: string) => {
+        setFillerMode(mode);
+        setSavingMode(true);
+        await fetch(`/api/documentary/${doc.id}/settings`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fillerMode: mode }),
+        });
+        setSavingMode(false);
+    };
 
     const triggerAssembly = async () => {
         setAssembling(true);
@@ -1065,12 +1086,43 @@ function AssemblyTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
         setAssembling(false);
     };
 
-    // Show video player if final video exists
-    if (doc.finalVideoPath) {
-        const videoUrl = doc.finalVideoPath.startsWith("http")
-            ? doc.finalVideoPath
-            : `/api/documentary/${doc.id}/stream`; // future stream endpoint
+    const videoUrl = doc.finalVideoPath
+        ? (doc.finalVideoPath.startsWith("http") ? doc.finalVideoPath : `${r2Base}/${doc.finalVideoPath}`)
+        : null;
 
+    // Filler mode selector component
+    const FillerSelector = () => (
+        <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-4 mb-4">
+            <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                Visual Fill Mode {savingMode && <Loader2 className="w-3 h-3 inline animate-spin ml-1" />}
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {fillerOptions.map((opt) => (
+                    <button
+                        key={opt.value}
+                        onClick={() => updateFillerMode(opt.value)}
+                        className={cn(
+                            "text-left p-3 rounded-lg border transition-all",
+                            fillerMode === opt.value
+                                ? "border-amber-500/50 bg-amber-500/10 ring-1 ring-amber-500/30"
+                                : "border-gray-700 bg-gray-800/50 hover:bg-gray-800"
+                        )}
+                    >
+                        <p className={cn(
+                            "text-xs font-semibold",
+                            fillerMode === opt.value ? "text-amber-400" : "text-white"
+                        )}>
+                            {opt.label}
+                        </p>
+                        <p className="text-[10px] text-gray-500 mt-0.5">{opt.desc}</p>
+                    </button>
+                ))}
+            </div>
+        </div>
+    );
+
+    // Show video player if final video exists
+    if (videoUrl) {
         return (
             <div className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -1090,6 +1142,7 @@ function AssemblyTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
                         Your browser does not support video playback.
                     </video>
                 </div>
+                <FillerSelector />
                 <div className="flex items-center gap-3">
                     <button
                         onClick={triggerAssembly}
@@ -1110,26 +1163,29 @@ function AssemblyTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
             <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-8 text-center">
                 <Loader2 className="w-10 h-10 text-amber-400 mx-auto mb-3 animate-spin" />
                 <h3 className="text-sm font-semibold text-white mb-1">Assembling Documentary...</h3>
-                <p className="text-xs text-gray-500">Generating narration, stitching clips, and mixing audio. This may take several minutes.</p>
+                <p className="text-xs text-gray-500">Generating narration, creating filler visuals, and mixing audio. This may take several minutes.</p>
             </div>
         );
     }
 
     return (
-        <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-8 text-center">
-            <Film className="w-10 h-10 text-gray-600 mx-auto mb-3" />
-            <h3 className="text-sm font-semibold text-white mb-1">Final Assembly</h3>
-            <p className="text-xs text-gray-500 max-w-md mx-auto mb-4">
-                Once all video clips are generated, click below to assemble the final documentary with narration and transitions.
-            </p>
-            <button
-                onClick={triggerAssembly}
-                disabled={assembling}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-50 transition-colors"
-            >
-                {assembling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wrench className="w-4 h-4" />}
-                Assemble Documentary
-            </button>
+        <div className="space-y-4">
+            <FillerSelector />
+            <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-8 text-center">
+                <Film className="w-10 h-10 text-gray-600 mx-auto mb-3" />
+                <h3 className="text-sm font-semibold text-white mb-1">Final Assembly</h3>
+                <p className="text-xs text-gray-500 max-w-md mx-auto mb-4">
+                    Scene clips will be interleaved with {fillerMode === "kenburns" ? "Ken Burns animations on asset images" : fillerMode === "stock" ? "Pexels stock footage" : fillerMode === "kenburns+stock" ? "a mix of Ken Burns and stock footage" : "abstract procedural animations"} to fill the full narration duration.
+                </p>
+                <button
+                    onClick={triggerAssembly}
+                    disabled={assembling}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-50 transition-colors"
+                >
+                    {assembling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wrench className="w-4 h-4" />}
+                    Assemble Documentary
+                </button>
+            </div>
         </div>
     );
 }

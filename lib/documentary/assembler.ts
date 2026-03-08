@@ -1,15 +1,17 @@
 /**
  * Documentary Assembly Pipeline
  *
- * Combines generated video clips + TTS narration into finished documentary.
+ * Combines generated video clips + TTS narration + visual filler into finished documentary.
  *
  * Steps:
  * 1. Generate narration audio per scene via Kokoro TTS
- * 2. Download all scene clips from R2
- * 3. Concatenate clips within each scene (FFmpeg concat)
- * 4. Mix narration audio with scene video
- * 5. Concatenate all scenes into final documentary
- * 6. Upload final MP4 to R2
+ * 2. Calculate narration duration → determine filler needed
+ * 3. Download all scene clips from R2
+ * 4. Generate filler visuals (Ken Burns / Procedural / Stock Video)
+ * 5. Interleave clips + filler to fill narration duration
+ * 6. Mix narration audio with scene video
+ * 7. Concatenate all scenes into final documentary
+ * 8. Upload final MP4 to R2
  */
 
 import { execSync } from "child_process";
@@ -19,8 +21,134 @@ import os from "os";
 import { prisma } from "@/lib/prisma";
 import { generateVoiceover } from "@/lib/tts";
 import { uploadFileToR2, downloadFileFromR2, uploadBufferToR2 } from "@/lib/storage";
+import { generateKenBurnsFiller } from "./fillers/ken-burns";
+import { generateProceduralFiller, pickProceduralStyle } from "./fillers/procedural";
+import { generateStockVideoFiller } from "./fillers/stock-video";
 
 const TEMP_DIR = path.join(os.tmpdir(), "documentary-assembly");
+
+/**
+ * Get narration audio duration in seconds via ffprobe.
+ */
+function getAudioDuration(audioPath: string): number {
+    try {
+        const result = execSync(
+            `ffprobe -v error -show_entries format=duration -of csv=p=0 "${audioPath}"`,
+            { timeout: 15000, stdio: "pipe" }
+        ).toString().trim();
+        return parseFloat(result) || 0;
+    } catch {
+        return 0;
+    }
+}
+
+/**
+ * Get video duration in seconds via ffprobe.
+ */
+function getVideoDuration(videoPath: string): number {
+    try {
+        const result = execSync(
+            `ffprobe -v error -show_entries format=duration -of csv=p=0 "${videoPath}"`,
+            { timeout: 15000, stdio: "pipe" }
+        ).toString().trim();
+        return parseFloat(result) || 0;
+    } catch {
+        return 0;
+    }
+}
+
+/**
+ * Generate filler video based on the documentary's filler mode.
+ */
+async function generateFiller(
+    fillerMode: string,
+    outputPath: string,
+    duration: number,
+    sceneDir: string,
+    assetImagePaths: string[],
+    narrationText: string,
+    sceneTitle: string,
+    sceneMood?: string,
+): Promise<void> {
+    console.log(`[Assembly]   Generating ${duration}s of '${fillerMode}' filler...`);
+
+    switch (fillerMode) {
+        case "kenburns": {
+            if (assetImagePaths.length === 0) {
+                // Fallback to procedural if no images
+                await generateProceduralFiller(outputPath, duration, pickProceduralStyle(sceneMood));
+            } else {
+                await generateKenBurnsFiller(assetImagePaths, outputPath, duration);
+            }
+            break;
+        }
+
+        case "procedural": {
+            const style = pickProceduralStyle(sceneMood);
+            await generateProceduralFiller(outputPath, duration, style);
+            break;
+        }
+
+        case "stock": {
+            const success = await generateStockVideoFiller(narrationText, outputPath, duration, sceneTitle);
+            if (!success) {
+                // Fallback to Ken Burns if stock fails
+                if (assetImagePaths.length > 0) {
+                    await generateKenBurnsFiller(assetImagePaths, outputPath, duration);
+                } else {
+                    await generateProceduralFiller(outputPath, duration, pickProceduralStyle(sceneMood));
+                }
+            }
+            break;
+        }
+
+        case "kenburns+stock": {
+            // Split duration: 60% stock, 40% Ken Burns
+            const stockDuration = Math.ceil(duration * 0.6);
+            const kbDuration = duration - stockDuration;
+
+            const stockPath = path.join(sceneDir, "filler-stock-part.mp4");
+            const kbPath = path.join(sceneDir, "filler-kb-part.mp4");
+
+            // Try stock first
+            const stockSuccess = await generateStockVideoFiller(narrationText, stockPath, stockDuration, sceneTitle);
+
+            if (stockSuccess && assetImagePaths.length > 0) {
+                // Both modes succeeded — concatenate
+                await generateKenBurnsFiller(assetImagePaths, kbPath, kbDuration);
+
+                const concatList = path.join(sceneDir, "filler-mix-concat.txt");
+                fs.writeFileSync(concatList, [
+                    `file '${stockPath.replace(/\\/g, "/")}'`,
+                    `file '${kbPath.replace(/\\/g, "/")}'`,
+                ].join("\n"));
+
+                execSync(
+                    `ffmpeg -f concat -safe 0 -i "${concatList}" ` +
+                    `-c:v libx264 -preset fast -crf 22 -pix_fmt yuv420p ` +
+                    `-t ${duration} "${outputPath}" -y`,
+                    { timeout: 600000, stdio: "pipe" }
+                );
+            } else if (stockSuccess) {
+                fs.copyFileSync(stockPath, outputPath);
+            } else if (assetImagePaths.length > 0) {
+                await generateKenBurnsFiller(assetImagePaths, outputPath, duration);
+            } else {
+                await generateProceduralFiller(outputPath, duration, pickProceduralStyle(sceneMood));
+            }
+            break;
+        }
+
+        default: {
+            // Default to Ken Burns
+            if (assetImagePaths.length > 0) {
+                await generateKenBurnsFiller(assetImagePaths, outputPath, duration);
+            } else {
+                await generateProceduralFiller(outputPath, duration, pickProceduralStyle(sceneMood));
+            }
+        }
+    }
+}
 
 /**
  * Run the full assembly pipeline for a documentary
@@ -43,16 +171,39 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
                         shots: { orderBy: { shotIndex: "asc" } },
                     },
                 },
+                assets: true,
             },
         });
 
         if (!doc) throw new Error("Documentary not found");
+
+        const fillerMode = doc.fillerMode || "kenburns";
+        console.log(`[Assembly] Filler mode: ${fillerMode}`);
 
         // Mark as assembling
         await prisma.documentary.update({
             where: { id: documentaryId },
             data: { status: "ASSEMBLING" },
         });
+
+        // Download all asset images for Ken Burns filler
+        const assetImagePaths: string[] = [];
+        const assetDir = path.join(workDir, "assets");
+        if (!fs.existsSync(assetDir)) fs.mkdirSync(assetDir, { recursive: true });
+
+        for (const asset of doc.assets) {
+            if (asset.imagePath) {
+                const assetFile = path.join(assetDir, `asset-${asset.id}.png`);
+                try {
+                    await downloadFileFromR2(asset.imagePath, assetFile);
+                    assetImagePaths.push(assetFile);
+                } catch (err: any) {
+                    console.warn(`[Assembly] Failed to download asset ${asset.id}: ${err.message}`);
+                }
+            }
+        }
+
+        console.log(`[Assembly] Downloaded ${assetImagePaths.length} asset images for filler`);
 
         const assembledScenePaths: string[] = [];
 
@@ -65,19 +216,25 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
 
             // Step 1: Generate narration audio for this scene
             let narrationPath: string | null = null;
+            let narrationDuration = 0;
+
             if (scene.narrationText) {
                 console.log(`[Assembly]   Generating TTS narration (${scene.narrationText.length} chars)...`);
                 try {
                     const audioBuffer = await generateVoiceover({
                         text: scene.narrationText,
                         voiceId: doc.voiceId || "bf_emma",
-                        speed: 0.95, // slightly slower for documentary feel
+                        speed: 0.95,
                     });
 
                     narrationPath = path.join(sceneDir, "narration.wav");
                     fs.writeFileSync(narrationPath, audioBuffer);
 
-                    // Also upload narration to R2 for future reference
+                    // Get exact narration duration
+                    narrationDuration = getAudioDuration(narrationPath);
+                    console.log(`[Assembly]   TTS done → ${narrationDuration.toFixed(1)}s`);
+
+                    // Upload narration to R2
                     const narrationR2Key = `documentaries/${documentaryId}/scenes/${scene.id}/narration.wav`;
                     await uploadBufferToR2(audioBuffer, narrationR2Key, "audio/wav");
 
@@ -85,15 +242,15 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
                         where: { id: scene.id },
                         data: { narrationPath: narrationR2Key },
                     });
-
-                    console.log(`[Assembly]   TTS done → ${narrationR2Key}`);
                 } catch (ttsErr: any) {
                     console.warn(`[Assembly]   TTS failed for scene ${scene.sceneIndex}: ${ttsErr.message}`);
                 }
             }
 
-            // Step 2: Download and concatenate shots for this scene
+            // Step 2: Download scene clips
             const shotPaths: string[] = [];
+            let totalClipDuration = 0;
+
             for (const shot of scene.shots) {
                 if (!shot.clipPath) {
                     console.warn(`[Assembly]   Shot ${shot.shotIndex} missing clip, skipping`);
@@ -102,51 +259,99 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
 
                 const shotFile = path.join(sceneDir, `shot-${shot.shotIndex}.mp4`);
                 await downloadFileFromR2(shot.clipPath, shotFile);
+
+                const clipDuration = getVideoDuration(shotFile);
+                totalClipDuration += clipDuration;
                 shotPaths.push(shotFile);
             }
 
-            if (shotPaths.length === 0) {
-                console.warn(`[Assembly]   No clips for scene ${scene.sceneIndex}, skipping`);
+            if (shotPaths.length === 0 && narrationDuration === 0) {
+                console.warn(`[Assembly]   No clips or narration for scene ${scene.sceneIndex}, skipping`);
                 continue;
             }
 
-            // Step 3: Concat all shots in this scene
-            const sceneConcatPath = path.join(sceneDir, "scene-concat.mp4");
-            if (shotPaths.length === 1) {
-                // Single shot, just copy
-                fs.copyFileSync(shotPaths[0], sceneConcatPath);
-            } else {
-                // FFmpeg concat demuxer
-                const concatListPath = path.join(sceneDir, "concat.txt");
-                const concatContent = shotPaths.map((p) => `file '${p.replace(/\\/g, "/")}'`).join("\n");
-                fs.writeFileSync(concatListPath, concatContent);
+            // Step 3: Calculate filler needed
+            const fillerDuration = Math.max(0, narrationDuration - totalClipDuration);
+            console.log(`[Assembly]   Clips: ${totalClipDuration.toFixed(1)}s | Narration: ${narrationDuration.toFixed(1)}s | Filler needed: ${fillerDuration.toFixed(1)}s`);
 
-                execSync(
-                    `ffmpeg -f concat -safe 0 -i "${concatListPath}" -c copy "${sceneConcatPath}" -y`,
-                    { timeout: 600000, cwd: sceneDir }
+            // Step 4: Generate filler if needed
+            let fillerPath: string | null = null;
+            if (fillerDuration > 2) {
+                fillerPath = path.join(sceneDir, "filler.mp4");
+
+                // Get scene-specific mood from first shot
+                const sceneMood = scene.shots[0]?.mood || undefined;
+
+                await generateFiller(
+                    fillerMode,
+                    fillerPath,
+                    fillerDuration,
+                    sceneDir,
+                    assetImagePaths,
+                    scene.narrationText || "",
+                    scene.title || `Scene ${scene.sceneIndex + 1}`,
+                    sceneMood,
                 );
             }
 
-            // Step 4: Mix narration audio if available
+            // Step 5: Interleave clips + filler → scene video
+            const sceneVideoPath = path.join(sceneDir, "scene-video.mp4");
+            const videoParts: string[] = [];
+
+            // Pattern: [Clip 1] → [Filler] → [Clip 2] → [Filler] → ...
+            // But if filler exists, place clips at start and filler fills the rest
+            if (shotPaths.length > 0) {
+                videoParts.push(...shotPaths);
+            }
+            if (fillerPath && fs.existsSync(fillerPath)) {
+                videoParts.push(fillerPath);
+            }
+
+            if (videoParts.length === 0) continue;
+
+            if (videoParts.length === 1) {
+                fs.copyFileSync(videoParts[0], sceneVideoPath);
+            } else {
+                // Need to re-encode for consistent format before concat
+                const normalizedParts: string[] = [];
+                for (let i = 0; i < videoParts.length; i++) {
+                    const normPath = path.join(sceneDir, `norm-${i}.mp4`);
+                    execSync(
+                        `ffmpeg -i "${videoParts[i]}" -c:v libx264 -preset fast -crf 22 ` +
+                        `-vf "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:black,fps=24" ` +
+                        `-pix_fmt yuv420p -an "${normPath}" -y`,
+                        { timeout: 600000, stdio: "pipe" }
+                    );
+                    normalizedParts.push(normPath);
+                }
+
+                const concatListPath = path.join(sceneDir, "scene-concat.txt");
+                const concatContent = normalizedParts.map((p) => `file '${p.replace(/\\/g, "/")}'`).join("\n");
+                fs.writeFileSync(concatListPath, concatContent);
+
+                execSync(
+                    `ffmpeg -f concat -safe 0 -i "${concatListPath}" -c copy "${sceneVideoPath}" -y`,
+                    { timeout: 600000, stdio: "pipe" }
+                );
+            }
+
+            // Step 6: Mix narration audio with scene video
             const sceneOutputPath = path.join(sceneDir, "scene-final.mp4");
             if (narrationPath && fs.existsSync(narrationPath)) {
                 try {
-                    // Mix: keep video audio as background (lower volume) + narration as narrator
+                    // Add narration as audio track (video has no audio from Wan2.2)
                     execSync(
-                        `ffmpeg -i "${sceneConcatPath}" -i "${narrationPath}" ` +
-                        `-filter_complex "[0:a]volume=0.3[bg];[1:a]volume=1.0[narr];[bg][narr]amix=inputs=2:duration=longest:dropout_transition=3[aout]" ` +
-                        `-map 0:v -map "[aout]" -c:v copy -c:a aac -b:a 192k "${sceneOutputPath}" -y`,
-                        { timeout: 600000, cwd: sceneDir }
+                        `ffmpeg -i "${sceneVideoPath}" -i "${narrationPath}" ` +
+                        `-map 0:v -map 1:a -c:v copy -c:a aac -b:a 192k ` +
+                        `-shortest "${sceneOutputPath}" -y`,
+                        { timeout: 600000, stdio: "pipe" }
                     );
                 } catch {
-                    // If audio mixing fails (e.g., no audio stream in video), just add narration as only audio
-                    execSync(
-                        `ffmpeg -i "${sceneConcatPath}" -i "${narrationPath}" -map 0:v -map 1:a -c:v copy -c:a aac -b:a 192k -shortest "${sceneOutputPath}" -y`,
-                        { timeout: 600000, cwd: sceneDir }
-                    );
+                    // If mixing fails, just use video without audio
+                    fs.copyFileSync(sceneVideoPath, sceneOutputPath);
                 }
             } else {
-                fs.copyFileSync(sceneConcatPath, sceneOutputPath);
+                fs.copyFileSync(sceneVideoPath, sceneOutputPath);
             }
 
             // Upload assembled scene to R2
@@ -162,7 +367,7 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
             console.log(`[Assembly]   Scene ${scene.sceneIndex + 1} assembled → ${sceneR2Key}`);
         }
 
-        // ─── Step 5: Final concat of all scenes ──────────
+        // ─── Step 7: Final concat of all scenes ──────────
         if (assembledScenePaths.length === 0) {
             throw new Error("No scenes assembled — cannot create final documentary");
         }
@@ -178,24 +383,21 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
                 .join("\n");
             fs.writeFileSync(finalConcatPath, finalConcatContent);
 
-            // Re-encode to ensure consistent format for final concatenation
             execSync(
                 `ffmpeg -f concat -safe 0 -i "${finalConcatPath}" ` +
                 `-c:v libx264 -preset fast -crf 22 -c:a aac -b:a 192k ` +
                 `-movflags +faststart "${finalOutputPath}" -y`,
-                { timeout: 1800000 } // 30 min timeout for long docs
+                { timeout: 1800000 }
             );
         }
 
-        // ─── Step 6: Upload final documentary to R2 ──────
+        // ─── Step 8: Upload final documentary to R2 ──────
         const finalR2Key = `documentaries/${documentaryId}/final.mp4`;
         console.log(`[Assembly] Uploading final documentary...`);
         await uploadFileToR2(finalOutputPath, finalR2Key, "video/mp4");
 
-        // Get file size for metadata
         const finalSize = fs.statSync(finalOutputPath).size;
 
-        // Get duration via ffprobe
         let totalDuration = 0;
         try {
             const probeResult = execSync(
@@ -204,8 +406,7 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
             ).toString().trim();
             totalDuration = parseFloat(probeResult) || 0;
         } catch {
-            // Estimate from scene count
-            totalDuration = doc.scenes.length * 120; // rough estimate
+            totalDuration = doc.scenes.length * 120;
         }
 
         // Update documentary record
@@ -232,7 +433,6 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
             data: { status: "FAILED", errorMsg: `Assembly failed: ${error.message}` },
         });
 
-        // Cleanup on failure too
         if (fs.existsSync(workDir)) {
             fs.rmSync(workDir, { recursive: true, force: true });
         }

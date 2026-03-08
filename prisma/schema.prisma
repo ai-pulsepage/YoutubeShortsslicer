@@ -421,6 +421,7 @@ model Documentary {
   style          String    @default("cinematic")
   styleGuide     Json?
   voiceId        String    @default("bf_emma")
+  fillerMode     String    @default("kenburns") // kenburns, procedural, stock, kenburns+stock
   status         DocStatus @default(DRAFT)
   totalDuration  Float?
   finalVideoPath String?
