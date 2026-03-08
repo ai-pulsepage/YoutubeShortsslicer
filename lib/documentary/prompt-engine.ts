@@ -13,7 +13,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import { getRedis, CHANNELS, type RedisJob } from "./redis-client";
+import { CHANNELS, type RedisJob, dispatchJob } from "./redis-client";
 
 /**
  * Generates video prompts for all shots and dispatches to RunPod
@@ -42,7 +42,6 @@ export async function generateVideoClips(documentaryId: string): Promise<void> {
         throw new Error(`Documentary ${documentaryId} not found`);
     }
 
-    const redis = getRedis();
     let jobCount = 0;
     let previousShotLastFrame: string | null = null;
 
@@ -97,7 +96,7 @@ export async function generateVideoClips(documentaryId: string): Promise<void> {
                 data: { compositePrompt: prompt },
             });
 
-            // Dispatch to Redis
+            // Dispatch to Redis queue (LPUSH, not PUB/SUB)
             const redisJob: RedisJob = {
                 jobId: job.id,
                 documentaryId,
@@ -113,7 +112,7 @@ export async function generateVideoClips(documentaryId: string): Promise<void> {
                 },
             };
 
-            await redis.publish(CHANNELS.DOCUMENTARY_JOBS, JSON.stringify(redisJob));
+            await dispatchJob(redisJob);
             jobCount++;
 
             // Track for next shot's continuity
