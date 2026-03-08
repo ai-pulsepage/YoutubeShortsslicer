@@ -102,6 +102,7 @@ def get_flux_pipeline():
             _flux_pipe = FluxPipeline.from_pretrained(
                 "black-forest-labs/FLUX.1-schnell",
                 torch_dtype=torch.bfloat16,
+                token=False,  # Don't send token — schnell is Apache 2.0, no auth needed
             )
             _flux_pipe.enable_model_cpu_offload()
             print("✅ Flux.1-schnell loaded (open model, no auth needed)")
