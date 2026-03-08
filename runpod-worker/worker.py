@@ -4,7 +4,7 @@ RunPod GPU Worker — Documentary Factory
 Python worker that runs on RunPod RTX 4090 pod.
 Listens to Redis for generation jobs and processes them with:
 - Flux.1: Reference image generation
-- Wan2.1: Image-conditioned video generation
+- Wan2.2: Image-conditioned video generation
 
 Deploy: Upload this folder to RunPod pod, then run:
   pip install -r requirements.txt
@@ -16,6 +16,8 @@ Environment Variables Required:
   R2_ACCESS_KEY   - R2 access key
   R2_SECRET_KEY   - R2 secret key
   R2_BUCKET       - R2 bucket name
+  WEBHOOK_URL     - Backend webhook URL (e.g. https://your-app.railway.app/api/documentary/webhook)
+  WORKER_WEBHOOK_SECRET - Shared secret for webhook auth
 """
 
 import json
@@ -25,6 +27,7 @@ import time
 import uuid
 import tempfile
 import traceback
+import requests
 from pathlib import Path
 
 import redis
@@ -38,6 +41,8 @@ R2_ENDPOINT = os.environ["R2_ENDPOINT"]
 R2_ACCESS_KEY = os.environ["R2_ACCESS_KEY"]
 R2_SECRET_KEY = os.environ["R2_SECRET_KEY"]
 R2_BUCKET = os.environ.get("R2_BUCKET", "youtubeshorts")
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")  # e.g. https://your-app.railway.app/api/documentary/webhook
+WEBHOOK_SECRET = os.environ.get("WORKER_WEBHOOK_SECRET", "documentary-worker-secret")
 
 JOBS_CHANNEL = "documentary_jobs"
 RESULTS_CHANNEL = "documentary_results"
@@ -262,8 +267,8 @@ def process_job(job: dict, r: redis.Redis):
                     "error": f"Unknown job type: {job_type}",
                 }
 
-        # Publish result back via Redis list (persistent)
-        r.lpush(RESULTS_CHANNEL, json.dumps(result))
+        # Report result via webhook (primary) and Redis (fallback)
+        report_result(r, result)
         print(f"✅ Job {job_id} completed → {result.get('outputPath', 'N/A')}")
 
     except Exception as e:
@@ -276,7 +281,34 @@ def process_job(job: dict, r: redis.Redis):
             "status": "failed",
             "error": error_msg,
         }
-        r.lpush(RESULTS_CHANNEL, json.dumps(result))
+        report_result(r, result)
+
+
+# ─── Result Reporting ──────────────────────────────────
+
+def report_result(r, result: dict):
+    """Report job result via webhook (primary) and Redis list (fallback)."""
+    # Always push to Redis list as fallback
+    r.lpush(RESULTS_CHANNEL, json.dumps(result))
+
+    # Call webhook if configured
+    if WEBHOOK_URL:
+        try:
+            resp = requests.post(
+                WEBHOOK_URL,
+                json=result,
+                headers={
+                    "Content-Type": "application/json",
+                    "x-webhook-secret": WEBHOOK_SECRET,
+                },
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                print(f"  📡 Webhook reported: {result.get('status', 'unknown')}")
+            else:
+                print(f"  ⚠️ Webhook returned {resp.status_code}: {resp.text[:100]}")
+        except Exception as e:
+            print(f"  ⚠️ Webhook failed (Redis fallback used): {e}")
 
 
 # ─── Main Loop ─────────────────────────────────────────

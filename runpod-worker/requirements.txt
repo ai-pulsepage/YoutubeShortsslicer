@@ -12,3 +12,4 @@ opencv-python
 Pillow
 redis
 boto3
+requests
