@@ -354,7 +354,16 @@ function GeneratingBanner({ doc, onRefresh }: { doc: any; onRefresh: () => void 
         return () => clearInterval(interval);
     }, [doc.updatedAt]);
 
-    const isStuck = elapsed > 120; // > 2 minutes
+    // Check if jobs are actively running
+    const jobs = doc.genJobs || [];
+    const completed = jobs.filter((j: any) => j.status === "COMPLETED").length;
+    const failed = jobs.filter((j: any) => j.status === "FAILED").length;
+    const queued = jobs.filter((j: any) => j.status === "QUEUED" || j.status === "PROCESSING").length;
+    const hasJobs = jobs.length > 0;
+    const jobsActive = hasJobs && queued > 0;
+
+    // Only stuck if: no jobs and >2min, OR all jobs done/failed and >2min
+    const isStuck = !jobsActive && elapsed > 120;
 
     const forceReset = async () => {
         setResetting(true);
@@ -362,14 +371,23 @@ function GeneratingBanner({ doc, onRefresh }: { doc: any; onRefresh: () => void 
         setTimeout(onRefresh, 1000);
     };
 
+    // Show progress message based on state
+    let message: string;
+    if (jobsActive) {
+        message = `Generating assets... ${completed}/${jobs.length} images complete${failed > 0 ? `, ${failed} failed` : ''} (${queued} remaining)`;
+    } else if (isStuck && !hasJobs) {
+        message = `Pipeline appears stuck (${Math.floor(elapsed / 60)}m ${elapsed % 60}s). The server may have restarted mid-run.`;
+    } else if (isStuck) {
+        message = `All jobs finished but status wasn't updated. Click Force Retry to reset.`;
+    } else {
+        message = `AI is generating your documentary script and planning scenes... (${elapsed}s)`;
+    }
+
     return (
-        <div className="flex items-center gap-3 p-3 bg-violet-500/10 border border-violet-500/20 rounded-xl">
-            <Loader2 className="w-4 h-4 text-violet-400 animate-spin flex-shrink-0" />
-            <p className="text-sm text-violet-300 flex-1">
-                {isStuck
-                    ? `Pipeline appears stuck (${Math.floor(elapsed / 60)}m ${elapsed % 60}s). The server may have restarted mid-run.`
-                    : `AI is generating your documentary script and planning scenes... (${elapsed}s)`
-                }
+        <div className={`flex items-center gap-3 p-3 rounded-xl ${jobsActive ? 'bg-blue-500/10 border border-blue-500/20' : 'bg-violet-500/10 border border-violet-500/20'}`}>
+            <Loader2 className={`w-4 h-4 animate-spin flex-shrink-0 ${jobsActive ? 'text-blue-400' : 'text-violet-400'}`} />
+            <p className={`text-sm flex-1 ${jobsActive ? 'text-blue-300' : 'text-violet-300'}`}>
+                {message}
             </p>
             {isStuck && (
                 <button
