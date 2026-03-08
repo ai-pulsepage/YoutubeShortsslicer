@@ -6,7 +6,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import { getRedis, CHANNELS, type RedisJob } from "./redis-client";
+import { CHANNELS, type RedisJob, dispatchJob } from "./redis-client";
 
 /**
  * Generates image prompts for all assets and dispatches to RunPod
@@ -21,7 +21,6 @@ export async function generateAssetMatrix(documentaryId: string): Promise<void> 
         throw new Error(`Documentary ${documentaryId} not found`);
     }
 
-    const redis = getRedis();
     let jobCount = 0;
 
     for (const asset of documentary.assets) {
@@ -64,7 +63,7 @@ export async function generateAssetMatrix(documentaryId: string): Promise<void> 
             },
         };
 
-        await redis.publish(CHANNELS.DOCUMENTARY_JOBS, JSON.stringify(redisJob));
+        await dispatchJob(redisJob);
         jobCount++;
     }
 

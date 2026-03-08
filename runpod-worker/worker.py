@@ -147,8 +147,6 @@ def generate_video(
     print(f"  🎬 Video generated: {output_path}")
 
 
-# ─── Job Processor ─────────────────────────────────────
-
 def process_job(job: dict, r: redis.Redis):
     """Process a single generation job."""
     job_id = job.get("jobId", "unknown")
@@ -162,7 +160,8 @@ def process_job(job: dict, r: redis.Redis):
 
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
-            if job_type == "image":
+            # Map job types: ref_image and image both generate images
+            if job_type in ("image", "ref_image"):
                 # Generate reference image with Flux.1
                 output_file = os.path.join(tmpdir, f"{job_id}.png")
                 generate_image(prompt, output_file)
@@ -179,7 +178,7 @@ def process_job(job: dict, r: redis.Redis):
                     "type": "image",
                 }
 
-            elif job_type == "video":
+            elif job_type in ("video", "shot_video"):
                 # Download reference image first
                 ref_path = os.path.join(tmpdir, "reference.png")
                 if refs and len(refs) > 0:
@@ -228,8 +227,8 @@ def process_job(job: dict, r: redis.Redis):
                     "error": f"Unknown job type: {job_type}",
                 }
 
-        # Publish result back
-        r.publish(RESULTS_CHANNEL, json.dumps(result))
+        # Publish result back via Redis list (persistent)
+        r.lpush(RESULTS_CHANNEL, json.dumps(result))
         print(f"✅ Job {job_id} completed → {result.get('outputPath', 'N/A')}")
 
     except Exception as e:
@@ -242,7 +241,7 @@ def process_job(job: dict, r: redis.Redis):
             "status": "failed",
             "error": error_msg,
         }
-        r.publish(RESULTS_CHANNEL, json.dumps(result))
+        r.lpush(RESULTS_CHANNEL, json.dumps(result))
 
 
 # ─── Main Loop ─────────────────────────────────────────
@@ -255,21 +254,22 @@ def main():
     print()
 
     r = redis.from_url(REDIS_URL, decode_responses=True)
-    pubsub = r.pubsub()
-    pubsub.subscribe(JOBS_CHANNEL)
 
-    print(f"📡 Listening on channel: {JOBS_CHANNEL}")
+    print(f"📡 Listening on queue: {JOBS_CHANNEL} (BRPOP)")
     print(f"   Waiting for jobs...")
 
-    for message in pubsub.listen():
-        if message["type"] != "message":
+    while True:
+        # BRPOP blocks until a job is available (timeout=0 means block forever)
+        result = r.brpop(JOBS_CHANNEL, timeout=0)
+        if result is None:
             continue
 
+        _, raw_data = result
         try:
-            job = json.loads(message["data"])
+            job = json.loads(raw_data)
             process_job(job, r)
         except json.JSONDecodeError:
-            print(f"⚠️ Invalid JSON: {message['data'][:100]}")
+            print(f"⚠️ Invalid JSON: {raw_data[:100]}")
         except Exception as e:
             print(f"⚠️ Error processing message: {e}")
             traceback.print_exc()

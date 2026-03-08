@@ -28,7 +28,7 @@ export function getRedis(): Redis {
     return redis;
 }
 
-// Pub/Sub channels
+// Queue names (using Redis Lists for persistence, not Pub/Sub)
 export const CHANNELS = {
     DOCUMENTARY_JOBS: "documentary_jobs",
     DOCUMENTARY_RESULTS: "documentary_results",
@@ -51,4 +51,12 @@ export interface RedisJobResult {
     status: "completed" | "failed";
     outputPath?: string;
     errorMsg?: string;
+}
+
+/**
+ * Push a job onto the Redis queue (persists until consumed by the worker)
+ */
+export async function dispatchJob(job: RedisJob): Promise<void> {
+    const r = getRedis();
+    await r.lpush(CHANNELS.DOCUMENTARY_JOBS, JSON.stringify(job));
 }
