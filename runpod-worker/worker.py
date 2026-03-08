@@ -142,12 +142,12 @@ def get_wan_pipeline():
         _wan_pipe = WanImageToVideoPipeline.from_pretrained(
             model_id,
             torch_dtype=torch.bfloat16,
-        )
-        # model_cpu_offload is fast — 5B model fits easily on 24GB
-        _wan_pipe.enable_model_cpu_offload()
+        ).to("cuda")
+        # Load directly on GPU — 5B model (~10GB) fits easily in 24GB VRAM
+        # No CPU offload needed, saves system RAM
         _wan_pipe.vae.enable_slicing()
         _wan_pipe.vae.enable_tiling()
-        print(f"✅ {model_id} loaded")
+        print(f"✅ {model_id} loaded on GPU")
     return _wan_pipe
 
 
