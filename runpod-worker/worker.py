@@ -159,11 +159,15 @@ def generate_video(
     reference_image_path: str,
     output_path: str,
     num_frames: int = 81,  # ~5 seconds at 16fps
-    width: int = 848,      # Must be divisible by 16
-    height: int = 480,     # Must be divisible by 16
+    width: int = 848,
+    height: int = 480,
 ):
     """Generate a video clip with Wan2.1 image-to-video."""
     from PIL import Image
+
+    # Wan2.1 requires dimensions divisible by 16
+    width = (width // 16) * 16
+    height = (height // 16) * 16
 
     pipe = get_wan_pipeline()
     ref_image = Image.open(reference_image_path).convert("RGB").resize((width, height))
