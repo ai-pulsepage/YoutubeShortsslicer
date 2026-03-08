@@ -31,12 +31,21 @@ export async function POST(
         return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    if (documentary.status !== "ASSETS_READY" && documentary.status !== "FAILED") {
+    if (!["ASSETS_READY", "FAILED", "GENERATING"].includes(documentary.status as string)) {
         return NextResponse.json(
-            { error: `Cannot generate clips in status: ${documentary.status}. Must be ASSETS_READY.` },
+            { error: `Cannot generate clips in status: ${documentary.status}. Must be ASSETS_READY, GENERATING, or FAILED.` },
             { status: 400 }
         );
     }
+
+    // Clean up stale clip jobs from previous failed dispatches
+    await prisma.genJob.deleteMany({
+        where: {
+            documentaryId: id,
+            jobType: "shot_video",
+            status: { in: ["QUEUED", "FAILED"] },
+        },
+    });
 
     await generateVideoClips(id);
 

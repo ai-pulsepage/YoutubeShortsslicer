@@ -451,6 +451,13 @@ function PipelineActions({ doc, onRefresh }: { doc: any; onRefresh: () => void }
                     {doc.status === "GENERATING" ? "Force Retry" : "Retry"}
                 </button>
             )}
+            {doc.status === "GENERATING" && doc.genJobs?.some((j: any) => j.jobType === "shot_video" && j.status === "QUEUED") && (
+                <button onClick={() => runAction("generate-clips")} disabled={running}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-cyan-600 hover:bg-cyan-500 text-white disabled:opacity-50 transition-colors">
+                    {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Film className="w-4 h-4" />}
+                    Retry Clips
+                </button>
+            )}
         </div>
     );
 }
