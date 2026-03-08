@@ -132,25 +132,19 @@ def get_wan_pipeline():
     if _wan_pipe is None:
         from diffusers import WanImageToVideoPipeline
 
-        # 14B model — requires 100GB+ volume
-        for model_id in [
-            "Wan-AI/Wan2.1-I2V-14B-480P-Diffusers",
-        ]:
-            try:
-                print(f"🔄 Loading {model_id}...")
-                _wan_pipe = WanImageToVideoPipeline.from_pretrained(
-                    model_id,
-                    torch_dtype=torch.bfloat16,
-                )
-                _wan_pipe.enable_model_cpu_offload()
-                print(f"✅ {model_id} loaded")
-                break
-            except Exception as e:
-                print(f"⚠️  {model_id} failed ({e}), trying next...")
-                _wan_pipe = None
-
-        if _wan_pipe is None:
-            raise RuntimeError("Could not load any Wan2.1 model")
+        model_id = "Wan-AI/Wan2.1-I2V-14B-480P-Diffusers"
+        print(f"🔄 Loading {model_id}...")
+        _wan_pipe = WanImageToVideoPipeline.from_pretrained(
+            model_id,
+            torch_dtype=torch.bfloat16,
+        )
+        # Sequential offload: moves individual layers to GPU one at a time
+        # Uses ~3-5GB VRAM instead of 23GB (much slower but fits 24GB card)
+        _wan_pipe.enable_sequential_cpu_offload()
+        # VAE optimizations to reduce memory during decode
+        _wan_pipe.vae.enable_slicing()
+        _wan_pipe.vae.enable_tiling()
+        print(f"✅ {model_id} loaded (sequential CPU offload)")
     return _wan_pipe
 
 
@@ -158,9 +152,9 @@ def generate_video(
     prompt: str,
     reference_image_path: str,
     output_path: str,
-    num_frames: int = 81,  # ~5 seconds at 16fps
-    width: int = 848,
-    height: int = 480,
+    num_frames: int = 33,  # ~2 seconds at 16fps (saves VRAM)
+    width: int = 480,
+    height: int = 272,
 ):
     """Generate a video clip with Wan2.1 image-to-video."""
     from PIL import Image
@@ -170,6 +164,10 @@ def generate_video(
     height = (height // 16) * 16
 
     pipe = get_wan_pipeline()
+
+    # Clear any leftover GPU memory
+    torch.cuda.empty_cache()
+
     ref_image = Image.open(reference_image_path).convert("RGB").resize((width, height))
 
     result = pipe(
@@ -178,7 +176,7 @@ def generate_video(
         num_frames=num_frames,
         width=width,
         height=height,
-        num_inference_steps=30,
+        num_inference_steps=20,  # Fewer steps to save time (sequential offload is slow)
         guidance_scale=5.0,
     )
 
