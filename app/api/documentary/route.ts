@@ -49,9 +49,11 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { sourceUrls, style, styleGuide, voiceId, title } = body;
 
-    if (!sourceUrls || !Array.isArray(sourceUrls) || sourceUrls.length === 0) {
+    // In topic mode, sourceUrls can be empty if title is provided
+    const isTopicMode = (!sourceUrls || sourceUrls.length === 0) && title;
+    if (!isTopicMode && (!sourceUrls || !Array.isArray(sourceUrls) || sourceUrls.length === 0)) {
         return NextResponse.json(
-            { error: "At least one source URL is required" },
+            { error: "Provide a topic title OR at least one source URL" },
             { status: 400 }
         );
     }
@@ -60,7 +62,7 @@ export async function POST(req: NextRequest) {
         data: {
             userId: session.user.id,
             title: title || null,
-            sourceUrls,
+            sourceUrls: sourceUrls || [],
             style: style || "cinematic",
             styleGuide: styleGuide || null,
             voiceId: voiceId || "bf_emma",
