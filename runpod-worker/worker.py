@@ -225,12 +225,12 @@ def process_job(job: dict, r: redis.Redis):
                     download_from_r2(refs[0], ref_path)
                 else:
                     # Generate a reference image from prompt if none provided
-                    generate_image(prompt, ref_path, width=854, height=480)
+                    generate_image(prompt, ref_path, width=1280, height=704)
 
                 # Generate video clip
                 output_file = os.path.join(tmpdir, f"{job_id}.mp4")
                 duration_secs = job.get("duration", 5)
-                num_frames = max(33, int(duration_secs * 16))  # 16fps
+                num_frames = max(33, int(duration_secs * 24))  # 24fps for Wan2.2
                 generate_video(prompt, ref_path, output_file, num_frames=num_frames)
 
                 # Upload to R2
