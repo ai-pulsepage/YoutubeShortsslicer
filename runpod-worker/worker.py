@@ -159,8 +159,8 @@ def generate_video(
     reference_image_path: str,
     output_path: str,
     num_frames: int = 81,  # ~5 seconds at 16fps
-    width: int = 854,
-    height: int = 480,
+    width: int = 848,      # Must be divisible by 16
+    height: int = 480,     # Must be divisible by 16
 ):
     """Generate a video clip with Wan2.1 image-to-video."""
     from PIL import Image
