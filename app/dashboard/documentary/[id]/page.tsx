@@ -117,12 +117,9 @@ export default function DocumentaryDetailPage({ params }: { params: Promise<{ id
                 </div>
             )}
 
-            {/* Generating indicator */}
+            {/* Generating indicator with stuck detection */}
             {doc.status === "GENERATING" && (
-                <div className="flex items-center gap-3 p-3 bg-violet-500/10 border border-violet-500/20 rounded-xl">
-                    <Loader2 className="w-4 h-4 text-violet-400 animate-spin" />
-                    <p className="text-sm text-violet-300">AI is generating your documentary script and planning scenes... This takes 1-2 minutes.</p>
-                </div>
+                <GeneratingBanner doc={doc} onRefresh={fetchDoc} />
             )}
 
             {/* Pipeline Overview */}
@@ -344,6 +341,50 @@ function PipelineOverview({ doc }: { doc: any }) {
     );
 }
 
+/* ────── Generating Banner with Stuck Detection ────── */
+function GeneratingBanner({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
+    const [elapsed, setElapsed] = useState(0);
+    const [resetting, setResetting] = useState(false);
+
+    useEffect(() => {
+        const start = new Date(doc.updatedAt).getTime();
+        const tick = () => setElapsed(Math.floor((Date.now() - start) / 1000));
+        tick();
+        const interval = setInterval(tick, 1000);
+        return () => clearInterval(interval);
+    }, [doc.updatedAt]);
+
+    const isStuck = elapsed > 120; // > 2 minutes
+
+    const forceReset = async () => {
+        setResetting(true);
+        await fetch(`/api/documentary/${doc.id}/generate-story`, { method: "POST" });
+        setTimeout(onRefresh, 1000);
+    };
+
+    return (
+        <div className="flex items-center gap-3 p-3 bg-violet-500/10 border border-violet-500/20 rounded-xl">
+            <Loader2 className="w-4 h-4 text-violet-400 animate-spin flex-shrink-0" />
+            <p className="text-sm text-violet-300 flex-1">
+                {isStuck
+                    ? `Pipeline appears stuck (${Math.floor(elapsed / 60)}m ${elapsed % 60}s). The server may have restarted mid-run.`
+                    : `AI is generating your documentary script and planning scenes... (${elapsed}s)`
+                }
+            </p>
+            {isStuck && (
+                <button
+                    onClick={forceReset}
+                    disabled={resetting}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-50 transition-colors flex-shrink-0"
+                >
+                    {resetting ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+                    Force Retry
+                </button>
+            )}
+        </div>
+    );
+}
+
 /* ────── Pipeline Action Buttons ────── */
 function PipelineActions({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
     const [running, setRunning] = useState(false);
@@ -385,11 +426,11 @@ function PipelineActions({ doc, onRefresh }: { doc: any; onRefresh: () => void }
                     Assemble
                 </button>
             )}
-            {doc.status === "FAILED" && (
+            {(doc.status === "FAILED" || doc.status === "GENERATING") && (
                 <button onClick={() => runAction("generate-story")} disabled={running}
                     className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-red-600 hover:bg-red-500 text-white disabled:opacity-50 transition-colors">
                     {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                    Retry
+                    {doc.status === "GENERATING" ? "Force Retry" : "Retry"}
                 </button>
             )}
         </div>
