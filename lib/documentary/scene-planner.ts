@@ -266,6 +266,23 @@ async function savePlanToDatabase(
     documentaryId: string,
     plan: ScenePlan
 ): Promise<void> {
+    // Clean up any existing scenes/assets from previous failed runs
+    // Order matters due to foreign keys: shot-assets → shots → scenes, then assets + jobs
+    const existingScenes = await prisma.docScene.findMany({
+        where: { documentaryId },
+        include: { shots: { include: { shotAssets: true } } },
+    });
+    for (const scene of existingScenes) {
+        for (const shot of scene.shots) {
+            await prisma.docShotAsset.deleteMany({ where: { shotId: shot.id } });
+        }
+        await prisma.docShot.deleteMany({ where: { sceneId: scene.id } });
+    }
+    await prisma.docScene.deleteMany({ where: { documentaryId } });
+    await prisma.docAsset.deleteMany({ where: { documentaryId } });
+    await prisma.genJob.deleteMany({ where: { documentaryId } });
+    console.log(`[ScenePlanner] Cleaned up old scenes/assets/jobs for retry`);
+
     // Valid Prisma AssetType values
     const VALID_TYPES = new Set(["CHARACTER", "PROP", "CONCEPT", "ENVIRONMENT", "FILLER"]);
     const TYPE_MAP: Record<string, string> = {
