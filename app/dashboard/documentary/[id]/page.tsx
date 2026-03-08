@@ -942,6 +942,8 @@ function ProgressTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
 /* ────── Tab 5: Scene Preview ────── */
 function PreviewTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
     const [regeneratingIds, setRegeneratingIds] = useState<Set<string>>(new Set());
+    const r2Base = process.env.NEXT_PUBLIC_R2_PUBLIC_URL || "";
+    const r2Url = (path: string | null) => path ? `${r2Base}/${path}` : "";
 
     // Gather all shots with their scene info
     const allShots = (doc.scenes || []).flatMap((scene: any) =>
@@ -990,7 +992,7 @@ function PreviewTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
                         <div className="md:w-1/2 aspect-video bg-black relative">
                             {shot.clipPath && !regeneratingIds.has(shot.id) ? (
                                 <video
-                                    src={shot.clipPath}
+                                    src={r2Url(shot.clipPath)}
                                     controls
                                     className="w-full h-full object-contain"
                                     preload="metadata"
