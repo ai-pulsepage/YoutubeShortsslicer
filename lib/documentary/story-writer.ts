@@ -167,11 +167,12 @@ export async function saveScriptToDocumentary(
 async function getApiKey(): Promise<string> {
     const record = await prisma.apiKey.findUnique({
         where: { service: "deepseek" },
-    });
+    }).catch(() => null);
 
-    if (!record?.key) {
-        throw new Error("DeepSeek API key not found in database. Add it in Settings.");
-    }
+    if (record?.key) return record.key;
 
-    return record.key;
+    const envKey = process.env.DEEPSEEK_API_KEY;
+    if (envKey) return envKey;
+
+    throw new Error("DeepSeek API key not found. Set DEEPSEEK_API_KEY env var or add in Settings.");
 }
