@@ -127,19 +127,18 @@ def generate_image(prompt: str, output_path: str, width: int = 1024, height: int
 _wan_pipe = None
 
 def get_wan_pipeline():
-    """Lazy-load Wan2.1 image-to-video pipeline."""
+    """Lazy-load Wan2.2 image-to-video pipeline."""
     global _wan_pipe
     if _wan_pipe is None:
         from diffusers import WanImageToVideoPipeline
 
-        model_id = "Wan-AI/Wan2.1-I2V-14B-480P-Diffusers"
+        model_id = "Wan-AI/Wan2.2-TI2V-5B-Diffusers"
         print(f"🔄 Loading {model_id}...")
         _wan_pipe = WanImageToVideoPipeline.from_pretrained(
             model_id,
             torch_dtype=torch.bfloat16,
         )
-        # model_cpu_offload: keeps submodels in RAM, moves to GPU when needed
-        # Fast on 48GB GPUs (RTX 6000 Ada, A6000, etc.)
+        # model_cpu_offload is fast — 5B model fits easily on 24GB
         _wan_pipe.enable_model_cpu_offload()
         _wan_pipe.vae.enable_slicing()
         _wan_pipe.vae.enable_tiling()
@@ -151,14 +150,14 @@ def generate_video(
     prompt: str,
     reference_image_path: str,
     output_path: str,
-    num_frames: int = 81,  # ~5 seconds at 16fps
-    width: int = 848,
-    height: int = 480,
+    num_frames: int = 81,  # ~3.4 seconds at 24fps
+    width: int = 1280,
+    height: int = 720,
 ):
-    """Generate a video clip with Wan2.1 image-to-video."""
+    """Generate a video clip with Wan2.2 image-to-video."""
     from PIL import Image
 
-    # Wan2.1 requires dimensions divisible by 16
+    # Wan2.2 requires dimensions divisible by 16
     width = (width // 16) * 16
     height = (height // 16) * 16
 
@@ -179,7 +178,7 @@ def generate_video(
 
     # Export frames to video
     from diffusers.utils import export_to_video
-    export_to_video(result.frames[0], output_path, fps=16)
+    export_to_video(result.frames[0], output_path, fps=24)
     print(f"  🎬 Video generated: {output_path}")
 
 
