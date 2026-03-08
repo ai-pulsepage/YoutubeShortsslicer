@@ -132,9 +132,9 @@ def get_wan_pipeline():
     if _wan_pipe is None:
         from diffusers import WanImageToVideoPipeline
 
-        # Try 14B first, fall back to 1.3B if OOM or unavailable
+        # Use 1.3B for now (fits 50GB volume alongside FLUX.1)
+        # Upgrade to 14B when volume is 100GB+
         for model_id in [
-            "Wan-AI/Wan2.1-I2V-14B-480P-Diffusers",
             "Wan-AI/Wan2.1-I2V-1.3B-480P-Diffusers",
         ]:
             try:
