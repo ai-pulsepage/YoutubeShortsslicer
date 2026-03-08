@@ -63,10 +63,14 @@ export default function DocumentaryDetailPage({ params }: { params: Promise<{ id
 
     useEffect(() => { fetchDoc(); }, [fetchDoc]);
 
-    // Auto-refresh during generation
+    // Auto-refresh during active states + sync Redis results
     useEffect(() => {
         if (!doc || !["GENERATING", "ASSEMBLING", "SCENES_PLANNED"].includes(doc.status)) return;
-        const interval = setInterval(fetchDoc, 5000);
+        const interval = setInterval(async () => {
+            // Sync results from Redis → DB before refreshing
+            await fetch("/api/documentary/jobs/sync", { method: "POST" }).catch(() => { });
+            fetchDoc();
+        }, 5000);
         return () => clearInterval(interval);
     }, [doc, fetchDoc]);
 
