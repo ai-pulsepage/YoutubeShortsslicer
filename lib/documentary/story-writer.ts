@@ -107,7 +107,7 @@ Novelty Score: ${a.noveltyScore}/10
                 { role: "user", content: prompt },
             ],
             temperature: 0.8,
-            max_tokens: 16000, // Long scripts need lots of tokens
+            max_tokens: 8192,
             response_format: { type: "json_object" },
         }),
     });
