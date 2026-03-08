@@ -4,6 +4,8 @@ transformers>=4.40.0
 accelerate>=0.30.0
 safetensors
 sentencepiece
+protobuf
+ftfy
 Pillow
 redis
 boto3
