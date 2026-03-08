@@ -253,27 +253,48 @@ def main():
     print(f"   GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU (no GPU!)'}")
     print()
 
-    r = redis.from_url(REDIS_URL, decode_responses=True)
-
     print(f"📡 Listening on queue: {JOBS_CHANNEL} (BRPOP)")
     print(f"   Waiting for jobs...")
+    sys.stdout.flush()
 
     while True:
-        # BRPOP blocks until a job is available (timeout=0 means block forever)
-        result = r.brpop(JOBS_CHANNEL, timeout=0)
-        if result is None:
-            continue
-
-        _, raw_data = result
         try:
-            job = json.loads(raw_data)
-            process_job(job, r)
-        except json.JSONDecodeError:
-            print(f"⚠️ Invalid JSON: {raw_data[:100]}")
+            r = redis.from_url(REDIS_URL, decode_responses=True, socket_timeout=30, socket_keepalive=True)
+            r.ping()
+            print(f"✅ Redis connected")
+            sys.stdout.flush()
+
+            while True:
+                # Use short timeout (5s) to avoid Railway proxy killing the connection
+                result = r.brpop(JOBS_CHANNEL, timeout=5)
+                if result is None:
+                    continue  # Timeout, loop and try again
+
+                _, raw_data = result
+                try:
+                    job = json.loads(raw_data)
+                    process_job(job, r)
+                except json.JSONDecodeError:
+                    print(f"⚠️ Invalid JSON: {raw_data[:100]}")
+                except Exception as e:
+                    print(f"⚠️ Error processing job: {e}")
+                    traceback.print_exc()
+                sys.stdout.flush()
+
+        except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError, ConnectionResetError) as e:
+            print(f"🔄 Redis connection lost: {e}. Reconnecting in 3s...")
+            sys.stdout.flush()
+            time.sleep(3)
+        except KeyboardInterrupt:
+            print("\n👋 Worker stopped.")
+            break
         except Exception as e:
-            print(f"⚠️ Error processing message: {e}")
+            print(f"❌ Unexpected error: {e}")
             traceback.print_exc()
+            sys.stdout.flush()
+            time.sleep(5)
 
 
 if __name__ == "__main__":
     main()
+
