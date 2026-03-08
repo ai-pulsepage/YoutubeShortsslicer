@@ -127,27 +127,42 @@ export async function planScenes(
 
     console.log(`[ScenePlanner] Planning scenes for "${script.title}"...`);
 
-    const response = await fetch("https://api.deepseek.com/chat/completions", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-            model: "deepseek-chat",
-            messages: [
-                {
-                    role: "system",
-                    content:
-                        "You are an expert documentary filmmaker and cinematographer. Plan each scene with professional shot lists. Return only valid JSON.",
+    // Retry wrapper for DeepSeek API
+    const MAX_RETRIES = 3;
+    let response: Response | undefined;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+            response = await fetch("https://api.deepseek.com/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${apiKey}`,
                 },
-                { role: "user", content: prompt },
-            ],
-            temperature: 0.7,
-            max_tokens: 8192,
-            response_format: { type: "json_object" },
-        }),
-    });
+                body: JSON.stringify({
+                    model: "deepseek-chat",
+                    messages: [
+                        {
+                            role: "system",
+                            content:
+                                "You are an expert documentary filmmaker and cinematographer. Plan each scene with professional shot lists. Return ONLY valid JSON with double-quoted property names.",
+                        },
+                        { role: "user", content: prompt },
+                    ],
+                    temperature: 0.7,
+                    max_tokens: 16384,
+                    response_format: { type: "json_object" },
+                }),
+            });
+            break;
+        } catch (err: any) {
+            console.error(`[ScenePlanner] Fetch attempt ${attempt}/${MAX_RETRIES} failed: ${err.message}`);
+            if (attempt === MAX_RETRIES) throw err;
+            const delay = Math.pow(2, attempt) * 1000;
+            await new Promise(r => setTimeout(r, delay));
+        }
+    }
+
+    if (!response) throw new Error("Failed to get response from DeepSeek after retries");
 
     if (!response.ok) {
         const errText = await response.text();
@@ -161,7 +176,32 @@ export async function planScenes(
         throw new Error("Empty response from DeepSeek scene planner");
     }
 
-    const plan: ScenePlan = JSON.parse(content);
+    // Attempt JSON parse with repair fallback
+    let plan: ScenePlan;
+    try {
+        plan = JSON.parse(content);
+    } catch (parseError) {
+        console.warn(`[ScenePlanner] JSON parse failed, attempting repair...`);
+        // Common fixes: single quotes → double quotes, trailing commas, control chars
+        const repaired = content
+            .replace(/[\x00-\x1F\x7F]/g, ' ')           // Remove control characters
+            .replace(/,\s*([}\]])/g, '$1')                // Remove trailing commas
+            .replace(/(['"])?([a-zA-Z_]\w*)\1\s*:/g, '"$2":') // Ensure double-quoted keys
+            .replace(/:\s*'([^']*)'/g, ': "$1"');         // Single-quoted values → double
+        try {
+            plan = JSON.parse(repaired);
+            console.log(`[ScenePlanner] ✅ JSON repair succeeded`);
+        } catch (repairError) {
+            // Last resort: try to extract JSON from markdown code blocks
+            const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+            if (jsonMatch) {
+                plan = JSON.parse(jsonMatch[1].trim());
+                console.log(`[ScenePlanner] ✅ Extracted JSON from code block`);
+            } else {
+                throw new Error(`Scene planner returned unparseable JSON (${content.length} chars). First 200: ${content.substring(0, 200)}`);
+            }
+        }
+    }
 
     // Save to database
     await savePlanToDatabase(documentaryId, plan);
