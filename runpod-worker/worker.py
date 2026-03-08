@@ -142,12 +142,11 @@ def get_wan_pipeline():
         _wan_pipe = WanImageToVideoPipeline.from_pretrained(
             model_id,
             torch_dtype=torch.bfloat16,
-        ).to("cuda")
-        # Load directly on GPU — 5B model (~10GB) fits easily in 24GB VRAM
-        # No CPU offload needed, saves system RAM
+        )
+        _wan_pipe.enable_model_cpu_offload()
         _wan_pipe.vae.enable_slicing()
         _wan_pipe.vae.enable_tiling()
-        print(f"✅ {model_id} loaded on GPU")
+        print(f"✅ {model_id} loaded")
     return _wan_pipe
 
 
@@ -160,6 +159,7 @@ def generate_video(
     height: int = 720,
 ):
     """Generate a video clip with Wan2.2 image-to-video."""
+    import gc
     from PIL import Image
 
     # Wan2.2 requires dimensions divisible by 16
@@ -168,6 +168,7 @@ def generate_video(
 
     pipe = get_wan_pipeline()
     torch.cuda.empty_cache()
+    gc.collect()
 
     ref_image = Image.open(reference_image_path).convert("RGB").resize((width, height))
 
@@ -185,6 +186,11 @@ def generate_video(
     from diffusers.utils import export_to_video
     export_to_video(result.frames[0], output_path, fps=24)
     print(f"  🎬 Video generated: {output_path}")
+
+    # Aggressive cleanup to prevent system RAM buildup
+    del result
+    gc.collect()
+    torch.cuda.empty_cache()
 
 
 def process_job(job: dict, r: redis.Redis):
