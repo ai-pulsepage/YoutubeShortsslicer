@@ -6,6 +6,9 @@ safetensors
 sentencepiece
 protobuf
 ftfy
+imageio
+imageio-ffmpeg
+opencv-python
 Pillow
 redis
 boto3
