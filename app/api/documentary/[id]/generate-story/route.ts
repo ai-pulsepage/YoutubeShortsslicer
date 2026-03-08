@@ -81,36 +81,52 @@ async function runStoryPipeline(
 ): Promise<void> {
     console.log(`[StoryPipeline] Starting for ${documentaryId}...`);
 
-    let articles;
-
-    if (topicTitle) {
-        // Topic mode — DeepSeek researches the topic
-        console.log(`[StoryPipeline] Step 1/3: AI researching topic "${topicTitle}"...`);
-        articles = await researchTopic(topicTitle);
-    } else {
-        // URL mode — scrape provided articles
-        console.log(`[StoryPipeline] Step 1/3: Scraping ${sourceUrls.length} articles...`);
-        articles = await scrapeArticles(sourceUrls);
-    }
-
-    if (articles.length === 0) {
-        throw new Error(topicTitle
-            ? "AI could not generate research for this topic. Try a more specific title."
-            : "No articles could be scraped from the provided URLs");
-    }
-
-    // Save raw articles to documentary
-    await prisma.documentary.update({
+    // Fetch current state to determine what's already done
+    const current = await prisma.documentary.findUnique({
         where: { id: documentaryId },
-        data: { rawArticles: JSON.parse(JSON.stringify(articles)) },
+        include: { scenes: { take: 1 } },
     });
 
-    // Step 2: Generate script
-    console.log(`[StoryPipeline] Step 2/3: Writing ${targetDuration}-min script...`);
-    const script = await generateStoryScript(articles, targetDuration);
-    await saveScriptToDocumentary(documentaryId, script);
+    let articles;
+    let script;
 
-    // Step 3: Plan scenes + shots
+    // ── Step 1: Research / Scrape ─────────────────────────
+    if (current?.rawArticles && Array.isArray(current.rawArticles) && (current.rawArticles as any[]).length > 0) {
+        articles = current.rawArticles as any[];
+        console.log(`[StoryPipeline] Step 1/3: ⏩ Skipping research (${articles.length} articles already saved)`);
+    } else {
+        if (topicTitle) {
+            console.log(`[StoryPipeline] Step 1/3: AI researching topic "${topicTitle}"...`);
+            articles = await researchTopic(topicTitle);
+        } else {
+            console.log(`[StoryPipeline] Step 1/3: Scraping ${sourceUrls.length} articles...`);
+            articles = await scrapeArticles(sourceUrls);
+        }
+
+        if (articles.length === 0) {
+            throw new Error(topicTitle
+                ? "AI could not generate research for this topic. Try a more specific title."
+                : "No articles could be scraped from the provided URLs");
+        }
+
+        await prisma.documentary.update({
+            where: { id: documentaryId },
+            data: { rawArticles: JSON.parse(JSON.stringify(articles)) },
+        });
+    }
+
+    // ── Step 2: Generate Script ───────────────────────────
+    if (current?.script) {
+        console.log(`[StoryPipeline] Step 2/3: ⏩ Skipping script (already generated)`);
+        script = JSON.parse(current.script);
+    } else {
+        console.log(`[StoryPipeline] Step 2/3: Writing ${targetDuration}-min script...`);
+        script = await generateStoryScript(articles, targetDuration);
+        await saveScriptToDocumentary(documentaryId, script);
+    }
+
+    // ── Step 3: Plan Scenes + Shots ──────────────────────
+    // Always re-run scene planning on retry (cleanup is handled inside planScenes)
     console.log(`[StoryPipeline] Step 3/3: Planning scenes and shots...`);
     await planScenes(documentaryId, script, style);
 
