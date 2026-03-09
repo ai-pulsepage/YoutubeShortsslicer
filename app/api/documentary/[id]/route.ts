@@ -74,7 +74,10 @@ export async function PATCH(
         return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    const allowedFields = ["title", "style", "styleGuide", "voiceId", "status", "script"];
+    const allowedFields = ["title", "voiceId", "status", "script",
+        "genre", "subStyle", "audience", "perspective", "pacing",
+        "ending", "endingNote", "contentMode", "musicMood",
+        "useBRoll", "useKenBurns", "useAIVideo"];
     const updateData: Record<string, unknown> = {};
 
     for (const field of allowedFields) {

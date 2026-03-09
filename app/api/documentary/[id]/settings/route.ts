@@ -12,7 +12,12 @@ export async function PATCH(
     const { id } = await params;
     const body = await req.json();
 
-    const allowedFields = ["fillerMode", "voiceId", "style", "ttsEngine", "ttsVoiceId", "narratorStyle"];
+    const allowedFields = [
+        "fillerMode", "voiceId", "ttsEngine", "ttsVoiceId", "narratorStyle",
+        "genre", "subStyle", "audience", "perspective", "pacing",
+        "ending", "endingNote", "contentMode", "musicMood",
+        "useBRoll", "useKenBurns", "useAIVideo",
+    ];
     const updateData: Record<string, string> = {};
 
     for (const field of allowedFields) {

@@ -47,7 +47,9 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { sourceUrls, style, styleGuide, voiceId, title } = body;
+    const { sourceUrls, voiceId, title, genre, subStyle, audience, perspective,
+        pacing, ending, endingNote, contentMode, musicMood,
+        useBRoll, useKenBurns, useAIVideo, narratorStyle, ttsEngine } = body;
 
     // In topic mode, sourceUrls can be empty if title is provided
     const isTopicMode = (!sourceUrls || sourceUrls.length === 0) && title;
@@ -63,9 +65,21 @@ export async function POST(req: NextRequest) {
             userId: session.user.id,
             title: title || null,
             sourceUrls: sourceUrls || [],
-            style: style || "cinematic",
-            styleGuide: styleGuide || null,
-            voiceId: voiceId || "bf_emma",
+            genre: genre || "science",
+            subStyle: subStyle || "bbc_earth",
+            audience: audience || "adults",
+            perspective: perspective || "omniscient",
+            pacing: pacing || "standard",
+            ending: ending || "ai_decide",
+            endingNote: endingNote || null,
+            contentMode: contentMode || "creative",
+            musicMood: musicMood || "ambient",
+            useBRoll: useBRoll ?? true,
+            useKenBurns: useKenBurns ?? true,
+            useAIVideo: useAIVideo ?? false,
+            voiceId: voiceId || "Rachel",
+            narratorStyle: narratorStyle || "sleep",
+            ttsEngine: ttsEngine || "elevenlabs",
             status: "DRAFT",
         },
     });

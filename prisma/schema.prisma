@@ -418,8 +418,19 @@ model Documentary {
   sourceUrls     String[]
   rawArticles    Json?
   script         String?   @db.Text
-  style          String    @default("cinematic")
-  styleGuide     Json?
+  // ── Genre Preset System ──
+  genre          String    @default("science")       // science | true_crime | horror | history | children | sleep | comedy | nature
+  subStyle       String    @default("bbc_earth")     // Sub-style within the genre
+  audience       String    @default("adults")         // adults | young_adults | kids | toddlers | expert
+  perspective    String    @default("omniscient")     // omniscient | first_person | second_person | investigator
+  pacing         String    @default("standard")       // slow | standard | fast
+  ending         String    @default("ai_decide")      // ai_decide | hopeful | tragic | cliffhanger | reflective | circular | call_to_action
+  endingNote     String?                              // Optional free-text ending direction
+  contentMode    String    @default("creative")       // factual | creative
+  musicMood      String    @default("ambient")        // classical | ambient | dark_ambient | whimsical | epic | piano | electronic | none
+  useBRoll       Boolean   @default(true)             // Fetch Pexels stock footage
+  useKenBurns    Boolean   @default(true)             // Pan/zoom on images
+  useAIVideo     Boolean   @default(false)            // Use RunPod for AI video generation
   voiceId        String    @default("Rachel")
   ttsEngine      String    @default("elevenlabs")  // elevenlabs | xtts
   ttsVoiceId     String?                            // Engine-specific voice ID

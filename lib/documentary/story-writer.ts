@@ -2,13 +2,15 @@
  * Story Writer
  * 
  * Takes scraped articles and generates a full narrated documentary script.
- * Writes for a 10-year-old audience with analogies and visual cues.
+ * Writing style, persona, audience, and pacing are all driven by the
+ * genre preset system — no hardcoded style.
  * 
  * Adapted from TikTokShop's KnowledgeGenerator pattern.
  */
 
 import { prisma } from "@/lib/prisma";
 import type { ScrapedArticle } from "./scraper";
+import { buildPromptContext, getWordsPerMinute } from "./genre-presets";
 
 export interface StoryScript {
     title: string;
@@ -22,29 +24,50 @@ export interface ScriptSegment {
     visualCue: string; // what should be shown
 }
 
-const STORY_WRITER_PROMPT = `You are a world-class documentary scriptwriter. Your specialty is making complex science accessible and fascinating — like David Attenborough meets Bill Nye meets Neil deGrasse Tyson.
+/** Configuration passed from genre selections */
+export interface GenreConfig {
+    genre: string;
+    subStyle: string;
+    audience: string;
+    perspective: string;
+    pacing: string;
+    ending: string;
+    endingNote?: string | null;
+    contentMode: string;
+}
 
-You are writing a narrated documentary designed for adults who want to learn while relaxing or falling asleep. The tone should be:
-- Calm, warm, and engaging (not hyper or clickbaity)
-- Explain as if the listener is 10 years old, using analogies and comparisons
-- Build genuine wonder and curiosity
-- Use illustrative language that helps the listener visualize
+function buildStoryWriterPrompt(config: GenreConfig, targetDuration: number): string {
+    const styleContext = buildPromptContext({
+        genre: config.genre,
+        subStyle: config.subStyle,
+        audience: config.audience,
+        perspective: config.perspective,
+        pacing: config.pacing,
+        ending: config.ending,
+        endingNote: config.endingNote || undefined,
+        contentMode: config.contentMode,
+    });
+
+    const wpm = getWordsPerMinute(config.pacing);
+
+    return `You are a world-class documentary scriptwriter creating a narrated production.
+
+${styleContext}
 
 ARTICLES TO BASE THE STORY ON:
 {articles}
 
 REQUIREMENTS:
-1. Write a {duration}-minute narrated script
+1. Write a {duration}-minute narrated script (~${wpm} words per minute)
 2. Each segment has a timestamp, narration text, and a [VISUAL] cue
-3. Visual cues should describe what the viewer sees — be specific about characters, environments, camera angles
-4. Use a narrative arc: hook → context → discovery → implications → wonder
-5. Include analogies (e.g., "Imagine if the Sun were the size of a basketball...")
-6. Include brief "imagine you are there" moments for immersion
-7. End with a reflective, thought-provoking conclusion
+3. Visual cues should describe what the viewer sees — be specific about environments and subjects
+4. Use a narrative arc: hook → context → discovery → implications → resolution
+5. Include vivid sensory language that helps the listener visualize
+6. Create segments every 15-30 seconds of narration
 
 OUTPUT FORMAT (JSON):
 {
-  "title": "Compelling documentary title",
+  "title": "Compelling title",
   "estimatedDurationMinutes": {duration},
   "segments": [
     {
@@ -56,18 +79,29 @@ OUTPUT FORMAT (JSON):
   ]
 }
 
-Aim for approximately 150 words per minute of narration.
-Create segments every 15-30 seconds of narration.
 Return ONLY valid JSON.`;
+}
 
 /**
  * Generates a full documentary script from scraped articles
  */
 export async function generateStoryScript(
     articles: ScrapedArticle[],
-    targetDurationMinutes: number = 30
+    targetDurationMinutes: number = 30,
+    config?: GenreConfig
 ): Promise<StoryScript> {
     const apiKey = await getApiKey();
+
+    // Default config if none provided (backwards compatible)
+    const effectiveConfig: GenreConfig = config || {
+        genre: "science",
+        subStyle: "bbc_earth",
+        audience: "adults",
+        perspective: "omniscient",
+        pacing: "standard",
+        ending: "ai_decide",
+        contentMode: "creative",
+    };
 
     // Format articles for the prompt
     const articlesText = articles
@@ -84,11 +118,16 @@ Novelty Score: ${a.noveltyScore}/10
         })
         .join("\n");
 
-    const prompt = STORY_WRITER_PROMPT
+    const promptTemplate = buildStoryWriterPrompt(effectiveConfig, targetDurationMinutes);
+    const prompt = promptTemplate
         .replace("{articles}", articlesText)
         .replace(/\{duration\}/g, String(targetDurationMinutes));
 
-    console.log(`[StoryWriter] Generating ${targetDurationMinutes}-min script from ${articles.length} articles...`);
+    // Build system prompt from genre
+    const styleLabel = `${effectiveConfig.genre}/${effectiveConfig.subStyle}`.replace(/_/g, " ");
+    const systemPrompt = `You are a master scriptwriter specializing in ${styleLabel} content. Write engaging narration with rich sensory detail. Return only valid JSON.`;
+
+    console.log(`[StoryWriter] Generating ${targetDurationMinutes}-min ${styleLabel} script from ${articles.length} articles...`);
 
     // Retry wrapper for DeepSeek API (handles ECONNRESET, timeouts)
     const MAX_RETRIES = 3;
@@ -104,11 +143,7 @@ Novelty Score: ${a.noveltyScore}/10
                 body: JSON.stringify({
                     model: "deepseek-chat",
                     messages: [
-                        {
-                            role: "system",
-                            content:
-                                "You are a master documentary scriptwriter. Write engaging, calming narration with rich visual descriptions. Return only valid JSON.",
-                        },
+                        { role: "system", content: systemPrompt },
                         { role: "user", content: prompt },
                     ],
                     temperature: 0.8,

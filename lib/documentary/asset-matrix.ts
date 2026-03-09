@@ -27,7 +27,7 @@ export async function generateAssetMatrix(documentaryId: string): Promise<void> 
         // Skip if already has an image
         if (asset.imagePath) continue;
 
-        const prompt = buildAssetPrompt(asset, documentary.style, documentary.styleGuide);
+        const prompt = buildAssetPrompt(asset, documentary.genre, documentary.subStyle);
 
         // Create GenJob in DB
         const job = await prisma.genJob.create({
@@ -77,12 +77,11 @@ export async function generateAssetMatrix(documentaryId: string): Promise<void> 
  */
 function buildAssetPrompt(
     asset: { type: string; label: string; description: string | null; attire: string | null },
-    style: string,
-    styleGuide: unknown
+    genre: string,
+    subStyle: string
 ): string {
-    const sg = (styleGuide as Record<string, string>) || {};
-    const palette = sg.colorPalette || "rich, cinematic colors";
-    const era = sg.era || "modern";
+    // Derive visual style from genre
+    const styleLabel = `${genre} ${subStyle}`.replace(/_/g, " ");
 
     switch (asset.type) {
         case "CHARACTER":
@@ -90,8 +89,7 @@ function buildAssetPrompt(
                 `Portrait reference image of ${asset.label}.`,
                 asset.description || "",
                 asset.attire ? `Wearing: ${asset.attire}.` : "",
-                `Style: ${style}, ${era}, photorealistic.`,
-                `Color palette: ${palette}.`,
+                `Style: ${styleLabel}, photorealistic.`,
                 `Clean background, centered composition, professional lighting.`,
                 `Full face visible, three-quarter view.`,
             ]
@@ -102,7 +100,7 @@ function buildAssetPrompt(
             return [
                 `Product/object reference image: ${asset.label}.`,
                 asset.description || "",
-                `Style: ${style}, ${era}.`,
+                `Style: ${styleLabel}.`,
                 `Clean background, centered, studio lighting.`,
                 `High detail, sharp focus.`,
             ]
@@ -113,8 +111,7 @@ function buildAssetPrompt(
             return [
                 `Abstract artistic visualization of: ${asset.label}.`,
                 asset.description || "",
-                `Style: ${style}, artistic interpretation, visually striking.`,
-                `Color palette: ${palette}.`,
+                `Style: ${styleLabel}, artistic interpretation, visually striking.`,
                 `Dark background, rich detail, cinematic quality.`,
             ]
                 .filter(Boolean)
@@ -124,8 +121,7 @@ function buildAssetPrompt(
             return [
                 `Wide establishing shot of: ${asset.label}.`,
                 asset.description || "",
-                `Style: ${style}, ${era}, photorealistic.`,
-                `Color palette: ${palette}.`,
+                `Style: ${styleLabel}, photorealistic.`,
                 `Cinematic composition, atmospheric lighting, depth.`,
             ]
                 .filter(Boolean)
@@ -136,14 +132,13 @@ function buildAssetPrompt(
                 `Abstract art for video transition.`,
                 asset.description || "Flowing particles, soft colors, dark background.",
                 `Style: abstract, meditative, calming.`,
-                `Color palette: ${palette}.`,
                 `Seamless loop texture, dark background.`,
             ]
                 .filter(Boolean)
                 .join(" ");
 
         default:
-            return `${asset.label}: ${asset.description || ""}. Style: ${style}.`;
+            return `${asset.label}: ${asset.description || ""}. Style: ${styleLabel}.`;
     }
 }
 

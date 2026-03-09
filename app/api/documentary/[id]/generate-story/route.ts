@@ -13,7 +13,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { scrapeArticles, researchTopic } from "@/lib/documentary/scraper";
-import { generateStoryScript, saveScriptToDocumentary } from "@/lib/documentary/story-writer";
+import { generateStoryScript, saveScriptToDocumentary, type GenreConfig } from "@/lib/documentary/story-writer";
 import { planScenes } from "@/lib/documentary/scene-planner";
 
 export async function POST(
@@ -48,11 +48,23 @@ export async function POST(
     // Determine mode: topic-based (no URLs) or URL-based
     const isTopicMode = documentary.sourceUrls.length === 0 && !!documentary.title;
 
+    // Build genre config from documentary record
+    const genreConfig: GenreConfig = {
+        genre: documentary.genre,
+        subStyle: documentary.subStyle,
+        audience: documentary.audience,
+        perspective: documentary.perspective,
+        pacing: documentary.pacing,
+        ending: documentary.ending,
+        endingNote: documentary.endingNote,
+        contentMode: documentary.contentMode,
+    };
+
     // Run the pipeline in the background (don't block the HTTP response)
     runStoryPipeline(
         id,
         documentary.sourceUrls,
-        documentary.style,
+        genreConfig,
         targetDuration,
         isTopicMode ? documentary.title! : undefined
     ).catch(
@@ -75,11 +87,12 @@ export async function POST(
 async function runStoryPipeline(
     documentaryId: string,
     sourceUrls: string[],
-    style: string,
+    genreConfig: GenreConfig,
     targetDuration: number,
     topicTitle?: string
 ): Promise<void> {
-    console.log(`[StoryPipeline] Starting for ${documentaryId}...`);
+    const styleLabel = `${genreConfig.genre}/${genreConfig.subStyle}`;
+    console.log(`[StoryPipeline] Starting for ${documentaryId} (${styleLabel})...`);
 
     // Fetch current state to determine what's already done
     const current = await prisma.documentary.findUnique({
@@ -119,7 +132,6 @@ async function runStoryPipeline(
     if (current?.script && current.script.length > 50) {
         console.log(`[StoryPipeline] Step 2/3: ⏩ Skipping script (already generated)`);
         // Script is stored as formatted text, reconstruct a minimal StoryScript
-        // Parse the "[timestamp] narration\n[VISUAL: cue]" format
         const segments = current.script.split("\n\n").filter(Boolean).map((block: string) => {
             const tsMatch = block.match(/^\[([^\]]+)\]\s*([\s\S]*)/);
             const visualMatch = block.match(/\[VISUAL:\s*(.*)\]/);
@@ -135,15 +147,14 @@ async function runStoryPipeline(
             estimatedDurationMinutes: (current.totalDuration || 1800) / 60,
         };
     } else {
-        console.log(`[StoryPipeline] Step 2/3: Writing ${targetDuration}-min script...`);
-        script = await generateStoryScript(articles, targetDuration);
+        console.log(`[StoryPipeline] Step 2/3: Writing ${targetDuration}-min ${styleLabel} script...`);
+        script = await generateStoryScript(articles, targetDuration, genreConfig);
         await saveScriptToDocumentary(documentaryId, script);
     }
 
     // ── Step 3: Plan Scenes + Shots ──────────────────────
-    // Always re-run scene planning on retry (cleanup is handled inside planScenes)
     console.log(`[StoryPipeline] Step 3/3: Planning scenes and shots...`);
-    await planScenes(documentaryId, script, style);
+    await planScenes(documentaryId, script, `${genreConfig.genre} ${genreConfig.subStyle}`);
 
     // Update status to SCENES_PLANNED on success
     await prisma.documentary.update({

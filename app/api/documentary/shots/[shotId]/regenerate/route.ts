@@ -19,7 +19,7 @@ export async function POST(
         include: {
             scene: {
                 include: {
-                    documentary: { select: { id: true, userId: true, style: true } },
+                    documentary: { select: { id: true, userId: true, genre: true, subStyle: true } },
                 },
             },
             shotAssets: {

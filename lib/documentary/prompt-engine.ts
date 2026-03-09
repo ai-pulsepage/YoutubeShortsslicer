@@ -54,7 +54,7 @@ export async function generateVideoClips(documentaryId: string): Promise<void> {
             }
 
             // Build composite prompt
-            const prompt = buildShotPrompt(shot, documentary.style, documentary.styleGuide);
+            const prompt = buildShotPrompt(shot, documentary.genre, documentary.subStyle);
 
             // Gather reference images from assets
             const referenceImages: string[] = [];
@@ -150,9 +150,10 @@ function buildShotPrompt(
             asset: { label: string; type: string; description: string | null };
         }>;
     },
-    style: string,
-    styleGuide: unknown
+    genre: string,
+    subStyle: string
 ): string {
+    const styleLabel = `${genre} ${subStyle}`.replace(/_/g, " ");
     const parts: string[] = [];
 
     // Camera direction
@@ -195,7 +196,7 @@ function buildShotPrompt(
     if (shot.colorPalette) parts.push(`colors: ${shot.colorPalette}`);
 
     // Style
-    parts.push(`style: ${style}, cinematic, documentary quality`);
+    parts.push(`style: ${styleLabel}, cinematic, documentary quality`);
 
     // Transitions
     if (shot.transitionIn === "fade-in") parts.push("fade in from black");
