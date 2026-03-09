@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getRedis, CHANNELS } from "@/lib/documentary/redis-client";
+import { dispatchJob, type RedisJob } from "@/lib/documentary/redis-client";
 
 export async function POST(
     req: NextRequest,
@@ -19,7 +19,7 @@ export async function POST(
         include: {
             scene: {
                 include: {
-                    documentary: { select: { id: true, userId: true } },
+                    documentary: { select: { id: true, userId: true, style: true } },
                 },
             },
             shotAssets: {
@@ -39,7 +39,7 @@ export async function POST(
     });
 
     // Get reference images from shot assets
-    const referenceImages = shot.shotAssets
+    const referenceImages: string[] = shot.shotAssets
         .map((sa: any) => sa.asset?.imagePath)
         .filter(Boolean);
 
@@ -57,18 +57,24 @@ export async function POST(
         },
     });
 
-    // Dispatch to Redis
-    const redis = getRedis();
-    await redis.publish(
-        CHANNELS.DOCUMENTARY_JOBS,
-        JSON.stringify({
-            jobId: job.id,
-            type: "video",
-            prompt,
-            referenceImages,
+    // Dispatch to Redis queue via LPUSH (not PUB/SUB)
+    const redisJob: RedisJob = {
+        jobId: job.id,
+        documentaryId: shot.scene.documentary.id,
+        type: "shot_video",
+        prompt,
+        referenceImages,
+        metadata: {
+            width: 1280,
+            height: 720,
             duration: shot.duration || 5,
-        })
-    );
+            model: "wan2.1",
+            shotId: shot.id,
+        },
+    };
+
+    await dispatchJob(redisJob);
 
     return NextResponse.json({ jobId: job.id, status: "QUEUED" });
 }
+
