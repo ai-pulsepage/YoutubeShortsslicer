@@ -1058,8 +1058,28 @@ function PreviewTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
 function AssemblyTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
     const [assembling, setAssembling] = useState(false);
     const [fillerMode, setFillerMode] = useState(doc.fillerMode || "kenburns");
+    const [ttsEngine, setTtsEngine] = useState(doc.ttsEngine || "elevenlabs");
+    const [narratorStyle, setNarratorStyle] = useState(doc.narratorStyle || "sleep");
+    const [ttsVoiceId, setTtsVoiceId] = useState(doc.ttsVoiceId || doc.voiceId || "");
+    const [voices, setVoices] = useState<any[]>([]);
+    const [loadingVoices, setLoadingVoices] = useState(false);
     const [savingMode, setSavingMode] = useState(false);
     const r2Base = process.env.NEXT_PUBLIC_R2_PUBLIC_URL || "https://pub-1dd40b8f57a8493ebc23552a93ea62bd.r2.dev";
+
+    // Load voices when engine changes
+    useEffect(() => {
+        setLoadingVoices(true);
+        fetch(`/api/voiceover/voices?engine=${ttsEngine}`)
+            .then(r => r.ok ? r.json() : { voices: [] })
+            .then(data => {
+                setVoices(data.voices || []);
+                if (data.voices?.length > 0 && !data.voices.find((v: any) => v.id === ttsVoiceId)) {
+                    setTtsVoiceId(data.voices[0].id);
+                    saveSetting("ttsVoiceId", data.voices[0].id);
+                }
+            })
+            .finally(() => setLoadingVoices(false));
+    }, [ttsEngine]);
 
     const fillerOptions = [
         { value: "kenburns", label: "Ken Burns", desc: "Slow zoom/pan on asset images" },
@@ -1068,16 +1088,33 @@ function AssemblyTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
         { value: "kenburns+stock", label: "Ken Burns + Stock", desc: "Mix of assets and stock footage" },
     ];
 
-    const updateFillerMode = async (mode: string) => {
-        setFillerMode(mode);
+    const engineOptions = [
+        { value: "elevenlabs", label: "ElevenLabs", desc: "Premium cloud voices", icon: "✨" },
+        { value: "xtts", label: "XTTS v2", desc: "Self-hosted, voice cloning", icon: "🎙️" },
+    ];
+
+    const styleOptions = [
+        { value: "sleep", label: "Sleep / Calm", desc: "Long pauses, 0.85×" },
+        { value: "documentary", label: "Documentary", desc: "Measured pace, 0.92×" },
+        { value: "dramatic", label: "Dramatic", desc: "Intense, 0.95×" },
+        { value: "energetic", label: "Energetic", desc: "Fast pace, 1.1×" },
+        { value: "conversational", label: "Conversational", desc: "Natural, 1.0×" },
+    ];
+
+    const saveSetting = async (key: string, value: string) => {
         setSavingMode(true);
         await fetch(`/api/documentary/${doc.id}/settings`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ fillerMode: mode }),
+            body: JSON.stringify({ [key]: value }),
         });
         setSavingMode(false);
     };
+
+    const updateFillerMode = (mode: string) => { setFillerMode(mode); saveSetting("fillerMode", mode); };
+    const updateEngine = (eng: string) => { setTtsEngine(eng); saveSetting("ttsEngine", eng); };
+    const updateStyle = (style: string) => { setNarratorStyle(style); saveSetting("narratorStyle", style); };
+    const updateVoice = (voice: string) => { setTtsVoiceId(voice); saveSetting("ttsVoiceId", voice); };
 
     const triggerAssembly = async () => {
         setAssembling(true);
@@ -1090,9 +1127,97 @@ function AssemblyTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
         ? (doc.finalVideoPath.startsWith("http") ? doc.finalVideoPath : `${r2Base}/${doc.finalVideoPath}`)
         : null;
 
-    // Filler mode selector component
+    // Narration settings panel — shared between views
+    const NarrationSettings = () => (
+        <div className="space-y-4">
+            {/* TTS Engine */}
+            <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-4">
+                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                    Narration Engine {savingMode && <Loader2 className="w-3 h-3 inline animate-spin ml-1" />}
+                </h4>
+                <div className="grid grid-cols-2 gap-2">
+                    {engineOptions.map((opt) => (
+                        <button
+                            key={opt.value}
+                            onClick={() => updateEngine(opt.value)}
+                            className={cn(
+                                "text-left p-3 rounded-lg border transition-all",
+                                ttsEngine === opt.value
+                                    ? "border-violet-500/50 bg-violet-500/10 ring-1 ring-violet-500/30"
+                                    : "border-gray-700 bg-gray-800/50 hover:bg-gray-800"
+                            )}
+                        >
+                            <p className={cn("text-xs font-semibold", ttsEngine === opt.value ? "text-violet-400" : "text-white")}>
+                                {opt.icon} {opt.label}
+                            </p>
+                            <p className="text-[10px] text-gray-500 mt-0.5">{opt.desc}</p>
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* Narrator Style */}
+            <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-4">
+                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                    <Sparkles className="w-3 h-3 inline mr-1 text-violet-400" />
+                    Narrator Style
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {styleOptions.map((opt) => (
+                        <button
+                            key={opt.value}
+                            onClick={() => updateStyle(opt.value)}
+                            className={cn(
+                                "text-left p-2.5 rounded-lg border transition-all",
+                                narratorStyle === opt.value
+                                    ? "border-violet-500/50 bg-violet-500/10 ring-1 ring-violet-500/30"
+                                    : "border-gray-700 bg-gray-800/50 hover:bg-gray-800"
+                            )}
+                        >
+                            <p className={cn("text-xs font-semibold", narratorStyle === opt.value ? "text-violet-400" : "text-white")}>
+                                {opt.label}
+                            </p>
+                            <p className="text-[10px] text-gray-500 mt-0.5">{opt.desc}</p>
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* Voice Selection */}
+            <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-4">
+                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                    Voice {loadingVoices && <Loader2 className="w-3 h-3 inline animate-spin ml-1" />}
+                </h4>
+                {voices.length > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[200px] overflow-y-auto">
+                        {voices.map((v: any) => (
+                            <button
+                                key={v.id}
+                                onClick={() => updateVoice(v.id)}
+                                className={cn(
+                                    "text-left p-2.5 rounded-lg border transition-all",
+                                    ttsVoiceId === v.id
+                                        ? "border-violet-500/50 bg-violet-500/10"
+                                        : "border-gray-700 bg-gray-800/50 hover:bg-gray-800"
+                                )}
+                            >
+                                <p className={cn("text-xs font-medium truncate", ttsVoiceId === v.id ? "text-violet-400" : "text-white")}>
+                                    {v.name}
+                                </p>
+                                <p className="text-[10px] text-gray-500 truncate">{v.description}</p>
+                            </button>
+                        ))}
+                    </div>
+                ) : !loadingVoices ? (
+                    <p className="text-xs text-gray-600 italic">No voices available. Check API key.</p>
+                ) : null}
+            </div>
+        </div>
+    );
+
+    // Filler mode selector
     const FillerSelector = () => (
-        <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-4 mb-4">
+        <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-4">
             <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
                 Visual Fill Mode {savingMode && <Loader2 className="w-3 h-3 inline animate-spin ml-1" />}
             </h4>
@@ -1142,6 +1267,7 @@ function AssemblyTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
                         Your browser does not support video playback.
                     </video>
                 </div>
+                <NarrationSettings />
                 <FillerSelector />
                 <div className="flex items-center gap-3">
                     <button
@@ -1170,12 +1296,13 @@ function AssemblyTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
 
     return (
         <div className="space-y-4">
+            <NarrationSettings />
             <FillerSelector />
             <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-8 text-center">
                 <Film className="w-10 h-10 text-gray-600 mx-auto mb-3" />
                 <h3 className="text-sm font-semibold text-white mb-1">Final Assembly</h3>
                 <p className="text-xs text-gray-500 max-w-md mx-auto mb-4">
-                    Scene clips will be interleaved with {fillerMode === "kenburns" ? "Ken Burns animations on asset images" : fillerMode === "stock" ? "Pexels stock footage" : fillerMode === "kenburns+stock" ? "a mix of Ken Burns and stock footage" : "abstract procedural animations"} to fill the full narration duration.
+                    {fillerMode === "kenburns" ? "Ken Burns animations on asset images" : fillerMode === "stock" ? "Pexels stock footage" : fillerMode === "kenburns+stock" ? "A mix of Ken Burns and stock footage" : "Abstract procedural animations"} will fill the visual track while <strong className="text-violet-400">{ttsEngine === "elevenlabs" ? "ElevenLabs" : "XTTS v2"}</strong> narrates in <strong className="text-violet-400">{narratorStyle}</strong> style.
                 </p>
                 <button
                     onClick={triggerAssembly}
