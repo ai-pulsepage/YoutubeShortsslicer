@@ -420,7 +420,7 @@ model Documentary {
   script         String?   @db.Text
   style          String    @default("cinematic")
   styleGuide     Json?
-  voiceId        String    @default("bf_emma")
+  voiceId        String    @default("Rachel")
   ttsEngine      String    @default("elevenlabs")  // elevenlabs | xtts
   ttsVoiceId     String?                            // Engine-specific voice ID
   narratorStyle  String    @default("sleep")        // sleep | documentary | dramatic | energetic | conversational

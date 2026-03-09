@@ -77,18 +77,24 @@ export async function generateSpeech(options: GenerateOptions): Promise<Buffer> 
  * List all available voices from ElevenLabs account.
  */
 export async function listVoices(): Promise<ElevenLabsVoice[]> {
-    const apiKey = getApiKey();
+    const key = process.env.ELEVENLABS_API_KEY;
+    if (!key) {
+        console.warn("[ElevenLabs] ELEVENLABS_API_KEY not set — cannot list voices");
+        return [];
+    }
 
     const response = await fetch("https://api.elevenlabs.io/v1/voices", {
-        headers: { "xi-api-key": apiKey },
+        headers: { "xi-api-key": key },
     });
 
     if (!response.ok) {
-        throw new Error(`ElevenLabs list voices failed: ${response.status}`);
+        const errText = await response.text().catch(() => "");
+        console.error(`[ElevenLabs] List voices failed: ${response.status} — ${errText}`);
+        throw new Error(`ElevenLabs API returned ${response.status}: ${errText}`);
     }
 
     const data = await response.json();
-    return (data.voices || []).map((v: any) => ({
+    const voices = (data.voices || []).map((v: any) => ({
         voice_id: v.voice_id,
         name: v.name,
         category: v.category || "premade",
@@ -96,6 +102,9 @@ export async function listVoices(): Promise<ElevenLabsVoice[]> {
         preview_url: v.preview_url,
         labels: v.labels,
     }));
+
+    console.log(`[ElevenLabs] Loaded ${voices.length} voices`);
+    return voices;
 }
 
 /**
