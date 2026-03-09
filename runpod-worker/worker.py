@@ -71,17 +71,54 @@ def download_from_r2(r2_key: str, local_path: str):
     print(f"  📥 Downloaded: {r2_key}")
 
 
-# ─── Flux.1 Image Generation ──────────────────────────
-_flux_pipe = None
+# ─── Multi-Model Image Generation ─────────────────────
+_image_pipelines = {}  # Cache: model_name -> pipeline
 
-def get_flux_pipeline():
-    """Lazy-load Flux.1 pipeline. Tries FLUX.1-dev first (gated), falls back to schnell (open)."""
-    global _flux_pipe
-    if _flux_pipe is None:
+def get_image_pipeline(model_name: str = "flux"):
+    """Lazy-load the requested image generation pipeline.
+    
+    Supported models:
+      - chroma: Chroma FP16 (uncensored, Apache 2.0, 8.9B params) — best for horror/mature
+      - flux: Flux.1-dev (gated) or Flux.1-schnell (open fallback) — standard
+      - juggernaut: Juggernaut XL (photorealistic SDXL) — best for true crime/biography
+    """
+    global _image_pipelines
+    
+    if model_name in _image_pipelines:
+        return _image_pipelines[model_name]
+    
+    import gc
+    
+    # Free other loaded image pipelines to save VRAM
+    for key in list(_image_pipelines.keys()):
+        print(f"  🧹 Unloading {key} pipeline to make room for {model_name}...")
+        del _image_pipelines[key]
+    gc.collect()
+    torch.cuda.empty_cache()
+    
+    if model_name == "chroma":
         from diffusers import FluxPipeline
-        import os
-
-        # Read token from HF_HOME or default cache
+        print("🔄 Loading Chroma FP16 pipeline (uncensored)...")
+        pipe = FluxPipeline.from_pretrained(
+            "lodestone-horizon/chroma-unlocked-fp16",
+            torch_dtype=torch.bfloat16,
+        )
+        pipe.enable_model_cpu_offload()
+        print("✅ Chroma FP16 loaded (Apache 2.0, uncensored)")
+        
+    elif model_name == "juggernaut":
+        from diffusers import StableDiffusionXLPipeline
+        print("🔄 Loading Juggernaut XL pipeline (photorealistic)...")
+        pipe = StableDiffusionXLPipeline.from_pretrained(
+            "RunDiffusion/Juggernaut-XL-v9",
+            torch_dtype=torch.float16,
+            variant="fp16",
+        )
+        pipe.enable_model_cpu_offload()
+        print("✅ Juggernaut XL loaded (photorealistic)")
+        
+    else:  # Default: flux
+        from diffusers import FluxPipeline
         hf_token = None
         for token_path in [
             os.path.join(os.environ.get("HF_HOME", ""), "token"),
@@ -92,40 +129,54 @@ def get_flux_pipeline():
                     hf_token = f.read().strip()
                 break
 
-        # Try FLUX.1-dev first (higher quality, gated)
         try:
             print("🔄 Loading Flux.1-dev pipeline...")
-            _flux_pipe = FluxPipeline.from_pretrained(
+            pipe = FluxPipeline.from_pretrained(
                 "black-forest-labs/FLUX.1-dev",
                 torch_dtype=torch.bfloat16,
                 token=hf_token,
             )
-            _flux_pipe.enable_model_cpu_offload()
+            pipe.enable_model_cpu_offload()
             print("✅ Flux.1-dev loaded")
         except Exception as e:
             print(f"⚠️  Flux.1-dev failed ({e}), falling back to Flux.1-schnell...")
-            _flux_pipe = FluxPipeline.from_pretrained(
+            pipe = FluxPipeline.from_pretrained(
                 "black-forest-labs/FLUX.1-schnell",
                 torch_dtype=torch.bfloat16,
-                token=False,  # Don't send token — schnell is Apache 2.0, no auth needed
+                token=False,
             )
-            _flux_pipe.enable_model_cpu_offload()
-            print("✅ Flux.1-schnell loaded (open model, no auth needed)")
-    return _flux_pipe
+            pipe.enable_model_cpu_offload()
+            print("✅ Flux.1-schnell loaded (open model)")
+    
+    _image_pipelines[model_name] = pipe
+    return pipe
 
 
-def generate_image(prompt: str, output_path: str, width: int = 1024, height: int = 1024):
-    """Generate an image with Flux.1."""
-    pipe = get_flux_pipeline()
-    image = pipe(
-        prompt=prompt,
-        width=width,
-        height=height,
-        num_inference_steps=30,
-        guidance_scale=7.5,
-    ).images[0]
+def generate_image(prompt: str, output_path: str, width: int = 1024, height: int = 1024, model: str = "flux"):
+    """Generate an image with the specified model."""
+    pipe = get_image_pipeline(model)
+    
+    # Juggernaut XL uses different params than Flux/Chroma
+    if model == "juggernaut":
+        image = pipe(
+            prompt=prompt,
+            width=width,
+            height=height,
+            num_inference_steps=35,
+            guidance_scale=6.0,
+        ).images[0]
+    else:
+        # Flux and Chroma share the same API
+        image = pipe(
+            prompt=prompt,
+            width=width,
+            height=height,
+            num_inference_steps=30,
+            guidance_scale=7.5,
+        ).images[0]
+    
     image.save(output_path)
-    print(f"  🖼️  Image generated: {output_path}")
+    print(f"  🖼️  Image generated ({model}): {output_path}")
 
 
 # ─── Wan2.1 Video Generation ──────────────────────────
@@ -199,18 +250,20 @@ def process_job(job: dict, r: redis.Redis):
     job_type = job.get("type", "unknown")
     prompt = job.get("prompt", "")
     refs = job.get("referenceImages", [])
+    metadata = job.get("metadata", {})
+    image_model = metadata.get("model", "flux")  # chroma, flux, or juggernaut
 
     print(f"\n{'='*60}")
-    print(f"📋 Job: {job_id} | Type: {job_type}")
+    print(f"📋 Job: {job_id} | Type: {job_type} | Model: {image_model}")
     print(f"   Prompt: {prompt[:100]}...")
 
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Map job types: ref_image and image both generate images
             if job_type in ("image", "ref_image"):
-                # Generate reference image with Flux.1
+                # Generate reference image with selected model
                 output_file = os.path.join(tmpdir, f"{job_id}.png")
-                generate_image(prompt, output_file)
+                generate_image(prompt, output_file, model=image_model)
 
                 # Upload to R2
                 r2_key = f"documentaries/assets/{job_id}.png"
