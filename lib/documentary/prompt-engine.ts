@@ -64,9 +64,9 @@ export async function generateVideoClips(documentaryId: string): Promise<void> {
                 }
             }
 
-            // Add previous shot's last frame for continuity
+            // Add previous shot's last frame for continuity (AFTER assets — assets take priority)
             if (previousShotLastFrame) {
-                referenceImages.unshift(previousShotLastFrame);
+                referenceImages.push(previousShotLastFrame);
             }
 
             // Create GenJob
