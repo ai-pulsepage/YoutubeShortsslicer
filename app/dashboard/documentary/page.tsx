@@ -18,6 +18,7 @@ import {
     Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getSmartDefaults } from "@/lib/documentary/genre-presets";
 
 type Documentary = {
     id: string;
@@ -298,30 +299,8 @@ const GENRES = [
     ]},
 ];
 
-const SMART_DEFAULTS: Record<string, Record<string, any>> = {
-    "science.bbc_earth": { narratorStyle: "documentary", musicMood: "classical", pacing: "slow", audience: "adults", perspective: "omniscient", ending: "reflective", contentMode: "factual", useBRoll: true, useKenBurns: true, useAIVideo: false },
-    "science.cosmos": { narratorStyle: "sleep", musicMood: "ambient", pacing: "slow", audience: "adults", perspective: "omniscient", ending: "reflective", contentMode: "factual", useBRoll: true, useKenBurns: true, useAIVideo: false },
-    "science.kurzgesagt": { narratorStyle: "conversational", musicMood: "electronic", pacing: "fast", audience: "young_adults", perspective: "omniscient", ending: "ai_decide", contentMode: "factual", useBRoll: true, useKenBurns: false, useAIVideo: false },
-    "science.ted_talk": { narratorStyle: "conversational", musicMood: "none", pacing: "standard", audience: "adults", perspective: "first_person", ending: "call_to_action", contentMode: "factual", useBRoll: true, useKenBurns: true, useAIVideo: false },
-    "science.bill_nye": { narratorStyle: "energetic", musicMood: "whimsical", pacing: "fast", audience: "kids", perspective: "omniscient", ending: "hopeful", contentMode: "factual", useBRoll: true, useKenBurns: true, useAIVideo: false },
-    "science.academic": { narratorStyle: "documentary", musicMood: "none", pacing: "standard", audience: "expert", perspective: "omniscient", ending: "ai_decide", contentMode: "factual", useBRoll: false, useKenBurns: true, useAIVideo: false },
-    "true_crime.serial": { narratorStyle: "conversational", musicMood: "dark_ambient", pacing: "standard", audience: "adults", perspective: "investigator", ending: "cliffhanger", contentMode: "factual", useBRoll: true, useKenBurns: true, useAIVideo: false },
-    "true_crime.forensic_files": { narratorStyle: "documentary", musicMood: "dark_ambient", pacing: "standard", audience: "adults", perspective: "omniscient", ending: "ai_decide", contentMode: "factual", useBRoll: true, useKenBurns: true, useAIVideo: false },
-    "true_crime.unsolved_mysteries": { narratorStyle: "dramatic", musicMood: "dark_ambient", pacing: "slow", audience: "adults", perspective: "omniscient", ending: "cliffhanger", contentMode: "factual", useBRoll: true, useKenBurns: true, useAIVideo: false },
-    "horror.campfire": { narratorStyle: "dramatic", musicMood: "dark_ambient", pacing: "slow", audience: "adults", perspective: "first_person", ending: "cliffhanger", contentMode: "creative", useBRoll: true, useKenBurns: true, useAIVideo: false },
-    "horror.cryptids": { narratorStyle: "dramatic", musicMood: "dark_ambient", pacing: "slow", audience: "adults", perspective: "investigator", ending: "cliffhanger", contentMode: "creative", useBRoll: true, useKenBurns: true, useAIVideo: false },
-    "horror.psychological": { narratorStyle: "sleep", musicMood: "dark_ambient", pacing: "slow", audience: "adults", perspective: "second_person", ending: "cliffhanger", contentMode: "creative", useBRoll: true, useKenBurns: true, useAIVideo: false },
-    "history.ken_burns": { narratorStyle: "sleep", musicMood: "classical", pacing: "slow", audience: "adults", perspective: "omniscient", ending: "reflective", contentMode: "factual", useBRoll: false, useKenBurns: true, useAIVideo: false },
-    "history.epic_cinematic": { narratorStyle: "dramatic", musicMood: "epic", pacing: "standard", audience: "adults", perspective: "omniscient", ending: "ai_decide", contentMode: "creative", useBRoll: true, useKenBurns: true, useAIVideo: false },
-    "children.dr_seuss": { narratorStyle: "conversational", musicMood: "whimsical", pacing: "standard", audience: "toddlers", perspective: "omniscient", ending: "hopeful", contentMode: "creative", useBRoll: false, useKenBurns: true, useAIVideo: false },
-    "children.fairy_tale": { narratorStyle: "sleep", musicMood: "whimsical", pacing: "slow", audience: "kids", perspective: "omniscient", ending: "hopeful", contentMode: "creative", useBRoll: false, useKenBurns: true, useAIVideo: false },
-    "children.bedtime_lullaby": { narratorStyle: "sleep", musicMood: "piano", pacing: "slow", audience: "toddlers", perspective: "second_person", ending: "hopeful", contentMode: "creative", useBRoll: false, useKenBurns: true, useAIVideo: false },
-    "sleep.asmr_nature": { narratorStyle: "sleep", musicMood: "ambient", pacing: "slow", audience: "adults", perspective: "second_person", ending: "hopeful", contentMode: "creative", useBRoll: true, useKenBurns: true, useAIVideo: false },
-    "sleep.bedtime_science": { narratorStyle: "sleep", musicMood: "ambient", pacing: "slow", audience: "adults", perspective: "omniscient", ending: "reflective", contentMode: "factual", useBRoll: true, useKenBurns: true, useAIVideo: false },
-    "comedy.mock_doc": { narratorStyle: "documentary", musicMood: "ambient", pacing: "standard", audience: "adults", perspective: "omniscient", ending: "ai_decide", contentMode: "creative", useBRoll: true, useKenBurns: true, useAIVideo: false },
-    "comedy.drunk_history": { narratorStyle: "energetic", musicMood: "whimsical", pacing: "fast", audience: "young_adults", perspective: "first_person", ending: "ai_decide", contentMode: "creative", useBRoll: true, useKenBurns: true, useAIVideo: false },
-    "nature.planet_earth": { narratorStyle: "sleep", musicMood: "classical", pacing: "slow", audience: "adults", perspective: "omniscient", ending: "reflective", contentMode: "factual", useBRoll: true, useKenBurns: true, useAIVideo: false },
-};
+// Smart defaults are now sourced directly from genre-presets.ts via the GENRES array.
+// The creation modal imports getSmartDefaults() to apply them dynamically.
 
 function CreateDocumentaryModal({
     onClose,
@@ -348,14 +327,14 @@ function CreateDocumentaryModal({
     const [musicMood, setMusicMood] = useState("ambient");
     const [useBRoll, setUseBRoll] = useState(true);
     const [useKenBurns, setUseKenBurns] = useState(true);
-    const [useAIVideo, setUseAIVideo] = useState(false);
+    const [visualMode, setVisualMode] = useState("broll_only");
+    const [imageModel, setImageModel] = useState("chroma");
     const [narratorStyle, setNarratorStyle] = useState("sleep");
 
     const selectedGenre = GENRES.find((g) => g.id === genre);
 
     const applyDefaults = (g: string, s: string) => {
-        const key = `${g}.${s}`;
-        const defaults = SMART_DEFAULTS[key];
+        const defaults = getSmartDefaults(g, s);
         if (defaults) {
             setNarratorStyle(defaults.narratorStyle);
             setMusicMood(defaults.musicMood);
@@ -366,7 +345,8 @@ function CreateDocumentaryModal({
             setContentMode(defaults.contentMode);
             setUseBRoll(defaults.useBRoll);
             setUseKenBurns(defaults.useKenBurns);
-            setUseAIVideo(defaults.useAIVideo);
+            setVisualMode(defaults.visualMode);
+            setImageModel(defaults.imageModel);
         }
     };
 
@@ -385,7 +365,7 @@ function CreateDocumentaryModal({
                 genre, subStyle, audience, perspective, pacing,
                 ending, endingNote: endingNote || undefined,
                 contentMode, musicMood,
-                useBRoll, useKenBurns, useAIVideo, narratorStyle,
+                useBRoll, useKenBurns, visualMode, imageModel, narratorStyle,
             }),
         });
         const data = await res.json();
@@ -564,8 +544,45 @@ function CreateDocumentaryModal({
                                 </div>
                             )}
 
-                            {/* Narrator Style + Production Toggles */}
-                            <div className="flex items-center gap-3 pt-2 border-t border-gray-800">
+                            {/* Visual Mode Cards */}
+                            <div className="pt-2 border-t border-gray-800">
+                                <label className="block text-[10px] font-medium text-gray-500 mb-2">Visual Mode</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {[
+                                        { id: "full_ai_video", label: "Full AI Video", icon: "🎬", desc: "AI images + AI video clips" },
+                                        { id: "chapter_illustrations", label: "Chapter Illustrations", icon: "🖼️", desc: "AI images (Ken Burns) + Pexels B-Roll" },
+                                        { id: "broll_only", label: "B-Roll Only", icon: "📹", desc: "Pexels stock footage only" },
+                                        { id: "narration_only", label: "Narration Only", icon: "🎙️", desc: "Audio narration, no video" },
+                                    ].map((vm) => (
+                                        <button key={vm.id} onClick={() => setVisualMode(vm.id)}
+                                            className={cn("text-left px-3 py-2 rounded-lg border transition-all",
+                                                visualMode === vm.id
+                                                    ? "border-violet-500/50 bg-violet-500/10"
+                                                    : "border-gray-700 bg-gray-800/50 hover:border-gray-600"
+                                            )}>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm">{vm.icon}</span>
+                                                <span className={cn("text-[11px] font-medium", visualMode === vm.id ? "text-violet-300" : "text-gray-300")}>{vm.label}</span>
+                                            </div>
+                                            <p className="text-[9px] text-gray-500 mt-0.5 leading-tight">{vm.desc}</p>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Image Model + Narrator + Toggles */}
+                            <div className="flex items-end gap-3">
+                                {(visualMode === "full_ai_video" || visualMode === "chapter_illustrations") && (
+                                    <div className="flex-1">
+                                        <label className="block text-[10px] font-medium text-gray-500 mb-1">Image Model</label>
+                                        <select value={imageModel} onChange={(e) => setImageModel(e.target.value)}
+                                            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500">
+                                            <option value="chroma">Chroma FP16 (Uncensored)</option>
+                                            <option value="flux">Flux (Standard)</option>
+                                            <option value="juggernaut">Juggernaut XL (Photorealistic)</option>
+                                        </select>
+                                    </div>
+                                )}
                                 <div className="flex-1">
                                     <label className="block text-[10px] font-medium text-gray-500 mb-1">Narrator</label>
                                     <select value={narratorStyle} onChange={(e) => setNarratorStyle(e.target.value)}
@@ -577,20 +594,15 @@ function CreateDocumentaryModal({
                                         <option value="conversational">Conversational</option>
                                     </select>
                                 </div>
-                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                <label className="flex items-center gap-1.5 cursor-pointer pb-1">
                                     <input type="checkbox" checked={useBRoll} onChange={(e) => setUseBRoll(e.target.checked)}
                                         className="w-3.5 h-3.5 rounded border-gray-600 bg-gray-800 text-violet-500 focus:ring-violet-500" />
                                     <span className="text-[10px] text-gray-400">B-Roll</span>
                                 </label>
-                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                <label className="flex items-center gap-1.5 cursor-pointer pb-1">
                                     <input type="checkbox" checked={useKenBurns} onChange={(e) => setUseKenBurns(e.target.checked)}
                                         className="w-3.5 h-3.5 rounded border-gray-600 bg-gray-800 text-violet-500 focus:ring-violet-500" />
                                     <span className="text-[10px] text-gray-400">Ken Burns</span>
-                                </label>
-                                <label className="flex items-center gap-1.5 cursor-pointer">
-                                    <input type="checkbox" checked={useAIVideo} onChange={(e) => setUseAIVideo(e.target.checked)}
-                                        className="w-3.5 h-3.5 rounded border-gray-600 bg-gray-800 text-violet-500 focus:ring-violet-500" />
-                                    <span className="text-[10px] text-gray-400">AI Video</span>
                                 </label>
                             </div>
                         </>

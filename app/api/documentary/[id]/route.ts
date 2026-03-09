@@ -77,7 +77,7 @@ export async function PATCH(
     const allowedFields = ["title", "voiceId", "status", "script",
         "genre", "subStyle", "audience", "perspective", "pacing",
         "ending", "endingNote", "contentMode", "musicMood",
-        "useBRoll", "useKenBurns", "useAIVideo"];
+        "useBRoll", "useKenBurns", "visualMode", "imageModel"];
     const updateData: Record<string, unknown> = {};
 
     for (const field of allowedFields) {

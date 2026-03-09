@@ -182,8 +182,23 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
 
         if (!doc) throw new Error("Documentary not found");
 
-        const fillerMode = doc.fillerMode || "kenburns";
-        console.log(`[Assembly] Filler mode: ${fillerMode}`);
+        // Auto-select filler mode based on visualMode
+        const visualMode = (doc as any).visualMode || "broll_only";
+        let fillerMode: string;
+        switch (visualMode) {
+            case "chapter_illustrations":
+                fillerMode = "kenburns+stock"; // AI images (Ken Burns) + Pexels B-Roll
+                break;
+            case "broll_only":
+                fillerMode = "stock";          // Pexels stock footage only
+                break;
+            case "narration_only":
+                fillerMode = "procedural";     // Abstract background visuals
+                break;
+            default:
+                fillerMode = doc.fillerMode || "kenburns"; // full_ai_video uses legacy fillerMode
+        }
+        console.log(`[Assembly] Visual mode: ${visualMode} → filler mode: ${fillerMode}`);
 
         // Mark as assembling
         await prisma.documentary.update({

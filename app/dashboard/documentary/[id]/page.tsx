@@ -406,6 +406,7 @@ function GeneratingBanner({ doc, onRefresh }: { doc: any; onRefresh: () => void 
 /* ────── Pipeline Action Buttons ────── */
 function PipelineActions({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
     const [running, setRunning] = useState(false);
+    const visualMode = doc.visualMode || "broll_only";
 
     const runAction = async (endpoint: string) => {
         setRunning(true);
@@ -413,6 +414,9 @@ function PipelineActions({ doc, onRefresh }: { doc: any; onRefresh: () => void }
         setTimeout(onRefresh, 1000);
         setRunning(false);
     };
+
+    const needsAssets = visualMode === "full_ai_video" || visualMode === "chapter_illustrations";
+    const needsClips = visualMode === "full_ai_video";
 
     return (
         <div className="flex items-center gap-2">
@@ -423,18 +427,32 @@ function PipelineActions({ doc, onRefresh }: { doc: any; onRefresh: () => void }
                     Generate Story
                 </button>
             )}
-            {doc.status === "SCENES_PLANNED" && (
+            {doc.status === "SCENES_PLANNED" && needsAssets && (
                 <button onClick={() => runAction("generate-assets")} disabled={running}
                     className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50 transition-colors">
                     {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Image className="w-4 h-4" />}
-                    Generate Assets
+                    {visualMode === "chapter_illustrations" ? "Generate Chapter Images" : "Generate Assets"}
                 </button>
             )}
-            {doc.status === "ASSETS_READY" && (
+            {doc.status === "SCENES_PLANNED" && !needsAssets && (
+                <button onClick={() => runAction("assemble")} disabled={running}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-50 transition-colors">
+                    {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wrench className="w-4 h-4" />}
+                    Assemble Documentary
+                </button>
+            )}
+            {doc.status === "ASSETS_READY" && needsClips && (
                 <button onClick={() => runAction("generate-clips")} disabled={running}
                     className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-cyan-600 hover:bg-cyan-500 text-white disabled:opacity-50 transition-colors">
                     {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Film className="w-4 h-4" />}
                     Generate Clips
+                </button>
+            )}
+            {doc.status === "ASSETS_READY" && !needsClips && (
+                <button onClick={() => runAction("assemble")} disabled={running}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-50 transition-colors">
+                    {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wrench className="w-4 h-4" />}
+                    Assemble Documentary
                 </button>
             )}
             {(doc.status === "GENERATING" || doc.status === "ASSETS_READY") && (
@@ -451,13 +469,19 @@ function PipelineActions({ doc, onRefresh }: { doc: any; onRefresh: () => void }
                     {doc.status === "GENERATING" ? "Force Retry" : "Retry"}
                 </button>
             )}
-            {doc.status === "GENERATING" && doc.genJobs?.some((j: any) => j.jobType === "shot_video" && j.status === "QUEUED") && (
+            {doc.status === "GENERATING" && needsClips && doc.genJobs?.some((j: any) => j.jobType === "shot_video" && j.status === "QUEUED") && (
                 <button onClick={() => runAction("generate-clips")} disabled={running}
                     className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-cyan-600 hover:bg-cyan-500 text-white disabled:opacity-50 transition-colors">
                     {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Film className="w-4 h-4" />}
                     Retry Clips
                 </button>
             )}
+            {/* Visual mode badge */}
+            <span className="ml-2 px-2 py-0.5 rounded-full bg-gray-800 text-[10px] text-gray-400 font-medium">
+                {visualMode === "full_ai_video" ? "🎬 Full AI" :
+                 visualMode === "chapter_illustrations" ? "🖼️ Illustrations" :
+                 visualMode === "broll_only" ? "📹 B-Roll" : "🎙️ Audio"}
+            </span>
         </div>
     );
 }

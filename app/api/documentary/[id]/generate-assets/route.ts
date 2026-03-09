@@ -3,8 +3,11 @@
  * 
  * POST /api/documentary/[id]/generate-assets
  * 
- * Triggers reference image generation for all assets in the asset matrix.
- * Assets are generated via RunPod GPU (Flux.1) and results dispatched via Redis.
+ * Triggers reference image generation for assets in the asset matrix.
+ * Behavior depends on visualMode:
+ *   - full_ai_video: Generate ALL assets (reference images for video)
+ *   - chapter_illustrations: Generate KEY assets only (~5-10 chapter illustrations)
+ *   - broll_only / narration_only: Return 400 — skip this step
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -36,6 +39,23 @@ export async function POST(
         return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
+    // ── Visual Mode Gate ──
+    const visualMode = documentary.visualMode || "broll_only";
+
+    if (visualMode === "broll_only") {
+        return NextResponse.json(
+            { error: "Visual mode is 'B-Roll Only' — no AI images needed. Skip to Assembly." },
+            { status: 400 }
+        );
+    }
+
+    if (visualMode === "narration_only") {
+        return NextResponse.json(
+            { error: "Visual mode is 'Narration Only' — no visuals needed. Skip to Assembly." },
+            { status: 400 }
+        );
+    }
+
     if (documentary.status !== "SCENES_PLANNED" && documentary.status !== "FAILED") {
         return NextResponse.json(
             { error: `Cannot generate assets in status: ${documentary.status}. Must be SCENES_PLANNED.` },
@@ -57,12 +77,13 @@ export async function POST(
         data: { status: "GENERATING" },
     });
 
-    // Dispatch asset generation jobs
+    // Dispatch asset generation jobs (respects visualMode + imageModel internally)
     await generateAssetMatrix(id);
 
     return NextResponse.json({
-        message: "Asset generation started",
+        message: `Asset generation started (${visualMode} mode)`,
         documentaryId: id,
         assetCount: documentary._count.assets,
+        visualMode,
     });
 }

@@ -16,7 +16,7 @@ export async function PATCH(
         "fillerMode", "voiceId", "ttsEngine", "ttsVoiceId", "narratorStyle",
         "genre", "subStyle", "audience", "perspective", "pacing",
         "ending", "endingNote", "contentMode", "musicMood",
-        "useBRoll", "useKenBurns", "useAIVideo",
+        "useBRoll", "useKenBurns", "visualMode", "imageModel",
     ];
     const updateData: Record<string, string> = {};
 

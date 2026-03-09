@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { sourceUrls, voiceId, title, genre, subStyle, audience, perspective,
         pacing, ending, endingNote, contentMode, musicMood,
-        useBRoll, useKenBurns, useAIVideo, narratorStyle, ttsEngine } = body;
+        useBRoll, useKenBurns, visualMode, imageModel, narratorStyle, ttsEngine } = body;
 
     // In topic mode, sourceUrls can be empty if title is provided
     const isTopicMode = (!sourceUrls || sourceUrls.length === 0) && title;
@@ -76,7 +76,8 @@ export async function POST(req: NextRequest) {
             musicMood: musicMood || "ambient",
             useBRoll: useBRoll ?? true,
             useKenBurns: useKenBurns ?? true,
-            useAIVideo: useAIVideo ?? false,
+            visualMode: visualMode || "broll_only",
+            imageModel: imageModel || "chroma",
             voiceId: voiceId || "Rachel",
             narratorStyle: narratorStyle || "sleep",
             ttsEngine: ttsEngine || "elevenlabs",

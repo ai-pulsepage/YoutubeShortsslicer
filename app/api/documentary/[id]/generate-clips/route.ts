@@ -31,6 +31,15 @@ export async function POST(
         return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
+    // ── Visual Mode Gate: only full AI video mode needs clips ──
+    const visualMode = documentary.visualMode || "broll_only";
+    if (visualMode !== "full_ai_video") {
+        return NextResponse.json(
+            { error: `Video clips are only generated in 'Full AI Video' mode. Current mode: ${visualMode}. Skip to Assembly.` },
+            { status: 400 }
+        );
+    }
+
     if (!["ASSETS_READY", "FAILED", "GENERATING"].includes(documentary.status as string)) {
         return NextResponse.json(
             { error: `Cannot generate clips in status: ${documentary.status}. Must be ASSETS_READY, GENERATING, or FAILED.` },

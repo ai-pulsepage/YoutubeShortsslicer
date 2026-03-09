@@ -430,7 +430,8 @@ model Documentary {
   musicMood      String    @default("ambient")        // classical | ambient | dark_ambient | whimsical | epic | piano | electronic | none
   useBRoll       Boolean   @default(true)             // Fetch Pexels stock footage
   useKenBurns    Boolean   @default(true)             // Pan/zoom on images
-  useAIVideo     Boolean   @default(false)            // Use RunPod for AI video generation
+  visualMode     String    @default("broll_only")     // full_ai_video | chapter_illustrations | broll_only | narration_only
+  imageModel     String    @default("chroma")         // chroma | flux | juggernaut
   voiceId        String    @default("Rachel")
   ttsEngine      String    @default("elevenlabs")  // elevenlabs | xtts
   ttsVoiceId     String?                            // Engine-specific voice ID

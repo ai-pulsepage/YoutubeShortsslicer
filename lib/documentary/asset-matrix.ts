@@ -3,13 +3,21 @@
  * 
  * Generates image prompts for reference assets and dispatches
  * generation jobs to RunPod via Redis.
+ * 
+ * Respects visualMode:
+ *   - full_ai_video: Generate ALL assets
+ *   - chapter_illustrations: Only generate KEY assets (environments + 1 character per scene)
+ *   - broll_only / narration_only: Should not be called (gated at route level)
+ * 
+ * Uses genre-specific imageStyle modifiers for genre-appropriate visual output.
  */
 
 import { prisma } from "@/lib/prisma";
 import { CHANNELS, type RedisJob, dispatchJob } from "./redis-client";
+import { getImageStyleModifiers } from "./genre-presets";
 
 /**
- * Generates image prompts for all assets and dispatches to RunPod
+ * Generates image prompts for assets and dispatches to RunPod
  */
 export async function generateAssetMatrix(documentaryId: string): Promise<void> {
     const documentary = await prisma.documentary.findUnique({
@@ -21,13 +29,34 @@ export async function generateAssetMatrix(documentaryId: string): Promise<void> 
         throw new Error(`Documentary ${documentaryId} not found`);
     }
 
+    const visualMode = documentary.visualMode || "broll_only";
+    const imageModel = documentary.imageModel || "chroma";
+    const genre = documentary.genre || "science";
+    const subStyle = documentary.subStyle || "bbc_earth";
+    const imageStyleModifiers = getImageStyleModifiers(genre);
+
+    // Filter assets based on visual mode
+    let assetsToGenerate = documentary.assets.filter((a) => !a.imagePath);
+
+    if (visualMode === "chapter_illustrations") {
+        // Only generate key assets: ENVIRONMENT + CHARACTER (skip FILLER, CONCEPT, excess PROP)
+        const environments = assetsToGenerate.filter((a) => a.type === "ENVIRONMENT");
+        const characters = assetsToGenerate.filter((a) => a.type === "CHARACTER");
+        const keyProps = assetsToGenerate.filter((a) => a.type === "PROP").slice(0, 3); // Max 3 key props
+
+        assetsToGenerate = [...environments, ...characters, ...keyProps];
+
+        console.log(
+            `[AssetMatrix] Chapter Illustrations mode: filtered to ${assetsToGenerate.length} key assets ` +
+            `(${environments.length} env, ${characters.length} char, ${keyProps.length} props) ` +
+            `from ${documentary.assets.length} total`
+        );
+    }
+
     let jobCount = 0;
 
-    for (const asset of documentary.assets) {
-        // Skip if already has an image
-        if (asset.imagePath) continue;
-
-        const prompt = buildAssetPrompt(asset, documentary.genre, documentary.subStyle);
+    for (const asset of assetsToGenerate) {
+        const prompt = buildAssetPrompt(asset, genre, subStyle, imageStyleModifiers);
 
         // Create GenJob in DB
         const job = await prisma.genJob.create({
@@ -40,9 +69,10 @@ export async function generateAssetMatrix(documentaryId: string): Promise<void> 
                 metadata: {
                     width: 1024,
                     height: 1024,
-                    model: "flux-1-dev",
+                    model: imageModel,
                     assetType: asset.type,
                     assetLabel: asset.label,
+                    visualMode,
                 },
             },
         });
@@ -57,7 +87,7 @@ export async function generateAssetMatrix(documentaryId: string): Promise<void> 
             metadata: {
                 width: 1024,
                 height: 1024,
-                model: "flux-1-dev",
+                model: imageModel,
                 assetId: asset.id,
                 assetLabel: asset.label,
             },
@@ -68,19 +98,26 @@ export async function generateAssetMatrix(documentaryId: string): Promise<void> 
     }
 
     console.log(
-        `[AssetMatrix] ✅ Dispatched ${jobCount} image generation jobs for "${documentary.title}"`
+        `[AssetMatrix] ✅ Dispatched ${jobCount} image generation jobs for "${documentary.title}" ` +
+        `(mode: ${visualMode}, model: ${imageModel})`
     );
 }
 
 /**
- * Builds a Flux.1-optimized prompt for a reference asset image
+ * Builds a genre-aware image prompt for a reference asset
+ * 
+ * The imageStyleModifiers inject genre-specific visual aesthetics:
+ *   Horror → "desaturated, film grain, deep shadows, found footage"
+ *   Children's → "whimsical storybook illustration, bright watercolors"
+ *   Nature → "8K photography, shallow DOF, golden hour lighting"
  */
 function buildAssetPrompt(
     asset: { type: string; label: string; description: string | null; attire: string | null },
     genre: string,
-    subStyle: string
+    subStyle: string,
+    imageStyleModifiers: string
 ): string {
-    // Derive visual style from genre
+    // Combine genre + substyle for a style label
     const styleLabel = `${genre} ${subStyle}`.replace(/_/g, " ");
 
     switch (asset.type) {
@@ -89,9 +126,8 @@ function buildAssetPrompt(
                 `Portrait reference image of ${asset.label}.`,
                 asset.description || "",
                 asset.attire ? `Wearing: ${asset.attire}.` : "",
-                `Style: ${styleLabel}, photorealistic.`,
-                `Clean background, centered composition, professional lighting.`,
-                `Full face visible, three-quarter view.`,
+                `Visual style: ${imageStyleModifiers}`,
+                `Genre: ${styleLabel}. Full face visible, three-quarter view, centered composition.`,
             ]
                 .filter(Boolean)
                 .join(" ");
@@ -100,9 +136,8 @@ function buildAssetPrompt(
             return [
                 `Product/object reference image: ${asset.label}.`,
                 asset.description || "",
-                `Style: ${styleLabel}.`,
-                `Clean background, centered, studio lighting.`,
-                `High detail, sharp focus.`,
+                `Visual style: ${imageStyleModifiers}`,
+                `Genre: ${styleLabel}. Centered, detailed, sharp focus.`,
             ]
                 .filter(Boolean)
                 .join(" ");
@@ -111,8 +146,8 @@ function buildAssetPrompt(
             return [
                 `Abstract artistic visualization of: ${asset.label}.`,
                 asset.description || "",
-                `Style: ${styleLabel}, artistic interpretation, visually striking.`,
-                `Dark background, rich detail, cinematic quality.`,
+                `Visual style: ${imageStyleModifiers}`,
+                `Genre: ${styleLabel}. Visually striking, rich detail, cinematic quality.`,
             ]
                 .filter(Boolean)
                 .join(" ");
@@ -121,8 +156,8 @@ function buildAssetPrompt(
             return [
                 `Wide establishing shot of: ${asset.label}.`,
                 asset.description || "",
-                `Style: ${styleLabel}, photorealistic.`,
-                `Cinematic composition, atmospheric lighting, depth.`,
+                `Visual style: ${imageStyleModifiers}`,
+                `Genre: ${styleLabel}. Cinematic composition, atmospheric lighting, depth.`,
             ]
                 .filter(Boolean)
                 .join(" ");
@@ -131,14 +166,14 @@ function buildAssetPrompt(
             return [
                 `Abstract art for video transition.`,
                 asset.description || "Flowing particles, soft colors, dark background.",
-                `Style: abstract, meditative, calming.`,
-                `Seamless loop texture, dark background.`,
+                `Visual style: ${imageStyleModifiers}`,
+                `Seamless loop texture.`,
             ]
                 .filter(Boolean)
                 .join(" ");
 
         default:
-            return `${asset.label}: ${asset.description || ""}. Style: ${styleLabel}.`;
+            return `${asset.label}: ${asset.description || ""}. Visual style: ${imageStyleModifiers}. Genre: ${styleLabel}.`;
     }
 }
 
