@@ -77,3 +77,61 @@ export interface RenderJobData {
     userId: string;
     videoId: string;
 }
+
+// ─── RunPod Worker Queue (XTTS / MusicGen / Video) ──────
+const RUNPOD_QUEUE = "runpod-worker";
+
+/**
+ * Add a job to the RunPod worker queue.
+ * Returns the job ID for tracking.
+ */
+export async function addJob(
+    jobType: string,
+    data: Record<string, any>,
+): Promise<string> {
+    const queue = getQueue(RUNPOD_QUEUE);
+    const job = await queue.add(jobType, {
+        type: jobType,
+        ...data,
+    });
+    return job.id || `job-${Date.now()}`;
+}
+
+/**
+ * Wait for a RunPod job to complete and return its result.
+ * Polls the job status until completion or timeout.
+ */
+export async function waitForJobResult(
+    jobId: string,
+    timeoutMs: number = 120_000,
+): Promise<{ status: string; output_url?: string; audio_base64?: string; error?: string } | null> {
+    const queue = getQueue(RUNPOD_QUEUE);
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < timeoutMs) {
+        const job = await queue.getJob(jobId);
+        if (!job) return null;
+
+        const state = await job.getState();
+
+        if (state === "completed") {
+            return {
+                status: "COMPLETED",
+                output_url: job.returnvalue?.output_url,
+                audio_base64: job.returnvalue?.audio_base64,
+            };
+        }
+
+        if (state === "failed") {
+            return {
+                status: "FAILED",
+                error: job.failedReason || "Unknown error",
+            };
+        }
+
+        // Wait 2s before polling again
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+
+    return { status: "FAILED", error: "Timeout waiting for job result" };
+}

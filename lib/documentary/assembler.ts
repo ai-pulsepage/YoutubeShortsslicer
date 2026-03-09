@@ -1,17 +1,19 @@
 /**
  * Documentary Assembly Pipeline
  *
- * Combines generated video clips + TTS narration + visual filler into finished documentary.
+ * Combines generated video clips + TTS narration + SFX + music + visual filler.
  *
  * Steps:
- * 1. Generate narration audio per scene via Kokoro TTS
- * 2. Calculate narration duration → determine filler needed
- * 3. Download all scene clips from R2
- * 4. Generate filler visuals (Ken Burns / Procedural / Stock Video)
- * 5. Interleave clips + filler to fill narration duration
- * 6. Mix narration audio with scene video
- * 7. Concatenate all scenes into final documentary
- * 8. Upload final MP4 to R2
+ * 1. Generate narration audio per scene via ElevenLabs / XTTS v2
+ * 2. Fetch ambient SFX from Freesound API
+ * 3. Generate background music via MusicGen (RunPod)
+ * 4. Calculate narration duration → determine filler needed
+ * 5. Download all scene clips from R2
+ * 6. Generate filler visuals (Ken Burns / Procedural / Stock Video)
+ * 7. Interleave clips + filler to fill narration duration
+ * 8. Mix 3-track audio (narration + SFX + music) with scene video
+ * 9. Concatenate all scenes into final documentary
+ * 10. Upload final MP4 to R2
  */
 
 import { execSync } from "child_process";
@@ -20,10 +22,13 @@ import fs from "fs";
 import os from "os";
 import { prisma } from "@/lib/prisma";
 import { generateVoiceover } from "@/lib/tts";
+import type { TtsEngine, NarratorStyle } from "@/lib/tts";
 import { uploadFileToR2, downloadFileFromR2, uploadBufferToR2 } from "@/lib/storage";
 import { generateKenBurnsFiller } from "./fillers/ken-burns";
 import { generateProceduralFiller, pickProceduralStyle } from "./fillers/procedural";
 import { generateStockVideoFiller } from "./fillers/stock-video";
+import { fetchFreesoundSfx } from "@/lib/audio/freesound";
+import { generateBackgroundMusic } from "@/lib/audio/musicgen";
 
 const TEMP_DIR = path.join(os.tmpdir(), "documentary-assembly");
 
@@ -221,10 +226,14 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
             if (scene.narrationText) {
                 console.log(`[Assembly]   Generating TTS narration (${scene.narrationText.length} chars)...`);
                 try {
+                    const ttsEngine = (doc.ttsEngine || "elevenlabs") as TtsEngine;
+                    const narratorStyle = (doc.narratorStyle || "sleep") as NarratorStyle;
+
                     const audioBuffer = await generateVoiceover({
                         text: scene.narrationText,
-                        voiceId: doc.voiceId || "bf_emma",
-                        speed: 0.95,
+                        engine: ttsEngine,
+                        voiceId: doc.ttsVoiceId || doc.voiceId || "Rachel",
+                        narratorStyle,
                     });
 
                     narrationPath = path.join(sceneDir, "narration.wav");
@@ -232,7 +241,7 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
 
                     // Get exact narration duration
                     narrationDuration = getAudioDuration(narrationPath);
-                    console.log(`[Assembly]   TTS done → ${narrationDuration.toFixed(1)}s`);
+                    console.log(`[Assembly]   TTS done (${ttsEngine}/${narratorStyle}) → ${narrationDuration.toFixed(1)}s`);
 
                     // Upload narration to R2
                     const narrationR2Key = `documentaries/${documentaryId}/scenes/${scene.id}/narration.wav`;
@@ -245,6 +254,32 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
                 } catch (ttsErr: any) {
                     console.warn(`[Assembly]   TTS failed for scene ${scene.sceneIndex}: ${ttsErr.message}`);
                 }
+            }
+
+            // Step 1b: Fetch ambient SFX from Freesound
+            let sfxPath: string | null = null;
+            try {
+                sfxPath = await fetchFreesoundSfx(
+                    scene.title || `Scene ${scene.sceneIndex + 1}`,
+                    sceneDir,
+                    Math.max(10, narrationDuration),
+                );
+                if (sfxPath) console.log(`[Assembly]   SFX loaded: ${sfxPath}`);
+            } catch (sfxErr: any) {
+                console.warn(`[Assembly]   SFX fetch failed: ${sfxErr.message}`);
+            }
+
+            // Step 1c: Generate background music via MusicGen
+            let musicPath: string | null = null;
+            try {
+                musicPath = await generateBackgroundMusic(
+                    scene.title || "ambient",
+                    Math.max(10, narrationDuration),
+                    sceneDir,
+                );
+                if (musicPath) console.log(`[Assembly]   Music generated: ${musicPath}`);
+            } catch (musicErr: any) {
+                console.warn(`[Assembly]   Music generation failed: ${musicErr.message}`);
             }
 
             // Step 2: Download scene clips
@@ -271,19 +306,27 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
             }
 
             // Step 3: Calculate filler needed
+            // In narration-only mode (zero shots), filler fills the ENTIRE narration duration
+            const isNarrationOnly = shotPaths.length === 0 && narrationDuration > 0;
             const fillerDuration = Math.max(0, narrationDuration - totalClipDuration);
-            console.log(`[Assembly]   Clips: ${totalClipDuration.toFixed(1)}s | Narration: ${narrationDuration.toFixed(1)}s | Filler needed: ${fillerDuration.toFixed(1)}s`);
+            console.log(`[Assembly]   ${isNarrationOnly ? "[Narration-Only] " : ""}Clips: ${totalClipDuration.toFixed(1)}s | Narration: ${narrationDuration.toFixed(1)}s | Filler needed: ${fillerDuration.toFixed(1)}s`);
 
             // Step 4: Generate filler if needed
             let fillerPath: string | null = null;
             if (fillerDuration > 2) {
                 fillerPath = path.join(sceneDir, "filler.mp4");
 
-                // Get scene-specific mood from first shot
+                // Get scene-specific mood from first shot (or null for narration-only)
                 const sceneMood = scene.shots[0]?.mood || undefined;
 
+                // In narration-only mode, prefer stock video or kenburns+stock
+                // so Pexels provides all visuals driven by narration keywords
+                const effectiveFillerMode = isNarrationOnly
+                    ? (fillerMode === "procedural" ? "kenburns+stock" : fillerMode)
+                    : fillerMode;
+
                 await generateFiller(
-                    fillerMode,
+                    effectiveFillerMode,
                     fillerPath,
                     fillerDuration,
                     sceneDir,
@@ -335,20 +378,78 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
                 );
             }
 
-            // Step 6: Mix narration audio with scene video
+            // Step 6: Mix 3-track audio (narration + SFX + music) with scene video
             const sceneOutputPath = path.join(sceneDir, "scene-final.mp4");
-            if (narrationPath && fs.existsSync(narrationPath)) {
+            const hasNarration = narrationPath && fs.existsSync(narrationPath);
+            const hasSfx = sfxPath && fs.existsSync(sfxPath);
+            const hasMusic = musicPath && fs.existsSync(musicPath);
+
+            if (hasNarration || hasSfx || hasMusic) {
                 try {
-                    // Add narration as audio track (video has no audio from Wan2.2)
+                    // Build FFmpeg command for multi-track audio mixing
+                    const inputs: string[] = [`-i "${sceneVideoPath}"`];
+                    const filters: string[] = [];
+                    let audioIdx = 1;
+
+                    if (hasNarration) {
+                        inputs.push(`-i "${narrationPath}"`);
+                        filters.push(`[${audioIdx}:a]volume=1.0[narr]`);
+                        audioIdx++;
+                    }
+                    if (hasSfx) {
+                        inputs.push(`-i "${sfxPath}"`);
+                        filters.push(`[${audioIdx}:a]volume=0.3[sfx]`);
+                        audioIdx++;
+                    }
+                    if (hasMusic) {
+                        inputs.push(`-i "${musicPath}"`);
+                        filters.push(`[${audioIdx}:a]volume=0.12[music]`);
+                        audioIdx++;
+                    }
+
+                    // Build amix filter
+                    const trackLabels: string[] = [];
+                    if (hasNarration) trackLabels.push("[narr]");
+                    if (hasSfx) trackLabels.push("[sfx]");
+                    if (hasMusic) trackLabels.push("[music]");
+
+                    const trackCount = trackLabels.length;
+                    if (trackCount > 1) {
+                        filters.push(
+                            `${trackLabels.join("")}amix=inputs=${trackCount}:duration=longest[aout]`
+                        );
+                    } else {
+                        // Single audio track — rename to [aout]
+                        const label = hasNarration ? "narr" : hasSfx ? "sfx" : "music";
+                        filters.push(`[${label}]acopy[aout]`);
+                    }
+
+                    const filterComplex = filters.join(";");
+
                     execSync(
-                        `ffmpeg -i "${sceneVideoPath}" -i "${narrationPath}" ` +
-                        `-map 0:v -map 1:a -c:v copy -c:a aac -b:a 192k ` +
+                        `ffmpeg ${inputs.join(" ")} ` +
+                        `-filter_complex "${filterComplex}" ` +
+                        `-map 0:v -map "[aout]" -c:v copy -c:a aac -b:a 192k ` +
                         `-shortest "${sceneOutputPath}" -y`,
                         { timeout: 600000, stdio: "pipe" }
                     );
-                } catch {
-                    // If mixing fails, just use video without audio
-                    fs.copyFileSync(sceneVideoPath, sceneOutputPath);
+                } catch (mixErr: any) {
+                    console.warn(`[Assembly]   Audio mixing failed: ${mixErr.message}`);
+                    // Fallback: just narration if multi-track fails
+                    if (hasNarration) {
+                        try {
+                            execSync(
+                                `ffmpeg -i "${sceneVideoPath}" -i "${narrationPath}" ` +
+                                `-map 0:v -map 1:a -c:v copy -c:a aac -b:a 192k ` +
+                                `-shortest "${sceneOutputPath}" -y`,
+                                { timeout: 600000, stdio: "pipe" }
+                            );
+                        } catch {
+                            fs.copyFileSync(sceneVideoPath, sceneOutputPath);
+                        }
+                    } else {
+                        fs.copyFileSync(sceneVideoPath, sceneOutputPath);
+                    }
                 }
             } else {
                 fs.copyFileSync(sceneVideoPath, sceneOutputPath);
@@ -442,14 +543,18 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
 }
 
 /**
- * Check if a documentary is ready for assembly
- * All shots must have clips generated
+ * Check if a documentary is ready for assembly.
+ *
+ * Two valid states:
+ *   1. All shots have clips generated (normal mode - RunPod was used)
+ *   2. ZERO shots but scenes have narration text (narration-only mode - stock footage)
  */
 export async function isReadyForAssembly(documentaryId: string): Promise<{
     ready: boolean;
     totalShots: number;
     completedShots: number;
     missingShots: number;
+    narrationOnly: boolean;
 }> {
     const doc = await prisma.documentary.findUnique({
         where: { id: documentaryId },
@@ -462,17 +567,25 @@ export async function isReadyForAssembly(documentaryId: string): Promise<{
         },
     });
 
-    if (!doc) return { ready: false, totalShots: 0, completedShots: 0, missingShots: 0 };
+    if (!doc) return { ready: false, totalShots: 0, completedShots: 0, missingShots: 0, narrationOnly: false };
 
     const allShots = doc.scenes.flatMap((s) => s.shots);
     const totalShots = allShots.length;
     const completedShots = allShots.filter((s) => s.clipPath).length;
     const missingShots = totalShots - completedShots;
 
+    // Narration-only mode: zero shots, but at least one scene has narration text
+    const hasNarration = doc.scenes.some((s) => s.narrationText && s.narrationText.trim().length > 0);
+    const narrationOnly = totalShots === 0 && hasNarration;
+
+    // Ready if: (a) all shots have clips, OR (b) narration-only mode with text
+    const ready = (totalShots > 0 && missingShots === 0) || narrationOnly;
+
     return {
-        ready: totalShots > 0 && missingShots === 0,
+        ready,
         totalShots,
         completedShots,
         missingShots,
+        narrationOnly,
     };
 }

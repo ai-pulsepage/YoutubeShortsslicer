@@ -6,28 +6,38 @@ import {
     Play,
     Pause,
     Volume2,
-    RefreshCw,
     Loader2,
+    Sparkles,
+    Upload,
+    ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// ─── Types ───────────────────────────────────────────────
+
+type TtsEngine = "elevenlabs" | "xtts";
+type NarratorStyle = "sleep" | "documentary" | "dramatic" | "energetic" | "conversational";
 
 type Voice = {
     id: string;
     name: string;
     description: string;
-    accent: string;
-    gender: string;
+    category?: string;
+    previewUrl?: string;
+    engine: TtsEngine;
 };
 
-const KOKORO_VOICES: Voice[] = [
-    { id: "af_bella", name: "Bella", description: "Warm, professional", accent: "American", gender: "Female" },
-    { id: "af_sarah", name: "Sarah", description: "Clear, authoritative", accent: "American", gender: "Female" },
-    { id: "am_adam", name: "Adam", description: "Deep, conversational", accent: "American", gender: "Male" },
-    { id: "am_michael", name: "Michael", description: "Energetic, narrator", accent: "American", gender: "Male" },
-    { id: "bf_emma", name: "Emma", description: "Elegant, storyteller", accent: "British", gender: "Female" },
-    { id: "bm_george", name: "George", description: "Attenborough-style", accent: "British", gender: "Male" },
-    { id: "bm_lewis", name: "Lewis", description: "Documentary narrator", accent: "British", gender: "Male" },
-    { id: "af_nicole", name: "Nicole", description: "Friendly, upbeat", accent: "American", gender: "Female" },
+const ENGINES: { id: TtsEngine; name: string; desc: string; icon: string }[] = [
+    { id: "elevenlabs", name: "ElevenLabs", desc: "Premium cloud voices, rich & natural", icon: "✨" },
+    { id: "xtts", name: "XTTS v2", desc: "Self-hosted, voice cloning from samples", icon: "🎙️" },
+];
+
+const NARRATOR_STYLES: { id: NarratorStyle; name: string; desc: string; speed: string }[] = [
+    { id: "sleep", name: "Sleep / Calm", desc: "Long pauses, very slow, contemplative", speed: "0.85×" },
+    { id: "documentary", name: "Documentary", desc: "Natural pauses, measured pace", speed: "0.92×" },
+    { id: "dramatic", name: "Dramatic", desc: "Shorter pauses, vocal intensity", speed: "0.95×" },
+    { id: "energetic", name: "Energetic", desc: "Fast pace, YouTube-style", speed: "1.1×" },
+    { id: "conversational", name: "Conversational", desc: "Natural speech rhythm", speed: "1.0×" },
 ];
 
 const MIX_MODES = [
@@ -37,32 +47,86 @@ const MIX_MODES = [
 ];
 
 export default function VoiceoverPage() {
-    const [selectedVoice, setSelectedVoice] = useState<string>("bm_george");
+    const [engine, setEngine] = useState<TtsEngine>("elevenlabs");
+    const [narratorStyle, setNarratorStyle] = useState<NarratorStyle>("sleep");
+    const [selectedVoice, setSelectedVoice] = useState<string>("");
+    const [voices, setVoices] = useState<Voice[]>([]);
+    const [loadingVoices, setLoadingVoices] = useState(false);
     const [mixMode, setMixMode] = useState("mix");
     const [balance, setBalance] = useState(70);
-
-    // Load saved settings on mount (SSR-safe)
-    useEffect(() => {
-        const v = localStorage.getItem("vo_voice");
-        const m = localStorage.getItem("vo_mixMode");
-        const b = localStorage.getItem("vo_balance");
-        if (v) setSelectedVoice(v);
-        if (m) setMixMode(m);
-        if (b) setBalance(parseInt(b));
-    }, []);
     const [generating, setGenerating] = useState(false);
     const [playing, setPlaying] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [previewText, setPreviewText] = useState(
-        "In the heart of the Amazon, a remarkable creature emerges from the shadows."
+        "In the heart of the Amazon, a remarkable creature emerges from the shadows. Its eyes gleam in the filtered sunlight.\n\nThis is the golden poison frog. Small enough to sit on a fingertip, yet deadly enough to kill ten grown men."
     );
     const audioRef = useRef<HTMLAudioElement>(null);
     const [audioUrl, setAudioUrl] = useState<string | null>(null);
 
-    // Persist settings to localStorage for editor to read
-    const updateVoice = (v: string) => { setSelectedVoice(v); localStorage.setItem("vo_voice", v); };
-    const updateMix = (m: string) => { setMixMode(m); localStorage.setItem("vo_mixMode", m); };
-    const updateBalance = (b: number) => { setBalance(b); localStorage.setItem("vo_balance", String(b)); };
+    // Load saved settings on mount
+    useEffect(() => {
+        const e = localStorage.getItem("vo_engine") as TtsEngine;
+        const s = localStorage.getItem("vo_style") as NarratorStyle;
+        const v = localStorage.getItem("vo_voice");
+        const m = localStorage.getItem("vo_mixMode");
+        const b = localStorage.getItem("vo_balance");
+        if (e && ["elevenlabs", "xtts"].includes(e)) setEngine(e);
+        if (s) setNarratorStyle(s);
+        if (v) setSelectedVoice(v);
+        if (m) setMixMode(m);
+        if (b) setBalance(parseInt(b));
+    }, []);
+
+    // Load voices when engine changes
+    useEffect(() => {
+        loadVoices(engine);
+    }, [engine]);
+
+    const loadVoices = async (eng: TtsEngine) => {
+        setLoadingVoices(true);
+        setVoices([]);
+        setError(null);
+        try {
+            const res = await fetch(`/api/voiceover/voices?engine=${eng}`);
+            if (!res.ok) throw new Error("Failed to load voices");
+            const data = await res.json();
+            setVoices(data.voices || []);
+            // Auto-select first voice if none selected
+            if (data.voices?.length > 0 && (!selectedVoice || !data.voices.find((v: Voice) => v.id === selectedVoice))) {
+                setSelectedVoice(data.voices[0].id);
+                localStorage.setItem("vo_voice", data.voices[0].id);
+            }
+        } catch (err: any) {
+            setError(`Failed to load ${eng} voices: ${err.message}`);
+        } finally {
+            setLoadingVoices(false);
+        }
+    };
+
+    const updateEngine = (e: TtsEngine) => {
+        setEngine(e);
+        localStorage.setItem("vo_engine", e);
+    };
+
+    const updateStyle = (s: NarratorStyle) => {
+        setNarratorStyle(s);
+        localStorage.setItem("vo_style", s);
+    };
+
+    const updateVoice = (v: string) => {
+        setSelectedVoice(v);
+        localStorage.setItem("vo_voice", v);
+    };
+
+    const updateMix = (m: string) => {
+        setMixMode(m);
+        localStorage.setItem("vo_mixMode", m);
+    };
+
+    const updateBalance = (b: number) => {
+        setBalance(b);
+        localStorage.setItem("vo_balance", String(b));
+    };
 
     const generatePreview = async () => {
         setGenerating(true);
@@ -76,7 +140,9 @@ export default function VoiceoverPage() {
                 body: JSON.stringify({
                     text: previewText,
                     voiceId: selectedVoice,
-                    speed: 1.0,
+                    engine,
+                    narratorStyle,
+                    speed: undefined,
                 }),
             });
 
@@ -89,7 +155,6 @@ export default function VoiceoverPage() {
             const url = URL.createObjectURL(blob);
             setAudioUrl(url);
 
-            // Auto-play
             if (audioRef.current) {
                 audioRef.current.src = url;
                 audioRef.current.play();
@@ -117,60 +182,118 @@ export default function VoiceoverPage() {
             <div>
                 <h1 className="text-2xl font-bold text-white">Voiceover Studio</h1>
                 <p className="text-gray-400 text-sm mt-1">
-                    Add AI-generated narration using Together.ai Kokoro TTS
+                    Professional AI narration with ElevenLabs & XTTS v2
                 </p>
             </div>
 
-            <audio
-                ref={audioRef}
-                onEnded={() => setPlaying(false)}
-                className="hidden"
-            />
+            <audio ref={audioRef} onEnded={() => setPlaying(false)} className="hidden" />
+
+            {/* Engine Selector */}
+            <div className="space-y-2">
+                <h2 className="text-sm font-semibold text-white">TTS Engine</h2>
+                <div className="grid grid-cols-2 gap-3">
+                    {ENGINES.map((eng) => (
+                        <button
+                            key={eng.id}
+                            onClick={() => updateEngine(eng.id)}
+                            className={cn(
+                                "p-4 rounded-xl border text-left transition-all",
+                                engine === eng.id
+                                    ? "bg-violet-500/10 border-violet-500/30 ring-1 ring-violet-500/20"
+                                    : "bg-gray-900/50 border-gray-800 hover:border-gray-700"
+                            )}
+                        >
+                            <div className="flex items-center gap-2 mb-1">
+                                <span className="text-lg">{eng.icon}</span>
+                                <span className="text-sm font-medium text-white">{eng.name}</span>
+                            </div>
+                            <p className="text-xs text-gray-400">{eng.desc}</p>
+                        </button>
+                    ))}
+                </div>
+            </div>
 
             <div className="grid grid-cols-2 gap-6">
-                {/* Voice Selection */}
+                {/* Left Column */}
                 <div className="space-y-4">
-                    <h2 className="text-sm font-semibold text-white">Choose Voice</h2>
-                    <div className="grid grid-cols-2 gap-2">
-                        {KOKORO_VOICES.map((voice) => (
+                    {/* Voice Selection */}
+                    <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+                        Choose Voice
+                        {loadingVoices && <Loader2 className="w-3 h-3 animate-spin text-violet-400" />}
+                    </h2>
+
+                    {voices.length > 0 ? (
+                        <div className="grid grid-cols-2 gap-2 max-h-[280px] overflow-y-auto pr-1">
+                            {voices.map((voice) => (
+                                <button
+                                    key={voice.id}
+                                    onClick={() => updateVoice(voice.id)}
+                                    className={cn(
+                                        "p-3 rounded-xl border text-left transition-all relative group",
+                                        selectedVoice === voice.id
+                                            ? "bg-violet-500/10 border-violet-500/30"
+                                            : "bg-gray-900/50 border-gray-800 hover:border-gray-700"
+                                    )}
+                                >
+                                    <div className="flex items-center justify-between mb-1">
+                                        <span className="text-sm font-medium text-white truncate">{voice.name}</span>
+                                        {voice.previewUrl && (
+                                            <span
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (audioRef.current) {
+                                                        audioRef.current.src = voice.previewUrl!;
+                                                        audioRef.current.play();
+                                                        setPlaying(true);
+                                                    }
+                                                }}
+                                                className="w-5 h-5 rounded-full bg-violet-500/20 hover:bg-violet-500/40 flex items-center justify-center cursor-pointer transition-colors"
+                                            >
+                                                <Play className="w-2.5 h-2.5 text-violet-400" />
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-gray-400 truncate">{voice.description}</p>
+                                    {voice.category && (
+                                        <p className="text-[10px] text-gray-600 mt-0.5">{voice.category}</p>
+                                    )}
+                                </button>
+                            ))}
+                        </div>
+                    ) : !loadingVoices ? (
+                        <div className="text-sm text-gray-500 italic p-4 bg-gray-900/30 rounded-xl border border-gray-800">
+                            No voices available. Check API key configuration.
+                        </div>
+                    ) : null}
+
+                    {/* Narrator Style */}
+                    <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+                        <Sparkles className="w-3.5 h-3.5 text-violet-400" />
+                        Narrator Style
+                    </h2>
+                    <div className="space-y-1.5">
+                        {NARRATOR_STYLES.map((style) => (
                             <button
-                                key={voice.id}
-                                onClick={() => updateVoice(voice.id)}
+                                key={style.id}
+                                onClick={() => updateStyle(style.id)}
                                 className={cn(
-                                    "p-3 rounded-xl border text-left transition-all relative group",
-                                    selectedVoice === voice.id
+                                    "w-full flex items-center justify-between p-2.5 rounded-xl border transition-all",
+                                    narratorStyle === style.id
                                         ? "bg-violet-500/10 border-violet-500/30"
                                         : "bg-gray-900/50 border-gray-800 hover:border-gray-700"
                                 )}
                             >
-                                <div className="flex items-center justify-between mb-1">
-                                    <span className="text-sm font-medium text-white">{voice.name}</span>
-                                    <div className="flex items-center gap-1.5">
-                                        <span className="text-[10px] text-gray-500">{voice.gender}</span>
-                                        <span
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                updateVoice(voice.id);
-                                                // Small delay so state updates before generatePreview reads it
-                                                setTimeout(() => {
-                                                    const btn = document.getElementById("generate-preview-btn");
-                                                    if (btn) btn.click();
-                                                }, 100);
-                                            }}
-                                            className="w-5 h-5 rounded-full bg-violet-500/20 hover:bg-violet-500/40 flex items-center justify-center cursor-pointer transition-colors"
-                                        >
-                                            <Play className="w-2.5 h-2.5 text-violet-400" />
-                                        </span>
-                                    </div>
+                                <div className="text-left">
+                                    <p className="text-sm font-medium text-white">{style.name}</p>
+                                    <p className="text-xs text-gray-500">{style.desc}</p>
                                 </div>
-                                <p className="text-xs text-gray-400">{voice.description}</p>
-                                <p className="text-[10px] text-gray-600 mt-0.5">{voice.accent}</p>
+                                <span className="text-[10px] text-gray-600 font-mono">{style.speed}</span>
                             </button>
                         ))}
                     </div>
                 </div>
 
-                {/* Mix Controls + Preview */}
+                {/* Right Column */}
                 <div className="space-y-4">
                     {/* Mix Mode */}
                     <h2 className="text-sm font-semibold text-white">Mix Mode</h2>
@@ -223,7 +346,8 @@ export default function VoiceoverPage() {
                         <textarea
                             value={previewText}
                             onChange={(e) => setPreviewText(e.target.value)}
-                            rows={3}
+                            rows={4}
+                            placeholder="Enter text to preview narration..."
                             className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 resize-none"
                         />
 
@@ -237,7 +361,7 @@ export default function VoiceoverPage() {
                             <button
                                 id="generate-preview-btn"
                                 onClick={generatePreview}
-                                disabled={generating || !previewText.trim()}
+                                disabled={generating || !previewText.trim() || !selectedVoice}
                                 className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-50 transition-colors"
                             >
                                 {generating ? (
@@ -266,9 +390,10 @@ export default function VoiceoverPage() {
                     {/* Cost Estimate */}
                     <div className="bg-gray-900/30 border border-gray-800/50 rounded-xl p-3">
                         <p className="text-xs text-gray-500">
-                            <strong className="text-gray-400">Cost estimate:</strong>{" "}
-                            ~$0.003/minute via Together.ai Kokoro.
-                            A 45s voiceover costs ~$0.002.
+                            <strong className="text-gray-400">Cost:</strong>{" "}
+                            {engine === "elevenlabs"
+                                ? "~$0.30/1K characters via ElevenLabs API"
+                                : "Free — self-hosted on RunPod (XTTS v2)"}
                         </p>
                     </div>
                 </div>
