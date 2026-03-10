@@ -97,24 +97,18 @@ def get_image_pipeline(model_name: str = "flux"):
     torch.cuda.empty_cache()
     
     if model_name == "chroma":
-        from diffusers import FluxPipeline, FluxTransformer2DModel
-        print("🔄 Loading Chroma transformer...")
-        # Chroma is a fine-tuned transformer on top of FLUX.1-schnell
-        # Load the transformer separately, then plug into the full schnell pipeline
-        transformer = FluxTransformer2DModel.from_pretrained(
-            "lodestones/Chroma",
-            subfolder="transformer",
-            torch_dtype=torch.bfloat16,
-        )
-        print("🔄 Loading base FLUX.1-schnell pipeline...")
+        from diffusers import FluxPipeline
+        print("🔄 Loading FLUX.1-dev base pipeline (for uncensored LoRA)...")
+        # Use FLUX.1-dev as the base (user is HF-authenticated, has access)
+        # Then apply the Flux-Uncensored-V2 LoRA for uncensored content
         pipe = FluxPipeline.from_pretrained(
-            "black-forest-labs/FLUX.1-schnell",
-            transformer=transformer,
+            "black-forest-labs/FLUX.1-dev",
             torch_dtype=torch.bfloat16,
-            token=False,
         )
+        print("🔄 Loading Flux-Uncensored-V2 LoRA...")
+        pipe.load_lora_weights("enhanceaiteam/Flux-Uncensored-V2")
         pipe.enable_model_cpu_offload()
-        print("✅ Chroma loaded (schnell base + Chroma transformer, uncensored)")
+        print("✅ Flux Uncensored loaded (FLUX.1-dev + Uncensored-V2 LoRA)")
         
     elif model_name == "juggernaut":
         from diffusers import StableDiffusionXLPipeline
