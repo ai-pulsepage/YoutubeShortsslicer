@@ -727,10 +727,21 @@ export async function isReadyForAssembly(documentaryId: string): Promise<{
     const hasNarration = doc.scenes.some((s) => s.narrationText && s.narrationText.trim().length > 0);
     const narrationOnly = totalShots === 0 && hasNarration;
 
-    // Chapter illustrations mode: ready when we have assets with images (no clips needed)
     const visualMode = (doc as any).visualMode || "broll_only";
-    const isChapterIllustrations = visualMode === "chapter_illustrations";
-    if (isChapterIllustrations) {
+
+    // B-Roll only mode: ready when we have scenes with narration (stock footage comes from Pexels during assembly)
+    if (visualMode === "broll_only") {
+        return {
+            ready: hasNarration && doc.scenes.length > 0,
+            totalShots: doc.scenes.length,
+            completedShots: doc.scenes.length,
+            missingShots: 0,
+            narrationOnly: true,
+        };
+    }
+
+    // Chapter illustrations mode: ready when we have assets with images (no clips needed)
+    if (visualMode === "chapter_illustrations") {
         const assetsWithImages = doc.assets.filter((a) => a.imagePath).length;
         const totalAssets = doc.assets.length;
         // Ready if at least some assets have images (allow partial for MVP)
@@ -744,7 +755,7 @@ export async function isReadyForAssembly(documentaryId: string): Promise<{
         };
     }
 
-    // Ready if: (a) all shots have clips, OR (b) narration-only mode with text
+    // Default: Ready if (a) all shots have clips, OR (b) narration-only mode with text
     const ready = (totalShots > 0 && missingShots === 0) || narrationOnly;
 
     return {
