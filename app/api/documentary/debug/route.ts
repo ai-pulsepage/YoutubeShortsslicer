@@ -1,9 +1,12 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 /**
- * Temporary diagnostic endpoint to check documentary + asset state.
- * DELETE THIS after debugging.
+ * Temporary diagnostic/repair endpoint.
+ * 
+ * GET  /api/documentary/debug — list all documentaries with assets and jobs
+ * POST /api/documentary/debug — reset a documentary status or clean up failed jobs
+ *   body: { documentaryId, action: "reset-status" | "clean-failed-jobs" }
  */
 export async function GET() {
     const docs = await prisma.documentary.findMany({
@@ -51,4 +54,36 @@ export async function GET() {
     }
 
     return NextResponse.json({ documentaries: results });
+}
+
+export async function POST(req: NextRequest) {
+    const { documentaryId, action } = await req.json();
+
+    if (!documentaryId || !action) {
+        return NextResponse.json({ error: "documentaryId and action required" }, { status: 400 });
+    }
+
+    if (action === "reset-status") {
+        // Reset to SCENES_PLANNED and delete all failed GenJobs
+        await prisma.genJob.deleteMany({
+            where: { documentaryId, status: "FAILED" },
+        });
+        await prisma.genJob.deleteMany({
+            where: { documentaryId, status: "QUEUED" },
+        });
+        await prisma.documentary.update({
+            where: { id: documentaryId },
+            data: { status: "SCENES_PLANNED" as any },
+        });
+        return NextResponse.json({ success: true, status: "SCENES_PLANNED", message: "Reset and cleaned failed jobs" });
+    }
+
+    if (action === "clean-failed-jobs") {
+        const deleted = await prisma.genJob.deleteMany({
+            where: { documentaryId, status: "FAILED" },
+        });
+        return NextResponse.json({ success: true, deleted: deleted.count });
+    }
+
+    return NextResponse.json({ error: "Unknown action" }, { status: 400 });
 }

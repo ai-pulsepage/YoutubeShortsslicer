@@ -113,6 +113,13 @@ async function checkDocumentaryCompletion(documentaryId: string) {
         newStatus = "ASSETS_READY";
     }
 
+    // If ALL ref_image jobs failed (none completed), revert to SCENES_PLANNED so user can retry
+    const allRefImagesFailed = refImageJobs.length > 0 && refImageJobs.every((j) => j.status === "FAILED") && videoJobs.length === 0;
+    if (doc.status === "GENERATING" && allRefImagesFailed) {
+        newStatus = "SCENES_PLANNED";
+        console.log(`[Webhook] All ${refImageJobs.length} image jobs failed — reverting to SCENES_PLANNED`);
+    }
+
     if (newStatus) {
         await prisma.documentary.update({
             where: { id: documentaryId },
