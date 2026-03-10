@@ -415,7 +415,15 @@ function PipelineActions({ doc, onRefresh }: { doc: any; onRefresh: () => void }
 
     const runAction = async (endpoint: string) => {
         setRunning(true);
-        await fetch(`/api/documentary/${doc.id}/${endpoint}`, { method: "POST" });
+        try {
+            const res = await fetch(`/api/documentary/${doc.id}/${endpoint}`, { method: "POST" });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                alert(`Action failed: ${data.error || res.statusText}${data.missingShots ? ` (${data.missingShots} missing)` : ""}`);
+            }
+        } catch (err) {
+            console.error("Action error:", err);
+        }
         setTimeout(onRefresh, 1000);
         setRunning(false);
     };
@@ -460,11 +468,11 @@ function PipelineActions({ doc, onRefresh }: { doc: any; onRefresh: () => void }
                     Assemble Documentary
                 </button>
             )}
-            {(doc.status === "GENERATING" || doc.status === "ASSETS_READY") && (
+            {doc.status === "GENERATING" && !needsAssets && !needsClips && (
                 <button onClick={() => runAction("assemble")} disabled={running}
                     className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-50 transition-colors">
                     {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wrench className="w-4 h-4" />}
-                    Assemble
+                    Force Assemble
                 </button>
             )}
             {doc.status === "FAILED" && needsAssets && (

@@ -57,14 +57,15 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-    const { documentaryId, action } = await req.json();
+    const { documentaryId, action, newStatus } = await req.json();
 
     if (!documentaryId || !action) {
         return NextResponse.json({ error: "documentaryId and action required" }, { status: 400 });
     }
 
     if (action === "reset-status") {
-        // Reset to SCENES_PLANNED and delete all failed GenJobs
+        const targetStatus = newStatus || "SCENES_PLANNED";
+        // Reset to target status, clear errorMsg, and delete all failed/queued GenJobs
         await prisma.genJob.deleteMany({
             where: { documentaryId, status: "FAILED" },
         });
@@ -73,9 +74,9 @@ export async function POST(req: NextRequest) {
         });
         await prisma.documentary.update({
             where: { id: documentaryId },
-            data: { status: "SCENES_PLANNED" as any },
+            data: { status: targetStatus as any, errorMsg: null },
         });
-        return NextResponse.json({ success: true, status: "SCENES_PLANNED", message: "Reset and cleaned failed jobs" });
+        return NextResponse.json({ success: true, status: targetStatus, message: `Reset to ${targetStatus} and cleaned failed jobs` });
     }
 
     if (action === "clean-failed-jobs") {

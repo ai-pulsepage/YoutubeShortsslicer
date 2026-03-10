@@ -586,6 +586,9 @@ export async function isReadyForAssembly(documentaryId: string): Promise<{
                     shots: { select: { id: true, clipPath: true } },
                 },
             },
+            assets: {
+                select: { id: true, imagePath: true },
+            },
         },
     });
 
@@ -599,6 +602,23 @@ export async function isReadyForAssembly(documentaryId: string): Promise<{
     // Narration-only mode: zero shots, but at least one scene has narration text
     const hasNarration = doc.scenes.some((s) => s.narrationText && s.narrationText.trim().length > 0);
     const narrationOnly = totalShots === 0 && hasNarration;
+
+    // Chapter illustrations mode: ready when we have assets with images (no clips needed)
+    const visualMode = (doc as any).visualMode || "broll_only";
+    const isChapterIllustrations = visualMode === "chapter_illustrations";
+    if (isChapterIllustrations) {
+        const assetsWithImages = doc.assets.filter((a) => a.imagePath).length;
+        const totalAssets = doc.assets.length;
+        // Ready if at least some assets have images (allow partial for MVP)
+        const ready = assetsWithImages > 0;
+        return {
+            ready,
+            totalShots: totalAssets,
+            completedShots: assetsWithImages,
+            missingShots: totalAssets - assetsWithImages,
+            narrationOnly: false,
+        };
+    }
 
     // Ready if: (a) all shots have clips, OR (b) narration-only mode with text
     const ready = (totalShots > 0 && missingShots === 0) || narrationOnly;
