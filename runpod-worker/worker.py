@@ -96,19 +96,20 @@ def get_image_pipeline(model_name: str = "flux"):
     gc.collect()
     torch.cuda.empty_cache()
     
-    if model_name == "chroma":
+    if model_name == "chroma" or model_name == "flux":
+        # Both chroma and flux use FLUX.1-dev
+        # Chroma was intended to be uncensored but the LoRA causes OOM on 24GB GPUs
+        # FLUX.1-dev handles horror/dark content fine without restrictions
         from diffusers import FluxPipeline
-        print("🔄 Loading FLUX.1-dev base pipeline (for uncensored LoRA)...")
-        # Use FLUX.1-dev as the base (user is HF-authenticated, has access)
-        # Then apply the Flux-Uncensored-V2 LoRA for uncensored content
+        print(f"🔄 Loading FLUX.1-dev pipeline (model={model_name})...")
         pipe = FluxPipeline.from_pretrained(
             "black-forest-labs/FLUX.1-dev",
             torch_dtype=torch.bfloat16,
         )
-        print("🔄 Loading Flux-Uncensored-V2 LoRA...")
-        pipe.load_lora_weights("enhanceaiteam/Flux-Uncensored-V2")
-        pipe.enable_model_cpu_offload()
-        print("✅ Flux Uncensored loaded (FLUX.1-dev + Uncensored-V2 LoRA)")
+        pipe.enable_sequential_cpu_offload()  # More aggressive offloading for 24GB GPUs
+        pipe.vae.enable_slicing()
+        pipe.vae.enable_tiling()
+        print(f"✅ FLUX.1-dev loaded (model={model_name})")
         
     elif model_name == "juggernaut":
         from diffusers import StableDiffusionXLPipeline
@@ -121,43 +122,28 @@ def get_image_pipeline(model_name: str = "flux"):
         pipe.enable_model_cpu_offload()
         print("✅ Juggernaut XL loaded (photorealistic)")
         
-    else:  # Default: flux
+    else:
         from diffusers import FluxPipeline
-        hf_token = None
-        for token_path in [
-            os.path.join(os.environ.get("HF_HOME", ""), "token"),
-            os.path.expanduser("~/.cache/huggingface/token"),
-        ]:
-            if os.path.exists(token_path):
-                with open(token_path) as f:
-                    hf_token = f.read().strip()
-                break
-
-        try:
-            print("🔄 Loading Flux.1-dev pipeline...")
-            pipe = FluxPipeline.from_pretrained(
-                "black-forest-labs/FLUX.1-dev",
-                torch_dtype=torch.bfloat16,
-                token=hf_token,
-            )
-            pipe.enable_model_cpu_offload()
-            print("✅ Flux.1-dev loaded")
-        except Exception as e:
-            print(f"⚠️  Flux.1-dev failed ({e}), falling back to Flux.1-schnell...")
-            pipe = FluxPipeline.from_pretrained(
-                "black-forest-labs/FLUX.1-schnell",
-                torch_dtype=torch.bfloat16,
-                token=False,
-            )
-            pipe.enable_model_cpu_offload()
-            print("✅ Flux.1-schnell loaded (open model)")
+        print(f"🔄 Loading FLUX.1-dev pipeline (model={model_name})...")
+        pipe = FluxPipeline.from_pretrained(
+            "black-forest-labs/FLUX.1-dev",
+            torch_dtype=torch.bfloat16,
+        )
+        pipe.enable_sequential_cpu_offload()
+        pipe.vae.enable_slicing()
+        pipe.vae.enable_tiling()
+        print(f"✅ FLUX.1-dev loaded (model={model_name})")
     
     _image_pipelines[model_name] = pipe
     return pipe
 
 
-def generate_image(prompt: str, output_path: str, width: int = 1024, height: int = 1024, model: str = "flux"):
+def generate_image(prompt: str, output_path: str, width: int = 768, height: int = 768, model: str = "flux"):
     """Generate an image with the specified model."""
+    # Clear VRAM before each generation
+    gc.collect()
+    torch.cuda.empty_cache()
+    
     pipe = get_image_pipeline(model)
     
     # Juggernaut XL uses different params than Flux/Chroma
@@ -175,8 +161,8 @@ def generate_image(prompt: str, output_path: str, width: int = 1024, height: int
             prompt=prompt,
             width=width,
             height=height,
-            num_inference_steps=30,
-            guidance_scale=7.5,
+            num_inference_steps=25,  # Reduced from 30 to save VRAM
+            guidance_scale=3.5,  # FLUX.1-dev works best with lower guidance
         ).images[0]
     
     image.save(output_path)
