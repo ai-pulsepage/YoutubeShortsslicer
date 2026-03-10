@@ -245,10 +245,12 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
                     const narratorStyle = (doc.narratorStyle || "sleep") as NarratorStyle;
 
                     // Resolve voice ID — reject legacy Kokoro IDs (bf_, bm_)
-                    let resolvedVoiceId = doc.ttsVoiceId || doc.voiceId || "Rachel";
+                    // ElevenLabs "Rachel" = 21m00Tcm4TlvDq8ikWAM
+                    const DEFAULT_VOICE = "21m00Tcm4TlvDq8ikWAM";
+                    let resolvedVoiceId = doc.ttsVoiceId || doc.voiceId || DEFAULT_VOICE;
                     if (ttsEngine === "elevenlabs" && /^(bf_|bm_)/.test(resolvedVoiceId)) {
-                        console.warn(`[Assembly]   Legacy Kokoro voice "${resolvedVoiceId}" detected, using "Rachel" instead`);
-                        resolvedVoiceId = "Rachel";
+                        console.warn(`[Assembly]   Legacy Kokoro voice "${resolvedVoiceId}" detected, using default ElevenLabs voice`);
+                        resolvedVoiceId = DEFAULT_VOICE;
                     }
 
                     const audioBuffer = await generateVoiceover({
