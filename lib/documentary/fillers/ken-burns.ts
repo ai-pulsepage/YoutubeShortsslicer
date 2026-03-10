@@ -50,26 +50,26 @@ export async function generateKenBurnsFiller(
     for (let i = 0; i < usedImages.length; i++) {
         const imgPath = usedImages[i];
         const segPath = path.join(dir, `kb-segment-${i}.mp4`);
-        const frames = Math.ceil(segmentDuration * 24);
+        const frames = Math.ceil(segmentDuration * 30);
 
         // Alternate between slow zoom-in and slow zoom-out with gentle pan
-        // Zoom rate 0.001 = very slow, cinematic (was 0.002 = too fast/jittery)
+        // Higher FPS (30) + slower zoom rate = buttery smooth Ken Burns
         let zoomEffect: string;
         if (i % 3 === 0) {
             // Slow zoom in, centered
-            zoomEffect = `zoompan=z='min(zoom+0.001,1.25)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:fps=24:s=${width}x${height}`;
+            zoomEffect = `zoompan=z='min(zoom+0.0008,1.20)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:fps=30:s=${width}x${height}`;
         } else if (i % 3 === 1) {
-            // Slow zoom out from 1.25x
-            zoomEffect = `zoompan=z='if(eq(on,1),1.25,max(zoom-0.001,1))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:fps=24:s=${width}x${height}`;
+            // Slow zoom out from 1.20x
+            zoomEffect = `zoompan=z='if(eq(on,1),1.20,max(zoom-0.0008,1))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:fps=30:s=${width}x${height}`;
         } else {
-            // Slow pan left-to-right with slight zoom
-            zoomEffect = `zoompan=z='min(zoom+0.0005,1.15)':x='if(eq(on,1),0,min(x+1,iw-iw/zoom))':y='ih/2-(ih/zoom/2)':d=${frames}:fps=24:s=${width}x${height}`;
+            // Slow pan left-to-right with very slight zoom
+            zoomEffect = `zoompan=z='min(zoom+0.0003,1.10)':x='if(eq(on,1),0,min(x+0.5,iw-iw/zoom))':y='ih/2-(ih/zoom/2)':d=${frames}:fps=30:s=${width}x${height}`;
         }
 
         try {
             execSync(
                 `ffmpeg -loop 1 -i "${imgPath}" -vf "${zoomEffect}" ` +
-                `-t ${segmentDuration} -c:v libx264 -preset fast -pix_fmt yuv420p "${segPath}" -y`,
+                `-t ${segmentDuration} -c:v libx264 -preset fast -pix_fmt yuv420p -r 30 "${segPath}" -y`,
                 { timeout: 120000, stdio: "pipe" }
             );
             segments.push(segPath);

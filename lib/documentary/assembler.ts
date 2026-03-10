@@ -39,13 +39,13 @@ const TEMP_DIR = path.join(os.tmpdir(), "documentary-assembly");
 function cleanNarrationText(text: string): string {
     return text
         .replace(/\[\d{1,2}:\d{2}(?::\d{2})?\]/g, "")                      // [0:00], [1:30]
-        .replace(/\[VISUAL:[^\]]*\]/gi, ' <break time="2.0s" /> ')          // [VISUAL: ...] → 2s pause
+        .replace(/\[VISUAL:[^\]]*\]/gi, ' <break time="1.0s" /> ')          // [VISUAL: ...] → 1s pause
         .replace(/\[SCENE[^\]]*\]/gi, "")                                  // [SCENE: ...]
         .replace(/\[MUSIC:[^\]]*\]/gi, "")                                 // [MUSIC: ...]
         .replace(/\[SFX:[^\]]*\]/gi, "")                                   // [SFX: ...]
         .replace(/\[NOTE:[^\]]*\]/gi, "")                                  // [NOTE: ...]
-        .replace(/\[CUT TO[^\]]*\]/gi, ' <break time="1.5s" /> ')          // [CUT TO ...] → 1.5s pause
-        .replace(/\[FADE[^\]]*\]/gi, ' <break time="1.5s" /> ')            // [FADE ...] → 1.5s pause
+        .replace(/\[CUT TO[^\]]*\]/gi, ' <break time="0.8s" /> ')          // [CUT TO ...] → 0.8s pause
+        .replace(/\[FADE[^\]]*\]/gi, ' <break time="0.8s" /> ')            // [FADE ...] → 0.8s pause
         .replace(/\n{3,}/g, "\n\n")                                        // collapse triple+ newlines
         .replace(/^\s+|\s+$/gm, "")                                       // trim each line
         .trim();
@@ -442,7 +442,7 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
                             scene.title || `Scene ${scene.sceneIndex + 1}`,
                             sceneMood,
                         ),
-                        120_000,
+                        180_000,
                         "Filler generation"
                     );
                 } catch (fillerErr: any) {
