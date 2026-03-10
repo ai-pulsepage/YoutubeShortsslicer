@@ -475,7 +475,7 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
                     const normPath = path.join(sceneDir, `norm-${i}.mp4`);
                     execSync(
                         `ffmpeg -i "${videoParts[i]}" -c:v libx264 -preset fast -crf 22 ` +
-                        `-vf "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:black,fps=24" ` +
+                        `-vf "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:black,fps=30" ` +
                         `-pix_fmt yuv420p -an "${normPath}" -y`,
                         { timeout: 600000, stdio: "pipe" }
                     );
@@ -595,7 +595,7 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
         if (assembledScenePaths.length > 1) {
             try {
                 execSync(
-                    `ffmpeg -f lavfi -i color=c=black:s=1280x720:r=24:d=3 ` +
+                    `ffmpeg -f lavfi -i color=c=black:s=1280x720:r=30:d=3 ` +
                     `-f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 ` +
                     `-t 3 -c:v libx264 -preset fast -pix_fmt yuv420p -c:a aac -b:a 192k ` +
                     `"${blackGapPath}" -y`,
@@ -623,7 +623,7 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
 
             execSync(
                 `ffmpeg -f concat -safe 0 -i "${finalConcatPath}" ` +
-                `-c:v libx264 -preset fast -crf 22 -c:a aac -b:a 192k ` +
+                `-c:v libx264 -preset fast -crf 22 -r 30 -c:a aac -b:a 192k ` +
                 `-movflags +faststart "${finalOutputPath}" -y`,
                 { timeout: 1800000 }
             );
