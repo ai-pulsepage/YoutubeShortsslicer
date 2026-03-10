@@ -322,16 +322,19 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
                 shotPaths.push(shotFile);
             }
 
-            if (shotPaths.length === 0 && narrationDuration === 0) {
+            if (shotPaths.length === 0 && narrationDuration === 0 && visualMode !== "chapter_illustrations") {
                 console.warn(`[Assembly]   No clips or narration for scene ${scene.sceneIndex}, skipping`);
                 continue;
             }
 
             // Step 3: Calculate filler needed
             // In narration-only mode (zero shots), filler fills the ENTIRE narration duration
+            // In chapter_illustrations mode, use narration duration or a minimum of 30s for filler
             const isNarrationOnly = shotPaths.length === 0 && narrationDuration > 0;
-            const fillerDuration = Math.max(0, narrationDuration - totalClipDuration);
-            console.log(`[Assembly]   ${isNarrationOnly ? "[Narration-Only] " : ""}Clips: ${totalClipDuration.toFixed(1)}s | Narration: ${narrationDuration.toFixed(1)}s | Filler needed: ${fillerDuration.toFixed(1)}s`);
+            const isChapterMode = visualMode === "chapter_illustrations" && shotPaths.length === 0;
+            const minFillerDuration = isChapterMode ? Math.max(narrationDuration, 30) : 0;
+            const fillerDuration = Math.max(minFillerDuration, narrationDuration - totalClipDuration);
+            console.log(`[Assembly]   ${isNarrationOnly ? "[Narration-Only] " : ""}${isChapterMode ? "[Chapter-Illustrations] " : ""}Clips: ${totalClipDuration.toFixed(1)}s | Narration: ${narrationDuration.toFixed(1)}s | Filler needed: ${fillerDuration.toFixed(1)}s`);
 
             // Step 4: Generate filler if needed
             let fillerPath: string | null = null;
