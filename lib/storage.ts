@@ -3,6 +3,8 @@ import {
     PutObjectCommand,
     GetObjectCommand,
     DeleteObjectCommand,
+    DeleteObjectsCommand,
+    ListObjectsV2Command,
 } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import { Readable } from "stream";
@@ -171,4 +173,96 @@ export function generateShortR2Key(
     segmentId: string
 ): string {
     return `shorts/${userId}/${videoId}/${segmentId}.mp4`;
+}
+
+/**
+ * Batch delete multiple R2 objects (max 1000 per request)
+ */
+export async function deleteMultipleFromR2(keys: string[]): Promise<number> {
+    if (keys.length === 0) return 0;
+
+    let deleted = 0;
+    // S3 DeleteObjects supports max 1000 keys per request
+    for (let i = 0; i < keys.length; i += 1000) {
+        const batch = keys.slice(i, i + 1000);
+        await s3.send(
+            new DeleteObjectsCommand({
+                Bucket: BUCKET,
+                Delete: {
+                    Objects: batch.map((key) => ({ Key: key })),
+                    Quiet: true,
+                },
+            })
+        );
+        deleted += batch.length;
+    }
+    return deleted;
+}
+
+/**
+ * List R2 objects under a prefix
+ */
+export async function listR2Objects(prefix: string): Promise<{ key: string; size: number; lastModified: Date }[]> {
+    const objects: { key: string; size: number; lastModified: Date }[] = [];
+    let continuationToken: string | undefined;
+
+    do {
+        const response = await s3.send(
+            new ListObjectsV2Command({
+                Bucket: BUCKET,
+                Prefix: prefix,
+                ContinuationToken: continuationToken,
+                MaxKeys: 1000,
+            })
+        );
+
+        for (const obj of response.Contents || []) {
+            if (obj.Key) {
+                objects.push({
+                    key: obj.Key,
+                    size: obj.Size || 0,
+                    lastModified: obj.LastModified || new Date(),
+                });
+            }
+        }
+
+        continuationToken = response.NextContinuationToken;
+    } while (continuationToken);
+
+    return objects;
+}
+
+/**
+ * Get R2 storage stats for documentary assets
+ */
+export async function getR2StorageStats(): Promise<{
+    totalObjects: number;
+    totalSizeBytes: number;
+    totalSizeMB: string;
+    prefixes: Record<string, { count: number; sizeMB: string }>;
+}> {
+    const objects = await listR2Objects("documentaries/");
+    const totalSizeBytes = objects.reduce((sum, o) => sum + o.size, 0);
+
+    // Group by sub-prefix (assets vs clips vs other)
+    const prefixMap: Record<string, { count: number; sizeBytes: number }> = {};
+    for (const obj of objects) {
+        const parts = obj.key.split("/");
+        const prefix = parts.length >= 2 ? `${parts[0]}/${parts[1]}` : parts[0];
+        if (!prefixMap[prefix]) prefixMap[prefix] = { count: 0, sizeBytes: 0 };
+        prefixMap[prefix].count++;
+        prefixMap[prefix].sizeBytes += obj.size;
+    }
+
+    const prefixes: Record<string, { count: number; sizeMB: string }> = {};
+    for (const [p, data] of Object.entries(prefixMap)) {
+        prefixes[p] = { count: data.count, sizeMB: (data.sizeBytes / (1024 * 1024)).toFixed(2) };
+    }
+
+    return {
+        totalObjects: objects.length,
+        totalSizeBytes,
+        totalSizeMB: (totalSizeBytes / (1024 * 1024)).toFixed(2),
+        prefixes,
+    };
 }

@@ -166,8 +166,8 @@ def generate_image(prompt: str, output_path: str, width: int = 768, height: int 
             guidance_scale=3.5,  # FLUX.1-dev works best with lower guidance
         ).images[0]
     
-    image.save(output_path)
-    print(f"  🖼️  Image generated ({model}): {output_path}")
+    image.save(output_path, format="WEBP", quality=90)
+    print(f"  🖼️  Image generated ({model}, WebP): {output_path}")
 
 
 # ─── Wan2.1 Video Generation ──────────────────────────
@@ -253,12 +253,12 @@ def process_job(job: dict, r: redis.Redis):
             # Map job types: ref_image and image both generate images
             if job_type in ("image", "ref_image"):
                 # Generate reference image with selected model
-                output_file = os.path.join(tmpdir, f"{job_id}.png")
+                output_file = os.path.join(tmpdir, f"{job_id}.webp")
                 generate_image(prompt, output_file, model=image_model)
 
                 # Upload to R2
-                r2_key = f"documentaries/assets/{job_id}.png"
-                upload_to_r2(output_file, r2_key, "image/png")
+                r2_key = f"documentaries/assets/{job_id}.webp"
+                upload_to_r2(output_file, r2_key, "image/webp")
 
                 # Publish result
                 result = {

@@ -117,63 +117,50 @@ function buildAssetPrompt(
     subStyle: string,
     imageStyleModifiers: string
 ): string {
-    // Combine genre + substyle for a style label
-    const styleLabel = `${genre} ${subStyle}`.replace(/_/g, " ");
+    const desc = asset.description || "";
 
     switch (asset.type) {
         case "CHARACTER":
             return [
-                `Portrait reference image of ${asset.label}.`,
-                asset.description || "",
-                asset.attire ? `Wearing: ${asset.attire}.` : "",
-                `Visual style: ${imageStyleModifiers}`,
-                `Genre: ${styleLabel}. Full face visible, three-quarter view, centered composition.`,
-            ]
-                .filter(Boolean)
-                .join(" ");
+                `Portrait of ${asset.label}.`,
+                desc,
+                asset.attire ? `Wearing ${asset.attire}.` : "",
+                imageStyleModifiers,
+                "Three-quarter view, centered.",
+            ].filter(Boolean).join(" ");
 
         case "PROP":
             return [
-                `Product/object reference image: ${asset.label}.`,
-                asset.description || "",
-                `Visual style: ${imageStyleModifiers}`,
-                `Genre: ${styleLabel}. Centered, detailed, sharp focus.`,
-            ]
-                .filter(Boolean)
-                .join(" ");
+                `${asset.label}.`,
+                desc,
+                imageStyleModifiers,
+                "Centered, detailed, sharp focus.",
+            ].filter(Boolean).join(" ");
 
         case "CONCEPT":
             return [
-                `Abstract artistic visualization of: ${asset.label}.`,
-                asset.description || "",
-                `Visual style: ${imageStyleModifiers}`,
-                `Genre: ${styleLabel}. Visually striking, rich detail, cinematic quality.`,
-            ]
-                .filter(Boolean)
-                .join(" ");
+                `Abstract visualization: ${asset.label}.`,
+                desc,
+                imageStyleModifiers,
+            ].filter(Boolean).join(" ");
 
         case "ENVIRONMENT":
             return [
-                `Wide establishing shot of: ${asset.label}.`,
-                asset.description || "",
-                `Visual style: ${imageStyleModifiers}`,
-                `Genre: ${styleLabel}. Cinematic composition, atmospheric lighting, depth.`,
-            ]
-                .filter(Boolean)
-                .join(" ");
+                `Wide shot: ${asset.label}.`,
+                desc,
+                imageStyleModifiers,
+                "Cinematic, atmospheric.",
+            ].filter(Boolean).join(" ");
 
         case "FILLER":
             return [
-                `Abstract art for video transition.`,
-                asset.description || "Flowing particles, soft colors, dark background.",
-                `Visual style: ${imageStyleModifiers}`,
-                `Seamless loop texture.`,
-            ]
-                .filter(Boolean)
-                .join(" ");
+                `Abstract transition art.`,
+                desc || "Flowing particles, dark background.",
+                imageStyleModifiers,
+            ].filter(Boolean).join(" ");
 
         default:
-            return `${asset.label}: ${asset.description || ""}. Visual style: ${imageStyleModifiers}. Genre: ${styleLabel}.`;
+            return `${asset.label}. ${desc} ${imageStyleModifiers}`.trim();
     }
 }
 

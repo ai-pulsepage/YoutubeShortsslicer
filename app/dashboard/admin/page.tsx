@@ -14,6 +14,7 @@ import {
     RefreshCw,
     Shield,
     Trash2,
+    HardDrive,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +22,7 @@ const TABS = [
     { id: "keys", label: "API Keys", icon: Key },
     { id: "users", label: "Users", icon: Users },
     { id: "system", label: "System", icon: Server },
+    { id: "storage", label: "Storage", icon: HardDrive },
     { id: "stats", label: "Stats", icon: BarChart3 },
 ];
 
@@ -235,6 +237,9 @@ export default function AdminPage() {
                     <QueueManager />
                 </div>
             )}
+
+            {/* Storage Tab */}
+            {activeTab === "storage" && <StorageManager />}
 
             {/* Stats Tab */}
             {activeTab === "stats" && (
@@ -452,6 +457,121 @@ function UserManager() {
                         </div>
                     </div>
                 ))}
+            </div>
+        </div>
+    );
+}
+
+type StorageStats = {
+    totalObjects: number;
+    totalSizeMB: string;
+    prefixes: Record<string, { count: number; sizeMB: string }>;
+};
+
+function StorageManager() {
+    const [stats, setStats] = useState<StorageStats | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [cleaning, setCleaning] = useState(false);
+    const [cleanResult, setCleanResult] = useState<string | null>(null);
+
+    const fetchStats = () => {
+        setLoading(true);
+        fetch("/api/admin/storage")
+            .then((r) => r.json())
+            .then(setStats)
+            .catch(console.error)
+            .finally(() => setLoading(false));
+    };
+
+    useEffect(() => { fetchStats(); }, []);
+
+    const cleanOrphans = async () => {
+        setCleaning(true);
+        setCleanResult(null);
+        try {
+            const res = await fetch("/api/admin/storage", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "clean-orphans" }),
+            });
+            const data = await res.json();
+            setCleanResult(data.message || "Done");
+            fetchStats(); // Refresh stats
+        } catch (err) {
+            setCleanResult("Cleanup failed");
+        } finally {
+            setCleaning(false);
+        }
+    };
+
+    return (
+        <div className="space-y-4">
+            <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-5">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-semibold text-white">R2 Storage — Documentary Assets</h3>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={cleanOrphans}
+                            disabled={cleaning}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-red-500/15 text-red-400 hover:bg-red-500/25 transition-colors disabled:opacity-50"
+                        >
+                            <Trash2 className="w-3 h-3" />
+                            {cleaning ? "Cleaning..." : "Clean Orphans"}
+                        </button>
+                        <button
+                            onClick={fetchStats}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-800 text-gray-300 hover:text-white transition-colors"
+                        >
+                            <RefreshCw className={cn("w-3 h-3", loading && "animate-spin")} />
+                            Refresh
+                        </button>
+                    </div>
+                </div>
+
+                {cleanResult && (
+                    <div className="mb-3 p-2 rounded-lg bg-green-500/10 border border-green-500/20 text-xs text-green-400">
+                        {cleanResult}
+                    </div>
+                )}
+
+                {loading ? (
+                    <div className="flex items-center justify-center py-6">
+                        <RefreshCw className="w-4 h-4 text-gray-500 animate-spin" />
+                        <span className="ml-2 text-sm text-gray-500">Loading storage stats...</span>
+                    </div>
+                ) : stats ? (
+                    <div className="space-y-4">
+                        {/* Summary */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-gray-800/50 rounded-lg p-3">
+                                <p className="text-xs text-gray-500">Total Objects</p>
+                                <p className="text-lg font-bold text-white">{stats.totalObjects}</p>
+                            </div>
+                            <div className="bg-gray-800/50 rounded-lg p-3">
+                                <p className="text-xs text-gray-500">Total Size</p>
+                                <p className="text-lg font-bold text-white">{stats.totalSizeMB} MB</p>
+                            </div>
+                        </div>
+
+                        {/* Prefix breakdown */}
+                        <div>
+                            <p className="text-xs text-gray-500 mb-2">Breakdown by Type</p>
+                            <div className="space-y-2">
+                                {Object.entries(stats.prefixes).map(([prefix, data]) => (
+                                    <div key={prefix} className="flex items-center justify-between py-2 border-b border-gray-800 last:border-0">
+                                        <span className="text-sm text-gray-300 font-mono">{prefix}</span>
+                                        <div className="flex gap-3">
+                                            <span className="text-xs text-gray-400">{data.count} files</span>
+                                            <span className="text-xs text-white font-medium">{data.sizeMB} MB</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <p className="text-sm text-gray-500">Unable to load storage stats</p>
+                )}
             </div>
         </div>
     );

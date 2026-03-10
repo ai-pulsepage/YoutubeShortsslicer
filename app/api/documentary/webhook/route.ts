@@ -113,11 +113,11 @@ async function checkDocumentaryCompletion(documentaryId: string) {
         newStatus = "ASSETS_READY";
     }
 
-    // If ALL ref_image jobs failed (none completed), revert to SCENES_PLANNED so user can retry
+    // If ALL ref_image jobs failed (none completed), set to FAILED so user sees retry options
     const allRefImagesFailed = refImageJobs.length > 0 && refImageJobs.every((j) => j.status === "FAILED") && videoJobs.length === 0;
     if (doc.status === "GENERATING" && allRefImagesFailed) {
-        newStatus = "SCENES_PLANNED";
-        console.log(`[Webhook] All ${refImageJobs.length} image jobs failed — reverting to SCENES_PLANNED`);
+        newStatus = "FAILED";
+        console.log(`[Webhook] All ${refImageJobs.length} image jobs failed — setting status to FAILED`);
     }
 
     if (newStatus) {
