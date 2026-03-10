@@ -98,13 +98,13 @@ def get_image_pipeline(model_name: str = "flux"):
     
     if model_name == "chroma":
         from diffusers import FluxPipeline
-        print("🔄 Loading Chroma FP16 pipeline (uncensored)...")
+        print("🔄 Loading Chroma pipeline (uncensored)...")
         pipe = FluxPipeline.from_pretrained(
-            "lodestone-horizon/chroma-unlocked-fp16",
+            "lodestones/Chroma",
             torch_dtype=torch.bfloat16,
         )
         pipe.enable_model_cpu_offload()
-        print("✅ Chroma FP16 loaded (Apache 2.0, uncensored)")
+        print("✅ Chroma loaded (Apache 2.0, uncensored)")
         
     elif model_name == "juggernaut":
         from diffusers import StableDiffusionXLPipeline
