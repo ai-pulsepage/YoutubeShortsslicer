@@ -773,6 +773,8 @@ function ShotMatrixTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) 
 function AssetsTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
     const [modalImage, setModalImage] = useState<string | null>(null);
     const [regeneratingIds, setRegeneratingIds] = useState<Set<string>>(new Set());
+    const r2Base = process.env.NEXT_PUBLIC_R2_PUBLIC_URL || "https://pub-1dd40b8f57a8493ebc23552a93ea62bd.r2.dev";
+    const r2Url = (path: string | null) => path ? (path.startsWith("http") ? path : `${r2Base}/${path}`) : "";
 
     if (!doc.assets || doc.assets.length === 0) {
         return (
@@ -812,9 +814,9 @@ function AssetsTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
                             {(assets as any[]).map((asset: any) => (
                                 <div key={asset.id} className="bg-gray-900/50 border border-gray-800 rounded-xl overflow-hidden hover:border-gray-700 transition-colors group">
                                     <div className="aspect-square bg-gray-800 relative cursor-pointer"
-                                        onClick={() => asset.imagePath && setModalImage(asset.imagePath)}>
+                                        onClick={() => asset.imagePath && setModalImage(r2Url(asset.imagePath))}>
                                         {asset.imagePath && !regeneratingIds.has(asset.id) ? (
-                                            <img src={asset.imagePath} alt={asset.label} className="w-full h-full object-cover" />
+                                            <img src={r2Url(asset.imagePath)} alt={asset.label} className="w-full h-full object-cover" />
                                         ) : (
                                             <div className="w-full h-full flex items-center justify-center">
                                                 <Loader2 className="w-6 h-6 text-gray-600 animate-spin" />
