@@ -71,6 +71,16 @@ export async function POST(
         );
     }
 
+    // Clean up old failed/completed GenJobs on retry from FAILED status
+    if (documentary.status === "FAILED") {
+        await prisma.genJob.deleteMany({
+            where: {
+                documentaryId: id,
+                status: { in: ["FAILED", "COMPLETED"] },
+            },
+        });
+    }
+
     // Set status immediately to prevent double-click race condition
     await prisma.documentary.update({
         where: { id },

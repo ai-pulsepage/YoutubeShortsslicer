@@ -467,10 +467,17 @@ function PipelineActions({ doc, onRefresh }: { doc: any; onRefresh: () => void }
                     Assemble
                 </button>
             )}
+            {doc.status === "FAILED" && needsAssets && (
+                <button onClick={() => runAction("generate-assets")} disabled={running}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50 transition-colors">
+                    {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                    Retry Images
+                </button>
+            )}
             {doc.status === "FAILED" && (
                 <button onClick={() => runAction("generate-story")} disabled={running}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-red-600 hover:bg-red-500 text-white disabled:opacity-50 transition-colors">
-                    {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium bg-gray-700 hover:bg-gray-600 text-gray-300 disabled:opacity-50 transition-colors">
+                    {running ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
                     Retry Story
                 </button>
             )}
