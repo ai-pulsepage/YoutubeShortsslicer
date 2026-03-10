@@ -51,6 +51,19 @@ function cleanNarrationText(text: string): string {
 }
 
 /**
+ * Run a promise with a timeout — rejects with a clear error if the promise takes too long.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms);
+        promise.then(
+            (val) => { clearTimeout(timer); resolve(val); },
+            (err) => { clearTimeout(timer); reject(err); }
+        );
+    });
+}
+
+/**
  * Get narration audio duration in seconds via ffprobe.
  */
 function getAudioDuration(audioPath: string): number {
@@ -271,12 +284,16 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
                         resolvedVoiceId = DEFAULT_VOICE;
                     }
 
-                    const audioBuffer = await generateVoiceover({
-                        text: cleanNarrationText(scene.narrationText),
-                        engine: ttsEngine,
-                        voiceId: resolvedVoiceId,
-                        narratorStyle,
-                    });
+                    const audioBuffer = await withTimeout(
+                        generateVoiceover({
+                            text: cleanNarrationText(scene.narrationText),
+                            engine: ttsEngine,
+                            voiceId: resolvedVoiceId,
+                            narratorStyle,
+                        }),
+                        30_000,
+                        "TTS narration"
+                    );
 
                     narrationPath = path.join(sceneDir, "narration.wav");
                     fs.writeFileSync(narrationPath, audioBuffer);
@@ -301,10 +318,14 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
             // Step 1b: Fetch ambient SFX from Freesound
             let sfxPath: string | null = null;
             try {
-                sfxPath = await fetchFreesoundSfx(
-                    scene.title || `Scene ${scene.sceneIndex + 1}`,
-                    sceneDir,
-                    Math.max(10, narrationDuration),
+                sfxPath = await withTimeout(
+                    fetchFreesoundSfx(
+                        scene.title || `Scene ${scene.sceneIndex + 1}`,
+                        sceneDir,
+                        Math.max(10, narrationDuration),
+                    ),
+                    15_000,
+                    "Freesound SFX"
                 );
                 if (sfxPath) console.log(`[Assembly]   SFX loaded: ${sfxPath}`);
             } catch (sfxErr: any) {
@@ -314,10 +335,14 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
             // Step 1c: Generate background music via MusicGen
             let musicPath: string | null = null;
             try {
-                musicPath = await generateBackgroundMusic(
-                    scene.title || "ambient",
-                    Math.max(10, narrationDuration),
-                    sceneDir,
+                musicPath = await withTimeout(
+                    generateBackgroundMusic(
+                        scene.title || "ambient",
+                        Math.max(10, narrationDuration),
+                        sceneDir,
+                    ),
+                    15_000,
+                    "MusicGen"
                 );
                 if (musicPath) console.log(`[Assembly]   Music generated: ${musicPath}`);
             } catch (musicErr: any) {
@@ -370,16 +395,25 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
                     ? (fillerMode === "procedural" ? "kenburns+stock" : fillerMode)
                     : fillerMode;
 
-                await generateFiller(
-                    effectiveFillerMode,
-                    fillerPath,
-                    fillerDuration,
-                    sceneDir,
-                    assetImagePaths,
-                    scene.narrationText || "",
-                    scene.title || `Scene ${scene.sceneIndex + 1}`,
-                    sceneMood,
-                );
+                try {
+                    await withTimeout(
+                        generateFiller(
+                            effectiveFillerMode,
+                            fillerPath,
+                            fillerDuration,
+                            sceneDir,
+                            assetImagePaths,
+                            scene.narrationText || "",
+                            scene.title || `Scene ${scene.sceneIndex + 1}`,
+                            sceneMood,
+                        ),
+                        120_000,
+                        "Filler generation"
+                    );
+                } catch (fillerErr: any) {
+                    console.warn(`[Assembly]   Filler generation failed: ${fillerErr.message}`);
+                    fillerPath = null;
+                }
             }
 
             // Step 5: Interleave clips + filler → scene video
