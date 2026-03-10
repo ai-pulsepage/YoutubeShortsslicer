@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getRedis, CHANNELS } from "@/lib/documentary/redis-client";
+import { dispatchJob, type RedisJob } from "@/lib/documentary/redis-client";
+import { getImageStyleModifiers } from "@/lib/documentary/genre-presets";
 
 export async function POST(
     req: NextRequest,
@@ -17,7 +18,16 @@ export async function POST(
     const asset = await prisma.docAsset.findUnique({
         where: { id: assetId },
         include: {
-            documentary: { select: { id: true, userId: true } },
+            documentary: {
+                select: {
+                    id: true,
+                    userId: true,
+                    genre: true,
+                    subStyle: true,
+                    imageModel: true,
+                    visualMode: true,
+                },
+            },
         },
     });
 
@@ -25,17 +35,25 @@ export async function POST(
         return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
+    const genre = (asset.documentary as any).genre || "science";
+    const subStyle = (asset.documentary as any).subStyle || "bbc_earth";
+    const imageModel = (asset.documentary as any).imageModel || "chroma";
+    const imageStyleModifiers = getImageStyleModifiers(genre);
+
     // Clear existing image
     await prisma.docAsset.update({
         where: { id: assetId },
         data: { imagePath: null },
     });
 
-    // Build the prompt from asset properties
+    // Build genre-aware prompt
+    const styleLabel = `${genre} ${subStyle}`.replace(/_/g, " ");
     const parts = [asset.label];
-    if (asset.attire) parts.push(asset.attire);
+    if (asset.attire) parts.push(`Wearing: ${asset.attire}.`);
     if (asset.description) parts.push(asset.description);
-    const prompt = parts.join(", ");
+    parts.push(`Visual style: ${imageStyleModifiers}`);
+    parts.push(`Genre: ${styleLabel}.`);
+    const prompt = parts.join(" ");
 
     // Create new job
     const job = await prisma.genJob.create({
@@ -45,20 +63,33 @@ export async function POST(
             jobType: "ref_image",
             prompt,
             status: "QUEUED",
+            metadata: {
+                width: 1024,
+                height: 1024,
+                model: imageModel,
+                assetType: asset.type,
+                assetLabel: asset.label,
+            },
         },
     });
 
-    // Dispatch to Redis
-    const redis = getRedis();
-    await redis.publish(
-        CHANNELS.DOCUMENTARY_JOBS,
-        JSON.stringify({
-            jobId: job.id,
-            type: "image",
-            prompt,
-            referenceImages: [],
-        })
-    );
+    // Dispatch to Redis (persistent list, not pub/sub)
+    const redisJob: RedisJob = {
+        jobId: job.id,
+        documentaryId: asset.documentary.id,
+        type: "ref_image",
+        prompt,
+        referenceImages: [],
+        metadata: {
+            width: 1024,
+            height: 1024,
+            model: imageModel,
+            assetId: assetId,
+            assetLabel: asset.label,
+        },
+    };
 
-    return NextResponse.json({ jobId: job.id, status: "QUEUED" });
+    await dispatchJob(redisJob);
+
+    return NextResponse.json({ jobId: job.id, status: "QUEUED", imageModel });
 }
