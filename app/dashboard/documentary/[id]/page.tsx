@@ -462,14 +462,21 @@ function PipelineActions({ doc, onRefresh }: { doc: any; onRefresh: () => void }
                     Assemble
                 </button>
             )}
-            {(doc.status === "FAILED" || doc.status === "GENERATING") && (
+            {doc.status === "FAILED" && (
                 <button onClick={() => runAction("generate-story")} disabled={running}
                     className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-red-600 hover:bg-red-500 text-white disabled:opacity-50 transition-colors">
                     {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                    {doc.status === "GENERATING" ? "Force Retry" : "Retry"}
+                    Retry Story
                 </button>
             )}
-            {doc.status === "GENERATING" && needsClips && doc.genJobs?.some((j: any) => j.jobType === "shot_video" && j.status === "QUEUED") && (
+            {doc.status === "GENERATING" && needsAssets && (
+                <button onClick={() => runAction("generate-assets")} disabled={running}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50 transition-colors">
+                    {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                    Retry Images
+                </button>
+            )}
+            {doc.status === "GENERATING" && needsClips && doc.genJobs?.some((j: any) => j.jobType === "shot_video" && (j.status === "QUEUED" || j.status === "FAILED")) && (
                 <button onClick={() => runAction("generate-clips")} disabled={running}
                     className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-cyan-600 hover:bg-cyan-500 text-white disabled:opacity-50 transition-colors">
                     {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Film className="w-4 h-4" />}
