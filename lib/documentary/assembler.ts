@@ -33,20 +33,21 @@ import { generateBackgroundMusic } from "@/lib/audio/musicgen";
 const TEMP_DIR = path.join(os.tmpdir(), "documentary-assembly");
 
 /**
- * Clean narration text for TTS — strip timestamps, visual markers, and production notes.
+ * Clean narration text for TTS — strip timestamps, convert visual markers to pauses.
+ * [VISUAL:...] becomes an SSML <break> tag so the narrator breathes where the filmmaker intended.
  */
 function cleanNarrationText(text: string): string {
     return text
-        .replace(/\[\d{1,2}:\d{2}(?::\d{2})?\]/g, "")   // [0:00], [1:30], [0:01:30]
-        .replace(/\[VISUAL:[^\]]*\]/gi, "")               // [VISUAL: ...]
-        .replace(/\[SCENE[^\]]*\]/gi, "")                 // [SCENE: ...] or [SCENE 1: ...]
-        .replace(/\[MUSIC:[^\]]*\]/gi, "")                // [MUSIC: ...]
-        .replace(/\[SFX:[^\]]*\]/gi, "")                  // [SFX: ...]
-        .replace(/\[NOTE:[^\]]*\]/gi, "")                 // [NOTE: ...]
-        .replace(/\[CUT TO[^\]]*\]/gi, "")               // [CUT TO: ...]
-        .replace(/\[FADE[^\]]*\]/gi, "")                 // [FADE IN/OUT: ...]
-        .replace(/\n{3,}/g, "\n\n")                       // collapse triple+ newlines
-        .replace(/^\s+|\s+$/gm, "")                      // trim each line
+        .replace(/\[\d{1,2}:\d{2}(?::\d{2})?\]/g, "")                      // [0:00], [1:30]
+        .replace(/\[VISUAL:[^\]]*\]/gi, ' <break time="2.0s" /> ')          // [VISUAL: ...] → 2s pause
+        .replace(/\[SCENE[^\]]*\]/gi, "")                                  // [SCENE: ...]
+        .replace(/\[MUSIC:[^\]]*\]/gi, "")                                 // [MUSIC: ...]
+        .replace(/\[SFX:[^\]]*\]/gi, "")                                   // [SFX: ...]
+        .replace(/\[NOTE:[^\]]*\]/gi, "")                                  // [NOTE: ...]
+        .replace(/\[CUT TO[^\]]*\]/gi, ' <break time="1.5s" /> ')          // [CUT TO ...] → 1.5s pause
+        .replace(/\[FADE[^\]]*\]/gi, ' <break time="1.5s" /> ')            // [FADE ...] → 1.5s pause
+        .replace(/\n{3,}/g, "\n\n")                                        // collapse triple+ newlines
+        .replace(/^\s+|\s+$/gm, "")                                       // trim each line
         .trim();
 }
 
@@ -204,7 +205,12 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
                 scenes: {
                     orderBy: { sceneIndex: "asc" },
                     include: {
-                        shots: { orderBy: { shotIndex: "asc" } },
+                        shots: {
+                            orderBy: { shotIndex: "asc" },
+                            include: {
+                                shotAssets: { include: { asset: true } },
+                            },
+                        },
                     },
                 },
                 assets: true,
@@ -237,8 +243,8 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
             data: { status: "ASSEMBLING" },
         });
 
-        // Download all asset images for Ken Burns filler
-        const assetImagePaths: string[] = [];
+        // Download all asset images — build a map of assetId → local path
+        const assetLocalPaths = new Map<string, string>();
         const assetDir = path.join(workDir, "assets");
         if (!fs.existsSync(assetDir)) fs.mkdirSync(assetDir, { recursive: true });
 
@@ -247,16 +253,19 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
                 const assetFile = path.join(assetDir, `asset-${asset.id}.png`);
                 try {
                     await downloadFileFromR2(asset.imagePath, assetFile);
-                    assetImagePaths.push(assetFile);
+                    assetLocalPaths.set(asset.id, assetFile);
                 } catch (err: any) {
                     console.warn(`[Assembly] Failed to download asset ${asset.id}: ${err.message}`);
                 }
             }
         }
 
-        console.log(`[Assembly] Downloaded ${assetImagePaths.length} asset images for filler`);
+        // Fallback: all images as an array for scenes with no linked assets
+        const allAssetImagePaths = Array.from(assetLocalPaths.values());
+        console.log(`[Assembly] Downloaded ${allAssetImagePaths.length} asset images`);
 
         const assembledScenePaths: string[] = [];
+        const totalScenes = doc.scenes.length;
 
         // ─── Process each scene ──────────────────────────
         for (const scene of doc.scenes) {
@@ -264,6 +273,32 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
 
             const sceneDir = path.join(workDir, `scene-${scene.sceneIndex}`);
             if (!fs.existsSync(sceneDir)) fs.mkdirSync(sceneDir, { recursive: true });
+
+            // Progress reporting — update DB so UI can show current scene
+            try {
+                await prisma.documentary.update({
+                    where: { id: documentaryId },
+                    data: { errorMsg: `Assembling scene ${scene.sceneIndex + 1}/${totalScenes}: ${scene.title || 'Untitled'}` },
+                });
+            } catch { /* non-critical */ }
+
+            // Resolve scene-specific images from shot→asset links (max 2 per scene)
+            const sceneImagePaths: string[] = [];
+            for (const shot of scene.shots) {
+                for (const sa of (shot as any).shotAssets || []) {
+                    const localPath = assetLocalPaths.get(sa.assetId || sa.asset?.id);
+                    if (localPath && !sceneImagePaths.includes(localPath)) {
+                        sceneImagePaths.push(localPath);
+                    }
+                    if (sceneImagePaths.length >= 2) break;
+                }
+                if (sceneImagePaths.length >= 2) break;
+            }
+            // Fallback: pick one asset if scene has no linked assets
+            if (sceneImagePaths.length === 0 && allAssetImagePaths.length > 0) {
+                sceneImagePaths.push(allAssetImagePaths[scene.sceneIndex % allAssetImagePaths.length]);
+            }
+            console.log(`[Assembly]   Scene images: ${sceneImagePaths.length}`);
 
             // Step 1: Generate narration audio for this scene
             let narrationPath: string | null = null;
@@ -291,7 +326,7 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
                             voiceId: resolvedVoiceId,
                             narratorStyle,
                         }),
-                        30_000,
+                        90_000,
                         "TTS narration"
                     );
 
@@ -402,7 +437,7 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
                             fillerPath,
                             fillerDuration,
                             sceneDir,
-                            assetImagePaths,
+                            sceneImagePaths.length > 0 ? sceneImagePaths : allAssetImagePaths.slice(0, 2),
                             scene.narrationText || "",
                             scene.title || `Scene ${scene.sceneIndex + 1}`,
                             sceneMood,
@@ -477,12 +512,13 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
                     }
                     if (hasSfx) {
                         inputs.push(`-i "${sfxPath}"`);
-                        filters.push(`[${audioIdx}:a]volume=0.3[sfx]`);
+                        filters.push(`[${audioIdx}:a]volume=0.20[sfx]`);
                         audioIdx++;
                     }
                     if (hasMusic) {
                         inputs.push(`-i "${musicPath}"`);
-                        filters.push(`[${audioIdx}:a]volume=0.12[music]`);
+                        // Music: quiet bed, 2s fade-in, 3s fade-out
+                        filters.push(`[${audioIdx}:a]volume=0.10,afade=t=in:st=0:d=2,afade=t=out:st=${Math.max(0, narrationDuration - 3)}:d=3[music]`);
                         audioIdx++;
                     }
 
@@ -554,14 +590,36 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
 
         const finalOutputPath = path.join(workDir, "documentary-final.mp4");
 
+        // Generate 3s black gap for inter-scene pauses
+        const blackGapPath = path.join(workDir, "black-gap.mp4");
+        if (assembledScenePaths.length > 1) {
+            try {
+                execSync(
+                    `ffmpeg -f lavfi -i color=c=black:s=1280x720:r=24:d=3 ` +
+                    `-f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 ` +
+                    `-t 3 -c:v libx264 -preset fast -pix_fmt yuv420p -c:a aac -b:a 192k ` +
+                    `"${blackGapPath}" -y`,
+                    { timeout: 30000, stdio: "pipe" }
+                );
+            } catch (gapErr: any) {
+                console.warn(`[Assembly] Failed to create black gap: ${gapErr.message}`);
+            }
+        }
+
         if (assembledScenePaths.length === 1) {
             fs.copyFileSync(assembledScenePaths[0], finalOutputPath);
         } else {
+            // Interleave scenes with 3s black gaps
             const finalConcatPath = path.join(workDir, "final-concat.txt");
-            const finalConcatContent = assembledScenePaths
-                .map((p) => `file '${p.replace(/\\/g, "/")}'`)
-                .join("\n");
-            fs.writeFileSync(finalConcatPath, finalConcatContent);
+            const hasGap = fs.existsSync(blackGapPath);
+            const lines: string[] = [];
+            for (let i = 0; i < assembledScenePaths.length; i++) {
+                lines.push(`file '${assembledScenePaths[i].replace(/\\/g, "/")}'`);
+                if (hasGap && i < assembledScenePaths.length - 1) {
+                    lines.push(`file '${blackGapPath.replace(/\\/g, "/")}'`);
+                }
+            }
+            fs.writeFileSync(finalConcatPath, lines.join("\n"));
 
             execSync(
                 `ffmpeg -f concat -safe 0 -i "${finalConcatPath}" ` +
