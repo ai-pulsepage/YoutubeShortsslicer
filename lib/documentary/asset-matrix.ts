@@ -67,8 +67,8 @@ export async function generateAssetMatrix(documentaryId: string): Promise<void> 
                 assetId: asset.id,
                 status: "QUEUED",
                 metadata: {
-                    width: 1024,
-                    height: 1024,
+                    width: 768,
+                    height: 768,
                     model: imageModel,
                     assetType: asset.type,
                     assetLabel: asset.label,

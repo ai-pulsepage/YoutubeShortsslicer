@@ -367,7 +367,12 @@ function GeneratingBanner({ doc, onRefresh }: { doc: any; onRefresh: () => void 
 
     const forceReset = async () => {
         setResetting(true);
-        await fetch(`/api/documentary/${doc.id}/generate-story`, { method: "POST" });
+        // Reset status to SCENES_PLANNED without regenerating the script
+        await fetch(`/api/documentary/debug`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ documentaryId: doc.id, action: "reset-status" }),
+        });
         setTimeout(onRefresh, 1000);
     };
 
@@ -380,7 +385,7 @@ function GeneratingBanner({ doc, onRefresh }: { doc: any; onRefresh: () => void 
     } else if (isStuck) {
         message = `All jobs finished but status wasn't updated. Click Force Retry to reset.`;
     } else {
-        message = `AI is generating your documentary script and planning scenes... (${elapsed}s)`;
+        message = hasJobs ? `Waiting for image generation to complete... (${elapsed}s)` : `AI is processing your documentary... (${elapsed}s)`;
     }
 
     return (
