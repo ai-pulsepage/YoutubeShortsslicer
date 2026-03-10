@@ -21,6 +21,7 @@ Environment Variables Required:
 """
 
 import json
+import gc
 import os
 import sys
 import time

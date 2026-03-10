@@ -153,8 +153,17 @@ async function runStoryPipeline(
     }
 
     // ── Step 3: Plan Scenes + Shots ──────────────────────
-    console.log(`[StoryPipeline] Step 3/3: Planning scenes and shots...`);
-    await planScenes(documentaryId, script, `${genreConfig.genre} ${genreConfig.subStyle}`);
+    // Check if scenes already exist (avoid re-planning and losing existing assets)
+    const existingScenes = await prisma.docScene.count({
+        where: { documentaryId },
+    });
+
+    if (existingScenes > 0) {
+        console.log(`[StoryPipeline] Step 3/3: ⏩ Skipping scene planning (${existingScenes} scenes already exist)`);
+    } else {
+        console.log(`[StoryPipeline] Step 3/3: Planning scenes and shots...`);
+        await planScenes(documentaryId, script, `${genreConfig.genre} ${genreConfig.subStyle}`);
+    }
 
     // Update status to SCENES_PLANNED on success
     await prisma.documentary.update({
