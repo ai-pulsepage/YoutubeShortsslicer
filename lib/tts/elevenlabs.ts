@@ -1,9 +1,4 @@
-/**
- * ElevenLabs TTS Engine
- *
- * Premium text-to-speech via ElevenLabs API.
- * Supports SSML <break> tags for pause control.
- */
+import { prisma } from "@/lib/prisma";
 
 export interface ElevenLabsVoice {
     voice_id: string;
@@ -23,10 +18,24 @@ interface GenerateOptions {
     speed?: number;
 }
 
-function getApiKey(): string {
-    const key = process.env.ELEVENLABS_API_KEY;
-    if (!key) throw new Error("ELEVENLABS_API_KEY not configured");
-    return key;
+async function getApiKey(): Promise<string> {
+    // 1. Check env var first
+    const envKey = process.env.ELEVENLABS_API_KEY;
+    if (envKey) return envKey;
+
+    // 2. Fall back to DB-stored key (admin panel)
+    try {
+        const record = await prisma.apiKey.findUnique({
+            where: { service: "elevenlabs" },
+        });
+        if (record?.key) {
+            return Buffer.from(record.key, "base64").toString("utf8");
+        }
+    } catch (err: any) {
+        console.warn(`[ElevenLabs] DB key lookup failed: ${err.message}`);
+    }
+
+    throw new Error("ELEVENLABS_API_KEY not configured — set in .env or Admin → API Keys");
 }
 
 /**
@@ -34,7 +43,7 @@ function getApiKey(): string {
  * Returns a Buffer of MP3 audio.
  */
 export async function generateSpeech(options: GenerateOptions): Promise<Buffer> {
-    const apiKey = getApiKey();
+    const apiKey = await getApiKey();
     const {
         text,
         voiceId,
@@ -77,9 +86,11 @@ export async function generateSpeech(options: GenerateOptions): Promise<Buffer> 
  * List all available voices from ElevenLabs account.
  */
 export async function listVoices(): Promise<ElevenLabsVoice[]> {
-    const key = process.env.ELEVENLABS_API_KEY;
-    if (!key) {
-        console.warn("[ElevenLabs] ELEVENLABS_API_KEY not set — cannot list voices");
+    let key: string;
+    try {
+        key = await getApiKey();
+    } catch {
+        console.warn("[ElevenLabs] No API key available — cannot list voices");
         return [];
     }
 
