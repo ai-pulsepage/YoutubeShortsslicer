@@ -33,6 +33,24 @@ import { generateBackgroundMusic } from "@/lib/audio/musicgen";
 const TEMP_DIR = path.join(os.tmpdir(), "documentary-assembly");
 
 /**
+ * Clean narration text for TTS — strip timestamps, visual markers, and production notes.
+ */
+function cleanNarrationText(text: string): string {
+    return text
+        .replace(/\[\d{1,2}:\d{2}(?::\d{2})?\]/g, "")   // [0:00], [1:30], [0:01:30]
+        .replace(/\[VISUAL:[^\]]*\]/gi, "")               // [VISUAL: ...]
+        .replace(/\[SCENE[^\]]*\]/gi, "")                 // [SCENE: ...] or [SCENE 1: ...]
+        .replace(/\[MUSIC:[^\]]*\]/gi, "")                // [MUSIC: ...]
+        .replace(/\[SFX:[^\]]*\]/gi, "")                  // [SFX: ...]
+        .replace(/\[NOTE:[^\]]*\]/gi, "")                 // [NOTE: ...]
+        .replace(/\[CUT TO[^\]]*\]/gi, "")               // [CUT TO: ...]
+        .replace(/\[FADE[^\]]*\]/gi, "")                 // [FADE IN/OUT: ...]
+        .replace(/\n{3,}/g, "\n\n")                       // collapse triple+ newlines
+        .replace(/^\s+|\s+$/gm, "")                      // trim each line
+        .trim();
+}
+
+/**
  * Get narration audio duration in seconds via ffprobe.
  */
 function getAudioDuration(audioPath: string): number {
@@ -254,7 +272,7 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
                     }
 
                     const audioBuffer = await generateVoiceover({
-                        text: scene.narrationText,
+                        text: cleanNarrationText(scene.narrationText),
                         engine: ttsEngine,
                         voiceId: resolvedVoiceId,
                         narratorStyle,
