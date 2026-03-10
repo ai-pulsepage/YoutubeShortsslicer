@@ -33,21 +33,22 @@ import { generateBackgroundMusic } from "@/lib/audio/musicgen";
 const TEMP_DIR = path.join(os.tmpdir(), "documentary-assembly");
 
 /**
- * Clean narration text for TTS — strip timestamps, convert visual markers to pauses.
- * [VISUAL:...] becomes an SSML <break> tag so the narrator breathes where the filmmaker intended.
+ * Clean narration text for TTS — strip timestamps, visual markers, and production notes.
+ * Pacing pauses are handled downstream by narrator-style.ts (SSML breaks at paragraphs/sentences).
+ * Visual markers become double-newlines so the narrator style treats them as paragraph breaks.
  */
 function cleanNarrationText(text: string): string {
     return text
-        .replace(/\[\d{1,2}:\d{2}(?::\d{2})?\]/g, "")                      // [0:00], [1:30]
-        .replace(/\[VISUAL:[^\]]*\]/gi, ' <break time="1.0s" /> ')          // [VISUAL: ...] → 1s pause
-        .replace(/\[SCENE[^\]]*\]/gi, "")                                  // [SCENE: ...]
-        .replace(/\[MUSIC:[^\]]*\]/gi, "")                                 // [MUSIC: ...]
-        .replace(/\[SFX:[^\]]*\]/gi, "")                                   // [SFX: ...]
-        .replace(/\[NOTE:[^\]]*\]/gi, "")                                  // [NOTE: ...]
-        .replace(/\[CUT TO[^\]]*\]/gi, ' <break time="0.8s" /> ')          // [CUT TO ...] → 0.8s pause
-        .replace(/\[FADE[^\]]*\]/gi, ' <break time="0.8s" /> ')            // [FADE ...] → 0.8s pause
-        .replace(/\n{3,}/g, "\n\n")                                        // collapse triple+ newlines
-        .replace(/^\s+|\s+$/gm, "")                                       // trim each line
+        .replace(/\[\d{1,2}:\d{2}(?::\d{2})?\]/g, "")          // [0:00], [1:30]
+        .replace(/\[VISUAL:[^\]]*\]/gi, "\n\n")                  // [VISUAL: ...] → paragraph break
+        .replace(/\[SCENE[^\]]*\]/gi, "")                        // [SCENE: ...]
+        .replace(/\[MUSIC:[^\]]*\]/gi, "")                       // [MUSIC: ...]
+        .replace(/\[SFX:[^\]]*\]/gi, "")                         // [SFX: ...]
+        .replace(/\[NOTE:[^\]]*\]/gi, "")                        // [NOTE: ...]
+        .replace(/\[CUT TO[^\]]*\]/gi, "\n\n")                   // [CUT TO ...] → paragraph break
+        .replace(/\[FADE[^\]]*\]/gi, "\n\n")                     // [FADE ...] → paragraph break
+        .replace(/\n{3,}/g, "\n\n")                              // collapse triple+ newlines
+        .replace(/^\s+|\s+$/gm, "")                             // trim each line
         .trim();
 }
 
@@ -467,7 +468,15 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
             if (videoParts.length === 0) continue;
 
             if (videoParts.length === 1) {
-                fs.copyFileSync(videoParts[0], sceneVideoPath);
+                // Single part still needs 30fps normalization for consistent final concat
+                const normPath = path.join(sceneDir, `norm-single.mp4`);
+                execSync(
+                    `ffmpeg -i "${videoParts[0]}" -c:v libx264 -preset fast -crf 22 ` +
+                    `-vf "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:black,fps=30" ` +
+                    `-pix_fmt yuv420p -an "${normPath}" -y`,
+                    { timeout: 600000, stdio: "pipe" }
+                );
+                fs.copyFileSync(normPath, sceneVideoPath);
             } else {
                 // Need to re-encode for consistent format before concat
                 const normalizedParts: string[] = [];
