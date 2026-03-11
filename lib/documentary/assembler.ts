@@ -308,15 +308,21 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
             if (scene.narrationText) {
                 console.log(`[Assembly]   Generating TTS narration (${scene.narrationText.length} chars)...`);
                 try {
-                    const ttsEngine = (doc.ttsEngine || "elevenlabs") as TtsEngine;
-                    const narratorStyle = (doc.narratorStyle || "sleep") as NarratorStyle;
+                    const ttsEngine = ((doc as any).ttsEngine || "elevenlabs") as TtsEngine;
+                    const narratorStyle = ((doc as any).narratorStyle || "sleep") as NarratorStyle;
 
-                    // Resolve voice ID — reject legacy Kokoro IDs (bf_, bm_)
-                    // ElevenLabs "Rachel" = 21m00Tcm4TlvDq8ikWAM
-                    const DEFAULT_VOICE = "21m00Tcm4TlvDq8ikWAM";
-                    let resolvedVoiceId = doc.ttsVoiceId || doc.voiceId || DEFAULT_VOICE;
+                    // Resolve voice ID — reject legacy Kokoro IDs (bf_, bm_) and name strings
+                    // ElevenLabs voice IDs are 20+ char alphanumeric strings like "21m00Tcm4TlvDq8ikWAM"
+                    const DEFAULT_VOICE = "21m00Tcm4TlvDq8ikWAM"; // Rachel
+                    let resolvedVoiceId = (doc as any).ttsVoiceId || doc.voiceId || DEFAULT_VOICE;
+                    // Check for Kokoro legacy IDs
                     if (ttsEngine === "elevenlabs" && /^(bf_|bm_)/.test(resolvedVoiceId)) {
                         console.warn(`[Assembly]   Legacy Kokoro voice "${resolvedVoiceId}" detected, using default ElevenLabs voice`);
+                        resolvedVoiceId = DEFAULT_VOICE;
+                    }
+                    // Check for name strings instead of proper IDs (ElevenLabs IDs are 20+ chars, alphanumeric)
+                    if (ttsEngine === "elevenlabs" && resolvedVoiceId.length < 15) {
+                        console.warn(`[Assembly]   Voice ID "${resolvedVoiceId}" looks like a name, using default ElevenLabs voice`);
                         resolvedVoiceId = DEFAULT_VOICE;
                     }
 
