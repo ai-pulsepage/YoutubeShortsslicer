@@ -8,6 +8,41 @@
 
 import { prisma } from "@/lib/prisma";
 
+/**
+ * Attempts to parse JSON with basic repair for common LLM quirks:
+ * trailing commas, unescaped newlines, truncated output
+ */
+function safeJsonParse(raw: string): any {
+    // First, try clean parse
+    try { return JSON.parse(raw); } catch { /* fall through to repair */ }
+
+    let fixed = raw;
+    // Remove trailing commas before } or ]
+    fixed = fixed.replace(/,\s*([}\]])/g, '$1');
+    // Fix unescaped newlines inside strings
+    fixed = fixed.replace(/(["'])([^"']*?)\n([^"']*?\1)/g, (_, q, a, b) => `${q}${a}\\n${b}`);
+    // If truncated mid-array, close it
+    if ((fixed.match(/\[/g) || []).length > (fixed.match(/\]/g) || []).length) {
+        // Trim incomplete last element
+        fixed = fixed.replace(/,\s*"[^"]*$/, '');
+        fixed = fixed.replace(/,\s*\{[^}]*$/, '');
+        const diff = (fixed.match(/\[/g) || []).length - (fixed.match(/\]/g) || []).length;
+        for (let i = 0; i < diff; i++) fixed += ']';
+    }
+    // Close unclosed objects
+    if ((fixed.match(/\{/g) || []).length > (fixed.match(/\}/g) || []).length) {
+        const diff = (fixed.match(/\{/g) || []).length - (fixed.match(/\}/g) || []).length;
+        for (let i = 0; i < diff; i++) fixed += '}';
+    }
+
+    try {
+        return JSON.parse(fixed);
+    } catch (e) {
+        console.error(`[SafeJsonParse] Repair failed, raw (first 500 chars): ${raw.slice(0, 500)}`);
+        throw e;
+    }
+}
+
 // Lightweight HTML-to-text extraction
 function extractArticleText(html: string): {
     title: string;
@@ -242,7 +277,7 @@ Rules:
         throw new Error("Empty response from DeepSeek");
     }
 
-    const parsed = JSON.parse(content);
+    const parsed = safeJsonParse(content);
     return {
         url: article.url,
         title: parsed.title || article.title,
@@ -388,7 +423,7 @@ Rules:
         throw new Error("Empty response from DeepSeek researcher");
     }
 
-    const parsed = JSON.parse(content);
+    const parsed = safeJsonParse(content);
     const articles: ScrapedArticle[] = (parsed.articles || []).map((a: any) => ({
         url: a.url || "https://ai-researched",
         title: a.title || "Untitled",

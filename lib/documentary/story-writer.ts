@@ -12,6 +12,28 @@ import { prisma } from "@/lib/prisma";
 import type { ScrapedArticle } from "./scraper";
 import { buildPromptContext, getWordsPerMinute } from "./genre-presets";
 
+/**
+ * Attempts to parse JSON with basic repair for common LLM quirks
+ */
+function safeJsonParse(raw: string): any {
+    try { return JSON.parse(raw); } catch { /* fall through to repair */ }
+    let fixed = raw;
+    fixed = fixed.replace(/,\s*([}\]])/g, '$1');
+    if ((fixed.match(/\[/g) || []).length > (fixed.match(/\]/g) || []).length) {
+        fixed = fixed.replace(/,\s*\{[^}]*$/, '');
+        const diff = (fixed.match(/\[/g) || []).length - (fixed.match(/\]/g) || []).length;
+        for (let i = 0; i < diff; i++) fixed += ']';
+    }
+    if ((fixed.match(/\{/g) || []).length > (fixed.match(/\}/g) || []).length) {
+        const diff = (fixed.match(/\{/g) || []).length - (fixed.match(/\}/g) || []).length;
+        for (let i = 0; i < diff; i++) fixed += '}';
+    }
+    try { return JSON.parse(fixed); } catch (e) {
+        console.error(`[SafeJsonParse] Story writer repair failed, raw (first 300 chars): ${raw.slice(0, 300)}`);
+        throw e;
+    }
+}
+
 export interface StoryScript {
     title: string;
     estimatedDurationMinutes: number;
@@ -198,7 +220,7 @@ Novelty Score: ${a.noveltyScore}/10
         throw new Error("Empty response from DeepSeek story writer");
     }
 
-    const parsed = JSON.parse(content);
+    const parsed = safeJsonParse(content);
 
     const script: StoryScript = {
         title: parsed.title || "Untitled Documentary",
