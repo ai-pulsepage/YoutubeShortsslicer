@@ -60,13 +60,18 @@ export async function POST(
         contentMode: documentary.contentMode,
     };
 
+    // For creative content modes, ALWAYS pass the title as the story premise
+    // For factual modes, only pass it in topic-only mode (no source URLs)
+    const isCreativeMode = genreConfig.contentMode === "creative";
+    const effectiveTopicTitle = (isCreativeMode || isTopicMode) ? documentary.title! : undefined;
+
     // Run the pipeline in the background (don't block the HTTP response)
     runStoryPipeline(
         id,
         documentary.sourceUrls,
         genreConfig,
         targetDuration,
-        isTopicMode ? documentary.title! : undefined
+        effectiveTopicTitle
     ).catch(
         async (err) => {
             console.error(`[GenerateStory] Pipeline failed for ${id}:`, err);
@@ -148,7 +153,7 @@ async function runStoryPipeline(
         };
     } else {
         console.log(`[StoryPipeline] Step 2/3: Writing ${targetDuration}-min ${styleLabel} script...`);
-        script = await generateStoryScript(articles, targetDuration, genreConfig);
+        script = await generateStoryScript(articles, targetDuration, genreConfig, topicTitle);
         await saveScriptToDocumentary(documentaryId, script);
     }
 

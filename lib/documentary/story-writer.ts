@@ -36,7 +36,7 @@ export interface GenreConfig {
     contentMode: string;
 }
 
-function buildStoryWriterPrompt(config: GenreConfig, targetDuration: number): string {
+function buildStoryWriterPrompt(config: GenreConfig, targetDuration: number, topicTitle?: string): string {
     const styleContext = buildPromptContext({
         genre: config.genre,
         subStyle: config.subStyle,
@@ -50,18 +50,37 @@ function buildStoryWriterPrompt(config: GenreConfig, targetDuration: number): st
 
     const wpm = getWordsPerMinute(config.pacing);
 
-    return `You are a world-class documentary scriptwriter creating a narrated production.
+    const isCreative = config.contentMode === "creative";
+
+    // Creative mode: premise-driven storytelling
+    // Factual mode: article-based documentary
+    const sourceSection = isCreative
+        ? `STORY PREMISE:
+${topicTitle ? topicTitle : '{articles}'}
+
+BACKGROUND RESEARCH (use for inspiration, NOT as source material):
+{articles}
+
+IMPORTANT: Write an ORIGINAL ${config.genre} narrative based on the premise above.
+The research is only for context and accuracy. Your PRIMARY job is to tell the STORY described in the premise.
+Do NOT write a documentary about the research articles. Write the story the premise describes.
+The tone, humor, characters, and narrative arc should come from the PREMISE, not from the articles.`
+        : `ARTICLES TO BASE THE STORY ON:
+{articles}`;
+
+    return `You are a world-class ${isCreative ? 'narrative scriptwriter' : 'documentary scriptwriter'} creating a narrated production.
 
 ${styleContext}
 
-ARTICLES TO BASE THE STORY ON:
-{articles}
+${sourceSection}
 
 REQUIREMENTS:
 1. Write a {duration}-minute narrated script (~${wpm} words per minute)
 2. Each segment has a timestamp, narration text, and a [VISUAL] cue
 3. Visual cues should describe what the viewer sees — be specific about environments and subjects
-4. Use a narrative arc: hook → context → discovery → implications → resolution
+4. ${isCreative
+        ? 'Use a narrative arc: setup → escalation → complications → climax → resolution'
+        : 'Use a narrative arc: hook → context → discovery → implications → resolution'}
 5. Include vivid sensory language that helps the listener visualize
 6. Create segments every 15-30 seconds of narration
 
@@ -88,7 +107,8 @@ Return ONLY valid JSON.`;
 export async function generateStoryScript(
     articles: ScrapedArticle[],
     targetDurationMinutes: number = 30,
-    config?: GenreConfig
+    config?: GenreConfig,
+    topicTitle?: string,
 ): Promise<StoryScript> {
     const apiKey = await getApiKey();
 
@@ -118,14 +138,17 @@ Novelty Score: ${a.noveltyScore}/10
         })
         .join("\n");
 
-    const promptTemplate = buildStoryWriterPrompt(effectiveConfig, targetDurationMinutes);
+    const promptTemplate = buildStoryWriterPrompt(effectiveConfig, targetDurationMinutes, topicTitle);
     const prompt = promptTemplate
         .replace("{articles}", articlesText)
         .replace(/\{duration\}/g, String(targetDurationMinutes));
 
     // Build system prompt from genre
+    const isCreative = effectiveConfig.contentMode === "creative";
     const styleLabel = `${effectiveConfig.genre}/${effectiveConfig.subStyle}`.replace(/_/g, " ");
-    const systemPrompt = `You are a master scriptwriter specializing in ${styleLabel} content. Write engaging narration with rich sensory detail. Return only valid JSON.`;
+    const systemPrompt = isCreative
+        ? `You are a master ${styleLabel} storyteller. Write an engaging, original narrative script. The user's premise is your primary creative direction. Return only valid JSON.`
+        : `You are a master scriptwriter specializing in ${styleLabel} content. Write engaging narration with rich sensory detail. Return only valid JSON.`;
 
     console.log(`[StoryWriter] Generating ${targetDurationMinutes}-min ${styleLabel} script from ${articles.length} articles...`);
 
