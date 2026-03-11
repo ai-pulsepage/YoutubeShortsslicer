@@ -17,6 +17,7 @@ interface PlannedScene {
     narrationText: string;
     duration: number; // seconds
     shots: PlannedShot[];
+    searchQueries?: string[]; // AI-generated Pexels search terms
 }
 
 interface PlannedShot {
@@ -60,6 +61,7 @@ Return JSON in this EXACT compact format:
       "narrationText": "ASSIGNED_POST_PLAN",
       "duration": 60,
       "segmentRange": [0, 3],
+      "searchQueries": ["observatory night stars", "telescope astronomer", "starry sky"],
       "shots": [
         {"action": "Wide view of observatory under starry sky", "mood": "wonder", "assetsUsed": ["Observatory"], "duration": 5},
         {"action": "Dr. Chen peers through telescope", "mood": "curiosity", "assetsUsed": ["Dr. Chen", "Observatory"], "duration": 4}
@@ -78,6 +80,12 @@ RULES:
 7. Group every 2-3 script segments into one scene
 8. For narrationText, just write "ASSIGNED_POST_PLAN" — the verbatim script text will be assigned automatically
 9. For segmentRange, specify [startIndex, endIndex] of which script segments belong to this scene (0-indexed)
+10. For searchQueries, provide 2-3 SHORT stock video search terms per scene. These are used to find relevant stock footage on Pexels.
+    - Each query should be 2-3 words max (noun + optional adjective)
+    - Focus on CONCRETE, filmable subjects: "solar flare sun", "forest path night", "trading floor screens", "old telegraph office"
+    - Do NOT use abstract concepts: avoid "despair", "fragility", "paradox", "protocol"
+    - Think: what would a stock video library actually have footage of?
+    - Each query should match a different visual from the scene's narration
 
 Return ONLY valid JSON.`;
 
@@ -406,6 +414,7 @@ async function savePlanToDatabase(
                 title: scene.title,
                 narrationText: scene.narrationText,
                 duration: scene.duration,
+                searchQueries: scene.searchQueries ? JSON.stringify(scene.searchQueries) : null,
             },
         });
 

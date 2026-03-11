@@ -107,6 +107,7 @@ async function generateFiller(
     narrationText: string,
     sceneTitle: string,
     sceneMood?: string,
+    searchQueries?: string[],
 ): Promise<void> {
     console.log(`[Assembly]   Generating ${duration}s of '${fillerMode}' filler...`);
 
@@ -128,7 +129,7 @@ async function generateFiller(
         }
 
         case "stock": {
-            const success = await generateStockVideoFiller(narrationText, outputPath, duration, sceneTitle);
+            const success = await generateStockVideoFiller(narrationText, outputPath, duration, sceneTitle, 1280, 720, searchQueries);
             if (!success) {
                 // Fallback to Ken Burns if stock fails
                 if (assetImagePaths.length > 0) {
@@ -149,7 +150,7 @@ async function generateFiller(
             const kbPath = path.join(sceneDir, "filler-kb-part.mp4");
 
             // Try stock first
-            const stockSuccess = await generateStockVideoFiller(narrationText, stockPath, stockDuration, sceneTitle);
+            const stockSuccess = await generateStockVideoFiller(narrationText, stockPath, stockDuration, sceneTitle, 1280, 720, searchQueries);
 
             if (stockSuccess && assetImagePaths.length > 0) {
                 // Both modes succeeded — concatenate
@@ -425,6 +426,17 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
                     ? (fillerMode === "procedural" ? "kenburns+stock" : fillerMode)
                     : fillerMode;
 
+                // Parse AI-generated search queries if available
+                const sceneSearchQueries: string[] | undefined = (() => {
+                    try {
+                        if ((scene as any).searchQueries) {
+                            const parsed = JSON.parse((scene as any).searchQueries);
+                            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+                        }
+                    } catch { /* ignore parse errors */ }
+                    return undefined;
+                })();
+
                 try {
                     await withTimeout(
                         generateFiller(
@@ -436,6 +448,7 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
                             scene.narrationText || "",
                             scene.title || `Scene ${scene.sceneIndex + 1}`,
                             sceneMood,
+                            sceneSearchQueries,
                         ),
                         180_000,
                         "Filler generation"

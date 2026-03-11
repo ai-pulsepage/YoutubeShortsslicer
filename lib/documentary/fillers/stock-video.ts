@@ -163,12 +163,13 @@ async function downloadVideo(url: string, outputPath: string): Promise<void> {
 /**
  * Generate stock video filler from Pexels.
  *
- * @param narrationText - Scene narration text for keyword extraction
+ * @param narrationText - Scene narration text for keyword extraction (fallback)
  * @param outputPath - Where to write the output MP4
  * @param duration - Total filler duration needed in seconds
- * @param sceneTitle - Optional scene title for better search results
+ * @param sceneTitle - Optional scene title for better search results (fallback)
  * @param width - Video width
  * @param height - Video height
+ * @param searchQueries - AI-generated Pexels search terms (preferred over extraction)
  */
 export async function generateStockVideoFiller(
     narrationText: string,
@@ -177,18 +178,36 @@ export async function generateStockVideoFiller(
     sceneTitle?: string,
     width = 1280,
     height = 720,
+    searchQueries?: string[],
 ): Promise<boolean> {
     const dir = path.dirname(outputPath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-    const keywords = extractKeywords(narrationText, sceneTitle);
-    console.log(`[StockVideo] Searching Pexels for: "${keywords}"`);
+    const videos: PexelsVideo[] = [];
 
-    const videos = await searchPexelsVideos(keywords, 8);
+    if (searchQueries && searchQueries.length > 0) {
+        // AI-generated queries: search each query separately for diverse clips
+        for (const query of searchQueries) {
+            console.log(`[StockVideo] Searching Pexels for AI query: "${query}"`);
+            const results = await searchPexelsVideos(query, 3);
+            videos.push(...results);
+        }
+        if (videos.length === 0) {
+            console.warn(`[StockVideo] No results for AI queries, falling back to extraction...`);
+        }
+    }
+
+    // Fallback: extract keywords from narration/title
+    if (videos.length === 0) {
+        const keywords = extractKeywords(narrationText, sceneTitle);
+        console.log(`[StockVideo] Searching Pexels for extracted: "${keywords}"`);
+        const results = await searchPexelsVideos(keywords, 8);
+        videos.push(...results);
+    }
 
     if (videos.length === 0) {
-        console.warn(`[StockVideo] No results for "${keywords}", trying generic terms...`);
-        const fallbackVideos = await searchPexelsVideos("abstract background cinematic", 5);
+        console.warn(`[StockVideo] No results, trying generic terms...`);
+        const fallbackVideos = await searchPexelsVideos("cinematic nature landscape", 5);
         if (fallbackVideos.length === 0) {
             console.warn("[StockVideo] No stock videos available");
             return false;

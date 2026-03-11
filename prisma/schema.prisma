@@ -460,6 +460,7 @@ model DocScene {
   narrationPath  String?
   duration       Float?
   assembledPath  String?
+  searchQueries  String?  @db.Text  // JSON array of AI-generated Pexels search terms
 
   documentary    Documentary @relation(fields: [documentaryId], references: [id], onDelete: Cascade)
   shots          DocShot[]
