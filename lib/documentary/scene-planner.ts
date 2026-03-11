@@ -57,8 +57,9 @@ Return JSON in this EXACT compact format:
   "scenes": [
     {
       "title": "The Awakening",
-      "narrationText": "Full narration text for this scene...",
+      "narrationText": "ASSIGNED_POST_PLAN",
       "duration": 60,
+      "segmentRange": [0, 3],
       "shots": [
         {"action": "Wide view of observatory under starry sky", "mood": "wonder", "assetsUsed": ["Observatory"], "duration": 5},
         {"action": "Dr. Chen peers through telescope", "mood": "curiosity", "assetsUsed": ["Dr. Chen", "Observatory"], "duration": 4}
@@ -75,7 +76,8 @@ RULES:
 5. Each shot 3-8 seconds
 6. Aim for 8-15 total unique assets
 7. Group every 2-3 script segments into one scene
-8. IMPORTANT: Keep total output under 6000 characters to avoid truncation
+8. For narrationText, just write "ASSIGNED_POST_PLAN" — the verbatim script text will be assigned automatically
+9. For segmentRange, specify [startIndex, endIndex] of which script segments belong to this scene (0-indexed)
 
 Return ONLY valid JSON.`;
 
@@ -89,21 +91,16 @@ export async function planScenes(
 ): Promise<void> {
     const apiKey = await getApiKey();
 
-    // Compile script text — truncate if too long for prompt
+    // Compile script text for the AI prompt (full script, no truncation)
     const scriptText = script.segments
-        .map((seg) => `[${seg.timestamp}] ${seg.narration}\n[VISUAL: ${seg.visualCue}]`)
+        .map((seg, i) => `[Segment ${i}] [${seg.timestamp}] ${seg.narration}\n[VISUAL: ${seg.visualCue}]`)
         .join("\n\n");
 
-    // Limit script text to ~4000 chars to leave room for response
-    const trimmedScript = scriptText.length > 4000
-        ? scriptText.substring(0, 4000) + "\n\n[...remaining segments condensed for brevity]"
-        : scriptText;
-
     const prompt = SCENE_PLANNER_PROMPT
-        .replace("{script}", trimmedScript)
+        .replace("{script}", scriptText)
         .replace("{style}", style);
 
-    console.log(`[ScenePlanner] Planning scenes for "${script.title}" (${scriptText.length} chars of script)...`);
+    console.log(`[ScenePlanner] Planning scenes for "${script.title}" (${scriptText.length} chars of script, ${script.segments.length} segments)...`);
 
     // Retry wrapper for DeepSeek API
     const MAX_RETRIES = 3;
@@ -122,7 +119,7 @@ export async function planScenes(
                         {
                             role: "system",
                             content:
-                                "You are an expert filmmaker. Create a compact scene plan with shot lists. Return ONLY valid JSON. Keep output under 6000 characters.",
+                                "You are an expert filmmaker. Create a compact scene plan with shot lists. Return ONLY valid JSON. Do NOT include narration text — just write ASSIGNED_POST_PLAN for narrationText. Focus on scene titles, shots, assets, and segmentRange.",
                         },
                         { role: "user", content: prompt },
                     ],
@@ -171,6 +168,11 @@ export async function planScenes(
     }
 
     console.log(`[ScenePlanner] Parsed: ${plan.scenes.length} scenes, ${plan.assets.length} assets`);
+
+    // ─── Assign verbatim script text to scenes ──────────────────
+    // The AI returns segmentRange hints, but we also handle the fallback
+    // where segments are split evenly across scenes.
+    assignVerbatimNarration(plan, script);
 
     // Save to database
     await savePlanToDatabase(documentaryId, plan);
@@ -257,6 +259,80 @@ function repairTruncatedJSON(content: string): ScenePlan {
     }
 
     throw new Error(`Scene planner returned unparseable JSON (${content.length} chars). First 200: ${content.substring(0, 200)}`);
+}
+
+/**
+ * Assigns verbatim script text from the original segments to each scene.
+ * Uses segmentRange hints from the AI if available, otherwise splits evenly.
+ */
+function assignVerbatimNarration(plan: ScenePlan, script: StoryScript): void {
+    const totalSegments = script.segments.length;
+    const totalScenes = plan.scenes.length;
+
+    if (totalScenes === 0 || totalSegments === 0) return;
+
+    // Check if AI provided valid segmentRange hints
+    const hasSegmentRanges = plan.scenes.every(
+        (s: any) => Array.isArray(s.segmentRange) && s.segmentRange.length === 2
+    );
+
+    if (hasSegmentRanges) {
+        // Use AI's segment assignments
+        for (const scene of plan.scenes) {
+            const [start, end] = (scene as any).segmentRange as [number, number];
+            const clampedStart = Math.max(0, Math.min(start, totalSegments - 1));
+            const clampedEnd = Math.max(clampedStart, Math.min(end, totalSegments - 1));
+
+            const assignedSegments = script.segments.slice(clampedStart, clampedEnd + 1);
+            scene.narrationText = assignedSegments
+                .map(seg => `[${seg.timestamp}] ${seg.narration}\n[VISUAL: ${seg.visualCue}]`)
+                .join("\n\n");
+            scene.duration = Math.max(scene.duration, assignedSegments.length * 15);
+        }
+
+        // Check if any segments were missed (AI error)
+        const coveredSet = new Set<number>();
+        for (const scene of plan.scenes) {
+            const [start, end] = (scene as any).segmentRange as [number, number];
+            for (let i = start; i <= end && i < totalSegments; i++) {
+                coveredSet.add(i);
+            }
+        }
+
+        // If segments were missed, append them to the last scene
+        if (coveredSet.size < totalSegments) {
+            const missed = script.segments.filter((_, i) => !coveredSet.has(i));
+            const lastScene = plan.scenes[plan.scenes.length - 1];
+            const missedText = missed
+                .map(seg => `[${seg.timestamp}] ${seg.narration}\n[VISUAL: ${seg.visualCue}]`)
+                .join("\n\n");
+            lastScene.narrationText += "\n\n" + missedText;
+            console.warn(`[ScenePlanner] ${missed.length} segments not covered by AI ranges, appended to last scene`);
+        }
+    } else {
+        // Fallback: split segments evenly across scenes
+        const segmentsPerScene = Math.ceil(totalSegments / totalScenes);
+
+        for (let sceneIdx = 0; sceneIdx < totalScenes; sceneIdx++) {
+            const startSeg = sceneIdx * segmentsPerScene;
+            const endSeg = Math.min(startSeg + segmentsPerScene, totalSegments);
+            const assignedSegments = script.segments.slice(startSeg, endSeg);
+
+            plan.scenes[sceneIdx].narrationText = assignedSegments
+                .map(seg => `[${seg.timestamp}] ${seg.narration}\n[VISUAL: ${seg.visualCue}]`)
+                .join("\n\n");
+            plan.scenes[sceneIdx].duration = Math.max(
+                plan.scenes[sceneIdx].duration,
+                assignedSegments.length * 15
+            );
+        }
+
+        console.log(`[ScenePlanner] Assigned ${totalSegments} segments evenly across ${totalScenes} scenes (~${segmentsPerScene} each)`);
+    }
+
+    // Log total chars to verify no loss
+    const totalChars = plan.scenes.reduce((sum, s) => sum + s.narrationText.length, 0);
+    console.log(`[ScenePlanner] Total narration assigned: ${totalChars} chars across ${totalScenes} scenes`);
 }
 
 /**

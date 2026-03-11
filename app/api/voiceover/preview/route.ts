@@ -8,6 +8,7 @@ import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { generateVoiceover, TtsEngine } from "@/lib/tts";
 import type { NarratorStyle } from "@/lib/tts";
+import { cleanNarrationText } from "@/lib/documentary/assembler";
 
 export async function POST(req: Request) {
     const session = await auth();
@@ -36,7 +37,7 @@ export async function POST(req: Request) {
 
     try {
         const audioBuffer = await generateVoiceover({
-            text,
+            text: cleanNarrationText(text),
             engine: ttsEngine,
             voiceId,
             speed: speed || undefined,

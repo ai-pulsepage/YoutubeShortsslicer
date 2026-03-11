@@ -31,28 +31,79 @@ interface PexelsResponse {
 
 /**
  * Extract search keywords from narration text.
- * Takes key nouns/topics for Pexels search.
+ * Extracts concrete, visual nouns that Pexels actually has results for.
+ * Falls back to scene title words if narration yields nothing.
  */
 function extractKeywords(narrationText: string, sceneTitle?: string): string {
-    // Use scene title as primary keyword if available
-    if (sceneTitle) {
-        // Clean up the title for search
-        const cleaned = sceneTitle
-            .replace(/[^a-zA-Z\s]/g, "")
-            .replace(/\s+/g, " ")
-            .trim()
-            .toLowerCase();
-        if (cleaned.length > 2) return cleaned;
+    // Concrete visual nouns that Pexels has good footage for
+    const VISUAL_NOUNS = new Set([
+        // Nature
+        "forest", "lake", "river", "ocean", "mountain", "trees", "sky", "clouds",
+        "sunset", "sunrise", "rain", "snow", "storm", "stars", "moon", "sun",
+        "field", "meadow", "desert", "beach", "waterfall", "cave", "cliff",
+        "woods", "path", "trail", "flowers", "garden", "fog", "mist",
+        // Buildings & Spaces
+        "cabin", "house", "building", "city", "town", "village", "church",
+        "school", "office", "hospital", "factory", "bridge", "road", "highway",
+        "door", "window", "room", "hallway", "basement", "attic", "stairs",
+        "library", "museum", "temple", "ruins", "castle",
+        // People & Activities
+        "children", "kids", "people", "crowd", "family", "woman", "man",
+        "walking", "running", "swimming", "sleeping", "reading", "writing",
+        "camping", "hiking", "campfire", "bonfire", "fire", "candle",
+        // Objects
+        "car", "train", "boat", "airplane", "bicycle",
+        "book", "letter", "map", "compass", "flashlight", "torch",
+        "clock", "phone", "computer", "photograph", "mirror",
+        "paper", "notebook", "documents", "folder", "cabinet",
+        // Emotions & Atmosphere
+        "darkness", "shadow", "light", "night", "morning", "evening",
+        "silence", "fear", "mystery",
+        // Camp specific
+        "camp", "tent", "bunk", "canoe", "dock", "archery", "flag",
+        "bus", "counselor", "scouts", "summer",
+    ]);
+
+    // Clean narration — remove timestamps, VISUAL markers, special chars
+    const cleanText = narrationText
+        .replace(/\[\d{1,2}:\d{2}(?::\d{2})?\]/g, "")
+        .replace(/\[VISUAL:[^\]]*\]/gi, "")
+        .replace(/[^a-zA-Z\s]/g, " ")
+        .toLowerCase();
+
+    const words = cleanText.split(/\s+/).filter(w => w.length > 2);
+
+    // Find concrete visual nouns from narration
+    const found: string[] = [];
+    const seen = new Set<string>();
+    for (const word of words) {
+        // Check singular and plural forms
+        const singular = word.endsWith("s") ? word.slice(0, -1) : word;
+        const check = VISUAL_NOUNS.has(word) ? word : (VISUAL_NOUNS.has(singular) ? singular : null);
+        if (check && !seen.has(check)) {
+            seen.add(check);
+            found.push(check);
+            if (found.length >= 3) break; // 2-3 keywords is optimal for Pexels
+        }
     }
 
-    // Fallback: extract first meaningful phrase from narration
-    const words = narrationText
-        .replace(/[^a-zA-Z\s]/g, "")
-        .split(/\s+/)
-        .filter((w) => w.length > 4) // skip short words
-        .slice(0, 5);
+    if (found.length > 0) {
+        return found.join(" ");
+    }
 
-    return words.join(" ") || "abstract background";
+    // Fallback: use scene title but clean it up for Pexels
+    if (sceneTitle) {
+        const titleWords = sceneTitle
+            .replace(/[^a-zA-Z\s]/g, "")
+            .split(/\s+/)
+            .filter(w => w.length > 3 && !["the", "and", "but", "that", "this", "with", "from"].includes(w.toLowerCase()))
+            .slice(0, 2)
+            .map(w => w.toLowerCase());
+
+        if (titleWords.length > 0) return titleWords.join(" ");
+    }
+
+    return "cinematic nature landscape";
 }
 
 /**

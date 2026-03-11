@@ -37,7 +37,7 @@ const TEMP_DIR = path.join(os.tmpdir(), "documentary-assembly");
  * Pacing pauses are handled downstream by narrator-style.ts (SSML breaks at paragraphs/sentences).
  * Visual markers become double-newlines so the narrator style treats them as paragraph breaks.
  */
-function cleanNarrationText(text: string): string {
+export function cleanNarrationText(text: string): string {
     return text
         .replace(/\[\d{1,2}:\d{2}(?::\d{2})?\]/g, "")          // [0:00], [1:30]
         .replace(/\[VISUAL:[^\]]*\]/gi, "\n\n")                  // [VISUAL: ...] → paragraph break
@@ -351,22 +351,10 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
                 }
             }
 
-            // Step 1b: Fetch ambient SFX from Freesound
-            let sfxPath: string | null = null;
-            try {
-                sfxPath = await withTimeout(
-                    fetchFreesoundSfx(
-                        scene.title || `Scene ${scene.sceneIndex + 1}`,
-                        sceneDir,
-                        Math.max(10, narrationDuration),
-                    ),
-                    15_000,
-                    "Freesound SFX"
-                );
-                if (sfxPath) console.log(`[Assembly]   SFX loaded: ${sfxPath}`);
-            } catch (sfxErr: any) {
-                console.warn(`[Assembly]   SFX fetch failed: ${sfxErr.message}`);
-            }
+            // Step 1b: SFX disabled — Freesound returns irrelevant audio with abstract queries
+            // (e.g. "Legendary loot.wav", "Self Destruct/Alpha-11 Warhead Explosion")
+            // TODO: Re-enable when we have better keyword extraction or curated SFX library
+            const sfxPath: string | null = null;
 
             // Step 1c: Generate background music via MusicGen
             let musicPath: string | null = null;
