@@ -495,6 +495,50 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
                 );
             }
 
+            // Step 5b: Ensure video is at least as long as narration
+            // If filler is shorter, pad with black frames so narration plays in full
+            if (narrationDuration > 0) {
+                try {
+                    // Get video duration
+                    const videoDurStr = execSync(
+                        `ffprobe -v error -show_entries format=duration -of csv=p=0 "${sceneVideoPath}"`,
+                        { timeout: 10000, encoding: "utf-8" }
+                    ).trim();
+                    const videoDuration = parseFloat(videoDurStr) || 0;
+
+                    if (videoDuration > 0 && videoDuration < narrationDuration - 1) {
+                        const paddingNeeded = narrationDuration - videoDuration;
+                        console.log(`[Assembly]   Video ${videoDuration.toFixed(1)}s < narration ${narrationDuration.toFixed(1)}s, padding ${paddingNeeded.toFixed(1)}s black`);
+
+                        // Create black padding video
+                        const blackPath = path.join(sceneDir, "black-pad.mp4");
+                        execSync(
+                            `ffmpeg -f lavfi -i color=c=black:s=1280x720:r=30:d=${paddingNeeded} ` +
+                            `-c:v libx264 -preset fast -pix_fmt yuv420p -an "${blackPath}" -y`,
+                            { timeout: 60000, stdio: "pipe" }
+                        );
+
+                        // Concatenate original video + black padding
+                        const padConcatPath = path.join(sceneDir, "pad-concat.txt");
+                        fs.writeFileSync(padConcatPath, [
+                            `file '${sceneVideoPath.replace(/\\/g, "/")}'`,
+                            `file '${blackPath.replace(/\\/g, "/")}'`,
+                        ].join("\n"));
+
+                        const paddedPath = path.join(sceneDir, "scene-video-padded.mp4");
+                        execSync(
+                            `ffmpeg -f concat -safe 0 -i "${padConcatPath}" -c copy "${paddedPath}" -y`,
+                            { timeout: 120000, stdio: "pipe" }
+                        );
+
+                        // Replace original with padded version
+                        fs.copyFileSync(paddedPath, sceneVideoPath);
+                    }
+                } catch (padErr: any) {
+                    console.warn(`[Assembly]   Video padding failed: ${padErr.message}`);
+                }
+            }
+
             // Step 6: Mix 3-track audio (narration + SFX + music) with scene video
             const sceneOutputPath = path.join(sceneDir, "scene-final.mp4");
             const hasNarration = narrationPath && fs.existsSync(narrationPath);
@@ -548,7 +592,7 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
                         `ffmpeg ${inputs.join(" ")} ` +
                         `-filter_complex "${filterComplex}" ` +
                         `-map 0:v -map "[aout]" -c:v copy -c:a aac -b:a 192k ` +
-                        `-shortest "${sceneOutputPath}" -y`,
+                        `"${sceneOutputPath}" -y`,
                         { timeout: 600000, stdio: "pipe" }
                     );
                 } catch (mixErr: any) {
@@ -559,7 +603,7 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
                             execSync(
                                 `ffmpeg -i "${sceneVideoPath}" -i "${narrationPath}" ` +
                                 `-map 0:v -map 1:a -c:v copy -c:a aac -b:a 192k ` +
-                                `-shortest "${sceneOutputPath}" -y`,
+                                `"${sceneOutputPath}" -y`,
                                 { timeout: 600000, stdio: "pipe" }
                             );
                         } catch {

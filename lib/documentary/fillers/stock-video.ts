@@ -31,8 +31,8 @@ interface PexelsResponse {
 
 /**
  * Extract search keywords from narration text.
+ * Priority: [VISUAL:] cue nouns > narration nouns > scene title fallback.
  * Extracts concrete, visual nouns that Pexels actually has results for.
- * Falls back to scene title words if narration yields nothing.
  */
 function extractKeywords(narrationText: string, sceneTitle?: string): string {
     // Concrete visual nouns that Pexels has good footage for
@@ -42,56 +42,71 @@ function extractKeywords(narrationText: string, sceneTitle?: string): string {
         "sunset", "sunrise", "rain", "snow", "storm", "stars", "moon", "sun",
         "field", "meadow", "desert", "beach", "waterfall", "cave", "cliff",
         "woods", "path", "trail", "flowers", "garden", "fog", "mist",
+        "clearing", "leaves", "branches", "roots", "moss",
         // Buildings & Spaces
         "cabin", "house", "building", "city", "town", "village", "church",
         "school", "office", "hospital", "factory", "bridge", "road", "highway",
         "door", "window", "room", "hallway", "basement", "attic", "stairs",
         "library", "museum", "temple", "ruins", "castle",
         // People & Activities
-        "children", "kids", "people", "crowd", "family", "woman", "man",
+        "children", "kids", "people", "crowd", "family", "woman", "man", "girl", "boy",
         "walking", "running", "swimming", "sleeping", "reading", "writing",
         "camping", "hiking", "campfire", "bonfire", "fire", "candle",
+        "whispering", "hugging", "waving", "crying", "smiling", "playing",
         // Objects
         "car", "train", "boat", "airplane", "bicycle",
         "book", "letter", "map", "compass", "flashlight", "torch",
         "clock", "phone", "computer", "photograph", "mirror",
         "paper", "notebook", "documents", "folder", "cabinet",
+        "stones", "circle", "bracelet", "newspaper", "clippings",
         // Emotions & Atmosphere
-        "darkness", "shadow", "light", "night", "morning", "evening",
-        "silence", "fear", "mystery",
+        "darkness", "shadow", "light", "night", "morning", "evening", "dusk", "dawn",
+        "silence", "fear", "mystery", "sunlight", "moonlight",
         // Camp specific
         "camp", "tent", "bunk", "canoe", "dock", "archery", "flag",
-        "bus", "counselor", "scouts", "summer",
+        "bus", "counselor", "scouts", "summer", "campers", "volleyball",
     ]);
 
-    // Clean narration — remove timestamps, VISUAL markers, special chars
-    const cleanText = narrationText
-        .replace(/\[\d{1,2}:\d{2}(?::\d{2})?\]/g, "")
-        .replace(/\[VISUAL:[^\]]*\]/gi, "")
-        .replace(/[^a-zA-Z\s]/g, " ")
-        .toLowerCase();
+    // Helper: scan text for visual nouns
+    function findNouns(text: string, limit: number): string[] {
+        const clean = text.replace(/[^a-zA-Z\s]/g, " ").toLowerCase();
+        const words = clean.split(/\s+/).filter(w => w.length > 2);
+        const found: string[] = [];
+        const seen = new Set<string>();
+        for (const word of words) {
+            const singular = word.endsWith("s") ? word.slice(0, -1) : word;
+            const check = VISUAL_NOUNS.has(word) ? word : (VISUAL_NOUNS.has(singular) ? singular : null);
+            if (check && !seen.has(check)) {
+                seen.add(check);
+                found.push(check);
+                if (found.length >= limit) break;
+            }
+        }
+        return found;
+    }
 
-    const words = cleanText.split(/\s+/).filter(w => w.length > 2);
-
-    // Find concrete visual nouns from narration
-    const found: string[] = [];
-    const seen = new Set<string>();
-    for (const word of words) {
-        // Check singular and plural forms
-        const singular = word.endsWith("s") ? word.slice(0, -1) : word;
-        const check = VISUAL_NOUNS.has(word) ? word : (VISUAL_NOUNS.has(singular) ? singular : null);
-        if (check && !seen.has(check)) {
-            seen.add(check);
-            found.push(check);
-            if (found.length >= 3) break; // 2-3 keywords is optimal for Pexels
+    // Priority 1: Extract nouns from [VISUAL:] cue text
+    const visualCues = narrationText.match(/\[VISUAL:\s*([^\]]+)\]/gi);
+    if (visualCues && visualCues.length > 0) {
+        const cueText = visualCues
+            .map(cue => cue.replace(/\[VISUAL:\s*/i, "").replace(/\]$/, ""))
+            .join(" ");
+        const cueNouns = findNouns(cueText, 3);
+        if (cueNouns.length > 0) {
+            return cueNouns.join(" ");
         }
     }
 
-    if (found.length > 0) {
-        return found.join(" ");
+    // Priority 2: Extract nouns from narration text (without VISUAL markers)
+    const cleanNarration = narrationText
+        .replace(/\[\d{1,2}:\d{2}(?::\d{2})?\]/g, "")
+        .replace(/\[VISUAL:[^\]]*\]/gi, "");
+    const narrationNouns = findNouns(cleanNarration, 3);
+    if (narrationNouns.length > 0) {
+        return narrationNouns.join(" ");
     }
 
-    // Fallback: use scene title but clean it up for Pexels
+    // Priority 3: Scene title fallback
     if (sceneTitle) {
         const titleWords = sceneTitle
             .replace(/[^a-zA-Z\s]/g, "")
