@@ -1,0 +1,761 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import {
+  Radio,
+  Plus,
+  Trash2,
+  Edit3,
+  Users,
+  Mic,
+  User,
+  Loader2,
+  ChevronLeft,
+  Play,
+  Clock,
+  Link2,
+  Search,
+  MessageSquare,
+  Megaphone,
+  ArrowUp,
+  ArrowDown,
+  X,
+  Check,
+  Globe,
+  FileText,
+  Sparkles,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+
+type Segment = {
+  id: string;
+  order: number;
+  type: string;
+  durationMin: number;
+  topicTitle: string | null;
+  topicContent: string | null;
+  sourceUrls: string[];
+  sourceMode: string;
+  sponsorId: string | null;
+  sponsor?: { brandName: string } | null;
+};
+
+type Character = {
+  id: string;
+  name: string;
+  role: string;
+  archetype: string;
+  avatarUrl: string | null;
+  voiceId: string | null;
+};
+
+type Episode = {
+  id: string;
+  episodeNumber: number;
+  title: string | null;
+  durationMin: number;
+  status: string;
+  segments: Segment[];
+  participants: { character: Character }[];
+  createdAt: string;
+};
+
+type Show = {
+  id: string;
+  name: string;
+  description: string | null;
+  showFormat: string;
+  contentFilter: string;
+  defaultDurationMin: number;
+  coverArtUrl: string | null;
+  jingleUrl: string | null;
+  jinglePrompt: string | null;
+  hosts: { character: Character }[];
+  defaultGuests: { character: Character }[];
+  _count: { episodes: number };
+};
+
+type Sponsor = {
+  id: string;
+  brandName: string;
+  promoCode: string | null;
+  adStyle: string;
+  active: boolean;
+};
+
+const SHOW_FORMATS = [
+  { id: "SOLO", name: "Solo Host", desc: "One host, solo commentary", icon: "🎙️" },
+  { id: "TWO_HOST", name: "Two Hosts", desc: "Two co-hosts bantering", icon: "🎙️🎙️" },
+  { id: "HOST_PLUS_GUESTS", name: "Host + Guests", desc: "Host brings on guests", icon: "🎙️🗣️" },
+  { id: "ROUNDTABLE", name: "Roundtable", desc: "Multiple equal voices", icon: "🔄" },
+];
+
+const CONTENT_FILTERS = [
+  { id: "UNHINGED", name: "Unhinged", desc: "No content restrictions", color: "red" },
+  { id: "MODERATE", name: "Moderate", desc: "Light language filter", color: "amber" },
+  { id: "FAMILY_FRIENDLY", name: "Family Friendly", desc: "Clean language only", color: "emerald" },
+];
+
+const DURATIONS = [15, 30, 45, 60];
+
+const SEGMENT_TYPE_INFO: Record<string, { icon: string; color: string; label: string }> = {
+  INTRO: { icon: "🎬", color: "blue", label: "Intro" },
+  TOPIC: { icon: "💬", color: "violet", label: "Topic" },
+  AD_BREAK: { icon: "📢", color: "amber", label: "Ad Break" },
+  OUTRO: { icon: "👋", color: "emerald", label: "Outro" },
+};
+
+const SOURCE_MODES = [
+  { id: "URLS", icon: <Link2 className="w-3.5 h-3.5" />, label: "Paste URLs", desc: "Scrape specific articles" },
+  { id: "AUTO_RESEARCH", icon: <Search className="w-3.5 h-3.5" />, label: "Auto-Research", desc: "AI finds sources" },
+  { id: "MANUAL_PREMISE", icon: <MessageSquare className="w-3.5 h-3.5" />, label: "Manual Premise", desc: "Argue from beliefs" },
+];
+
+export default function ShowDetailPage() {
+  const params = useParams();
+  const router = useRouter();
+  const showId = params.showId as string;
+
+  const [show, setShow] = useState<Show | null>(null);
+  const [episodes, setEpisodes] = useState<Episode[]>([]);
+  const [allCharacters, setAllCharacters] = useState<Character[]>([]);
+  const [sponsors, setSponsors] = useState<Sponsor[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<"episodes" | "settings">("episodes");
+  const [showCreateEpisode, setShowCreateEpisode] = useState(false);
+
+  useEffect(() => {
+    Promise.all([
+      fetch(`/api/podcast/shows`).then((r) => r.json()),
+      fetch(`/api/podcast/episodes?showId=${showId}`).then((r) => r.json()),
+      fetch(`/api/podcast/characters`).then((r) => r.json()),
+      fetch(`/api/podcast/sponsors`).then((r) => r.json()),
+    ])
+      .then(([shows, eps, chars, spons]) => {
+        const s = (Array.isArray(shows) ? shows : []).find((s: Show) => s.id === showId);
+        setShow(s || null);
+        setEpisodes(Array.isArray(eps) ? eps : []);
+        setAllCharacters(Array.isArray(chars) ? chars : []);
+        setSponsors(Array.isArray(spons) ? spons : []);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [showId]);
+
+  const createEpisode = async (data: {
+    title: string;
+    durationMin: number;
+    participantIds: string[];
+    segments: any[];
+  }) => {
+    const res = await fetch("/api/podcast/episodes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ showId, ...data }),
+    });
+    if (res.ok) {
+      const ep = await res.json();
+      setEpisodes([ep, ...episodes]);
+      setShowCreateEpisode(false);
+    }
+  };
+
+  const deleteEpisode = async (id: string, title: string) => {
+    if (!confirm(`Delete "${title}"?`)) return;
+    await fetch(`/api/podcast/episodes?id=${id}`, { method: "DELETE" });
+    setEpisodes(episodes.filter((e) => e.id !== id));
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-6 h-6 text-gray-500 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!show) {
+    return (
+      <div className="text-center py-20 text-gray-500">
+        Show not found.{" "}
+        <Link href="/dashboard/podcasts" className="text-violet-400 hover:underline">
+          Go back
+        </Link>
+      </div>
+    );
+  }
+
+  const hostChars = show.hosts.map((h) => h.character);
+  const guestChars = show.defaultGuests.map((g) => g.character);
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <Link
+          href="/dashboard/podcasts"
+          className="p-2 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-white"
+        >
+          <ChevronLeft className="w-5 h-5" />
+        </Link>
+        <div className="flex-1">
+          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+            <Radio className="w-6 h-6 text-violet-400" />
+            {show.name}
+          </h1>
+          <p className="text-sm text-gray-400 mt-0.5">
+            {show.showFormat.replace(/_/g, " ")} • {show.defaultDurationMin} min •{" "}
+            {show._count.episodes} episodes
+          </p>
+        </div>
+        <button
+          onClick={() => setShowCreateEpisode(true)}
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-violet-600 hover:bg-violet-500 text-white transition-all"
+        >
+          <Plus className="w-4 h-4" />
+          New Episode
+        </button>
+      </div>
+
+      {/* Cast */}
+      <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-4">
+        <h3 className="text-xs text-gray-500 uppercase tracking-wider mb-3">Cast</h3>
+        <div className="flex items-center gap-3 flex-wrap">
+          {hostChars.map((c) => (
+            <CharacterBadge key={c.id} character={c} role="Host" />
+          ))}
+          {guestChars.map((c) => (
+            <CharacterBadge key={c.id} character={c} role="Guest" />
+          ))}
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-gray-800 pb-0">
+        <button
+          onClick={() => setTab("episodes")}
+          className={cn(
+            "px-4 py-2 text-sm font-medium border-b-2 -mb-[1px] transition-colors",
+            tab === "episodes"
+              ? "border-violet-500 text-violet-400"
+              : "border-transparent text-gray-500 hover:text-gray-300"
+          )}
+        >
+          Episodes ({episodes.length})
+        </button>
+        <button
+          onClick={() => setTab("settings")}
+          className={cn(
+            "px-4 py-2 text-sm font-medium border-b-2 -mb-[1px] transition-colors",
+            tab === "settings"
+              ? "border-violet-500 text-violet-400"
+              : "border-transparent text-gray-500 hover:text-gray-300"
+          )}
+        >
+          Settings
+        </button>
+      </div>
+
+      {/* Episodes List */}
+      {tab === "episodes" && (
+        <div className="space-y-3">
+          {episodes.length === 0 ? (
+            <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-12 text-center">
+              <FileText className="w-12 h-12 text-gray-700 mx-auto mb-3" />
+              <h3 className="text-white font-semibold mb-1">No episodes yet</h3>
+              <p className="text-gray-500 text-sm mb-4">
+                Create your first episode — set topics, add guests, assign sponsors
+              </p>
+              <button
+                onClick={() => setShowCreateEpisode(true)}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm bg-violet-600 hover:bg-violet-500 text-white"
+              >
+                <Plus className="w-4 h-4" /> Create Episode
+              </button>
+            </div>
+          ) : (
+            episodes.map((ep) => (
+              <EpisodeCard key={ep.id} episode={ep} onDelete={() => deleteEpisode(ep.id, ep.title || `Ep ${ep.episodeNumber}`)} showId={showId} />
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Settings (basic for now) */}
+      {tab === "settings" && (
+        <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-6 space-y-4">
+          <h3 className="text-sm font-semibold text-white">Show Settings</h3>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <p className="text-gray-500 text-xs mb-1">Format</p>
+              <p className="text-white">{show.showFormat.replace(/_/g, " ")}</p>
+            </div>
+            <div>
+              <p className="text-gray-500 text-xs mb-1">Content Filter</p>
+              <p className="text-white">{show.contentFilter}</p>
+            </div>
+            <div>
+              <p className="text-gray-500 text-xs mb-1">Default Duration</p>
+              <p className="text-white">{show.defaultDurationMin} minutes</p>
+            </div>
+            <div>
+              <p className="text-gray-500 text-xs mb-1">Language</p>
+              <p className="text-white">English</p>
+            </div>
+          </div>
+          {show.description && (
+            <div>
+              <p className="text-gray-500 text-xs mb-1">Description</p>
+              <p className="text-sm text-gray-300">{show.description}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Create Episode Modal */}
+      {showCreateEpisode && (
+        <CreateEpisodeModal
+          show={show}
+          allCharacters={allCharacters}
+          sponsors={sponsors}
+          onClose={() => setShowCreateEpisode(false)}
+          onCreate={createEpisode}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Character Badge ────────────────────────────────────
+
+function CharacterBadge({ character, role }: { character: Character; role: string }) {
+  return (
+    <div className="flex items-center gap-2 bg-gray-800/50 rounded-full px-3 py-1.5 border border-gray-700">
+      {character.avatarUrl ? (
+        <img src={character.avatarUrl} alt="" className="w-6 h-6 rounded-full" />
+      ) : (
+        <div className="w-6 h-6 rounded-full bg-gray-700 flex items-center justify-center text-xs">
+          {role === "Host" ? "🎙️" : "🗣️"}
+        </div>
+      )}
+      <span className="text-xs font-medium text-white">{character.name}</span>
+      <span className="text-[9px] uppercase text-gray-500 tracking-wider">{role}</span>
+    </div>
+  );
+}
+
+// ─── Episode Card ───────────────────────────────────────
+
+function EpisodeCard({ episode, onDelete, showId }: { episode: Episode; onDelete: () => void; showId: string }) {
+  const statusColors: Record<string, string> = {
+    DRAFT: "bg-gray-500/20 text-gray-400",
+    SCRIPTING: "bg-blue-500/20 text-blue-400",
+    RECORDING: "bg-violet-500/20 text-violet-400",
+    ASSEMBLING: "bg-amber-500/20 text-amber-400",
+    READY: "bg-emerald-500/20 text-emerald-400",
+    APPROVED: "bg-green-500/20 text-green-400",
+    PUBLISHED: "bg-green-600/20 text-green-300",
+    REJECTED: "bg-red-500/20 text-red-400",
+    FAILED_PODCAST: "bg-red-500/20 text-red-400",
+  };
+
+  const topicSegments = episode.segments.filter((s) => s.type === "TOPIC");
+
+  return (
+    <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-4 hover:border-gray-700 transition-colors group">
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-lg font-bold text-violet-400 flex-shrink-0">
+          {episode.episodeNumber}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <h3 className="text-sm font-semibold text-white truncate">
+              {episode.title || `Episode ${episode.episodeNumber}`}
+            </h3>
+            <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-medium", statusColors[episode.status] || statusColors.DRAFT)}>
+              {episode.status}
+            </span>
+          </div>
+          <div className="flex items-center gap-3 text-[11px] text-gray-500">
+            <span className="flex items-center gap-1">
+              <Clock className="w-3 h-3" /> {episode.durationMin} min
+            </span>
+            <span className="flex items-center gap-1">
+              <Users className="w-3 h-3" /> {episode.participants.length} speakers
+            </span>
+            <span className="flex items-center gap-1">
+              <MessageSquare className="w-3 h-3" /> {topicSegments.length} topics
+            </span>
+          </div>
+          {/* Topic pills */}
+          {topicSegments.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              {topicSegments.map((s) => (
+                <span key={s.id} className="text-[10px] px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20">
+                  {s.topicTitle || "Untitled Topic"}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button onClick={onDelete} className="p-1.5 rounded-lg hover:bg-red-500/10 text-gray-400 hover:text-red-400">
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Create Episode Modal ───────────────────────────────
+
+function CreateEpisodeModal({
+  show,
+  allCharacters,
+  sponsors,
+  onClose,
+  onCreate,
+}: {
+  show: Show;
+  allCharacters: Character[];
+  sponsors: Sponsor[];
+  onClose: () => void;
+  onCreate: (data: any) => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [durationMin, setDurationMin] = useState(show.defaultDurationMin);
+  const [selectedGuests, setSelectedGuests] = useState<string[]>(
+    show.defaultGuests.map((g) => g.character.id)
+  );
+  const [segments, setSegments] = useState<
+    {
+      type: string;
+      durationMin: number;
+      topicTitle: string;
+      topicContent: string;
+      sourceUrls: string[];
+      sourceMode: string;
+      sponsorId: string;
+    }[]
+  >([
+    { type: "INTRO", durationMin: 2, topicTitle: "", topicContent: "", sourceUrls: [], sourceMode: "MANUAL_PREMISE", sponsorId: "" },
+    { type: "TOPIC", durationMin: durationMin - 4, topicTitle: "", topicContent: "", sourceUrls: [], sourceMode: "MANUAL_PREMISE", sponsorId: "" },
+    { type: "OUTRO", durationMin: 2, topicTitle: "", topicContent: "", sourceUrls: [], sourceMode: "MANUAL_PREMISE", sponsorId: "" },
+  ]);
+  const [saving, setSaving] = useState(false);
+
+  const availableGuests = allCharacters.filter(
+    (c) => !show.hosts.some((h) => h.character.id === c.id)
+  );
+
+  const addSegment = (type: string) => {
+    const newSeg = {
+      type,
+      durationMin: type === "AD_BREAK" ? 2 : 10,
+      topicTitle: "",
+      topicContent: "",
+      sourceUrls: [],
+      sourceMode: "MANUAL_PREMISE",
+      sponsorId: "",
+    };
+    // Insert before outro
+    const outroIndex = segments.findIndex((s) => s.type === "OUTRO");
+    if (outroIndex >= 0) {
+      const copy = [...segments];
+      copy.splice(outroIndex, 0, newSeg);
+      setSegments(copy);
+    } else {
+      setSegments([...segments, newSeg]);
+    }
+  };
+
+  const removeSegment = (index: number) => {
+    setSegments(segments.filter((_, i) => i !== index));
+  };
+
+  const updateSegment = (index: number, field: string, value: any) => {
+    const copy = [...segments];
+    (copy[index] as any)[field] = value;
+    setSegments(copy);
+  };
+
+  const addSourceUrl = (index: number) => {
+    const copy = [...segments];
+    copy[index].sourceUrls = [...copy[index].sourceUrls, ""];
+    setSegments(copy);
+  };
+
+  const updateSourceUrl = (segIndex: number, urlIndex: number, value: string) => {
+    const copy = [...segments];
+    copy[segIndex].sourceUrls[urlIndex] = value;
+    setSegments(copy);
+  };
+
+  const removeSourceUrl = (segIndex: number, urlIndex: number) => {
+    const copy = [...segments];
+    copy[segIndex].sourceUrls = copy[segIndex].sourceUrls.filter((_, i) => i !== urlIndex);
+    setSegments(copy);
+  };
+
+  const handleCreate = () => {
+    setSaving(true);
+    onCreate({
+      title: title || undefined,
+      durationMin,
+      participantIds: selectedGuests,
+      segments: segments.map((s) => ({
+        type: s.type,
+        durationMin: s.durationMin,
+        topicTitle: s.topicTitle || null,
+        topicContent: s.topicContent || null,
+        sourceUrls: s.sourceUrls.filter((u) => u.trim()),
+        sourceMode: s.sourceMode,
+        sponsorId: s.sponsorId || null,
+      })),
+    });
+  };
+
+  const totalDuration = segments.reduce((sum, s) => sum + s.durationMin, 0);
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-3xl shadow-2xl max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
+          <h2 className="text-lg font-semibold text-white">New Episode — {show.name}</h2>
+          <button onClick={onClose} className="text-gray-500 hover:text-white">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
+          {/* Title & Duration */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Episode Title</label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Optional — auto-generated from topics"
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Target Duration</label>
+              <div className="flex gap-2">
+                {DURATIONS.map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => setDurationMin(d)}
+                    className={cn(
+                      "flex-1 py-2 rounded-lg text-sm border transition-colors",
+                      durationMin === d
+                        ? "bg-violet-500/15 border-violet-500/30 text-violet-400"
+                        : "bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600"
+                    )}
+                  >
+                    {d}m
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Guest Selection */}
+          <div>
+            <label className="text-xs text-gray-400 mb-2 block">
+              Guests <span className="text-gray-600">— hosts are auto-included</span>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {availableGuests.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() =>
+                    setSelectedGuests(
+                      selectedGuests.includes(c.id)
+                        ? selectedGuests.filter((id) => id !== c.id)
+                        : [...selectedGuests, c.id]
+                    )
+                  }
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs border transition-colors",
+                    selectedGuests.includes(c.id)
+                      ? "bg-violet-500/15 border-violet-500/30 text-violet-400"
+                      : "bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600"
+                  )}
+                >
+                  <span>{c.role === "HOST" ? "🎙️" : "🗣️"}</span>
+                  {c.name}
+                  {selectedGuests.includes(c.id) && <Check className="w-3 h-3" />}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Segment Rundown */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs text-gray-400">
+                Rundown{" "}
+                <span
+                  className={cn(
+                    "ml-1",
+                    Math.abs(totalDuration - durationMin) > 5
+                      ? "text-red-400"
+                      : "text-gray-600"
+                  )}
+                >
+                  ({totalDuration} / {durationMin} min)
+                </span>
+              </label>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => addSegment("TOPIC")}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] bg-violet-500/10 text-violet-400 border border-violet-500/20 hover:bg-violet-500/20"
+                >
+                  <Plus className="w-3 h-3" /> Topic
+                </button>
+                <button
+                  onClick={() => addSegment("AD_BREAK")}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20"
+                >
+                  <Plus className="w-3 h-3" /> Ad
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {segments.map((seg, i) => {
+                const info = SEGMENT_TYPE_INFO[seg.type] || SEGMENT_TYPE_INFO.TOPIC;
+                return (
+                  <div key={i} className="bg-gray-800/50 border border-gray-800 rounded-xl p-3 space-y-2">
+                    {/* Segment Header */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">{info.icon}</span>
+                      <span className="text-xs font-medium text-white flex-1">{info.label}</span>
+                      <input
+                        type="number"
+                        value={seg.durationMin}
+                        onChange={(e) => updateSegment(i, "durationMin", parseInt(e.target.value) || 1)}
+                        className="w-14 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-white text-center"
+                        min={1}
+                        max={60}
+                      />
+                      <span className="text-[10px] text-gray-500">min</span>
+                      {seg.type !== "INTRO" && seg.type !== "OUTRO" && (
+                        <button onClick={() => removeSegment(i)} className="p-1 text-gray-500 hover:text-red-400">
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Topic segment fields */}
+                    {seg.type === "TOPIC" && (
+                      <>
+                        <input
+                          type="text"
+                          value={seg.topicTitle}
+                          onChange={(e) => updateSegment(i, "topicTitle", e.target.value)}
+                          placeholder="Topic title (e.g., 'Is AI Taking Jobs?')"
+                          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none"
+                        />
+
+                        {/* Source Mode */}
+                        <div className="flex gap-1">
+                          {SOURCE_MODES.map((m) => (
+                            <button
+                              key={m.id}
+                              onClick={() => updateSegment(i, "sourceMode", m.id)}
+                              className={cn(
+                                "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] border transition-colors flex-1",
+                                seg.sourceMode === m.id
+                                  ? "bg-violet-500/15 border-violet-500/30 text-violet-400"
+                                  : "bg-gray-900 border-gray-700 text-gray-500 hover:border-gray-600"
+                              )}
+                            >
+                              {m.icon} {m.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* URL inputs */}
+                        {seg.sourceMode === "URLS" && (
+                          <div className="space-y-1">
+                            {seg.sourceUrls.map((url, ui) => (
+                              <div key={ui} className="flex gap-1">
+                                <input
+                                  type="url"
+                                  value={url}
+                                  onChange={(e) => updateSourceUrl(i, ui, e.target.value)}
+                                  placeholder="https://news-article-link.com/..."
+                                  className="flex-1 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-[10px] text-white placeholder-gray-600 focus:border-violet-500 focus:outline-none"
+                                />
+                                <button onClick={() => removeSourceUrl(i, ui)} className="text-gray-500 hover:text-red-400">
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ))}
+                            <button
+                              onClick={() => addSourceUrl(i)}
+                              className="flex items-center gap-1 text-[10px] text-violet-400 hover:text-violet-300"
+                            >
+                              <Plus className="w-3 h-3" /> Add URL
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Manual premise */}
+                        {seg.sourceMode === "MANUAL_PREMISE" && (
+                          <textarea
+                            value={seg.topicContent}
+                            onChange={(e) => updateSegment(i, "topicContent", e.target.value)}
+                            placeholder="Describe the debate premise..."
+                            rows={2}
+                            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none resize-none"
+                          />
+                        )}
+                      </>
+                    )}
+
+                    {/* Ad Break fields */}
+                    {seg.type === "AD_BREAK" && (
+                      <select
+                        value={seg.sponsorId}
+                        onChange={(e) => updateSegment(i, "sponsorId", e.target.value)}
+                        className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:border-violet-500 focus:outline-none"
+                      >
+                        <option value="">Select sponsor...</option>
+                        {sponsors.filter((s) => s.active).map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.brandName} {s.promoCode ? `(${s.promoCode})` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center gap-2 px-6 py-4 border-t border-gray-800">
+          <div className="flex-1" />
+          <button
+            onClick={handleCreate}
+            disabled={saving}
+            className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-medium bg-violet-600 hover:bg-violet-500 text-white transition-colors disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            Create Episode
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
