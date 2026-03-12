@@ -1,9 +1,9 @@
 """
 RunPod Podcast Worker — Mistral-Large + Brave Search
 
-Runs on RunPod dedicated pod (2×A100 80GB).
+Runs on RunPod dedicated pod (1× A100 40/80GB).
 Generates multi-character podcast dialogue using:
-  - vLLM serving Mistral-Large-Instruct (local, port 8000)
+  - vLLM serving Ministral-3-14B-Instruct-2512 (local, port 8000)
   - Brave Search API for current events research
   - Character personality injection from archetype system
 
@@ -13,7 +13,7 @@ Setup on RunPod (1× A100 PCIe 40/80GB, 100GB volume):
   1. pip install -r podcast-requirements.txt
   2. Start vLLM:
      python -m vllm.entrypoints.openai.api_server \
-       --model mistralai/Mistral-Small-Instruct-2503 \
+       --model mistralai/Ministral-3-14B-Instruct-2512 \
        --tensor-parallel-size 1 \
        --max-model-len 32768 \
        --gpu-memory-utilization 0.90 \
@@ -156,7 +156,7 @@ def call_mistral(system_prompt: str, user_prompt: str, temperature: float = 0.85
     resp = requests.post(
         f"{VLLM_BASE_URL}/v1/chat/completions",
         json={
-            "model": "mistralai/Mistral-Small-Instruct-2503",
+            "model": "mistralai/Ministral-3-14B-Instruct-2512",
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
