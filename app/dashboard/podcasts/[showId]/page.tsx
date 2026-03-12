@@ -12,6 +12,8 @@ import {
   Mic,
   Loader2,
   ChevronLeft,
+  ChevronDown,
+  ChevronUp,
   Clock,
   Link2,
   Search,
@@ -25,6 +27,8 @@ import {
   Eye,
   Brain,
   Cpu,
+  Volume2,
+  Play,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -454,6 +458,9 @@ function EpisodeCard({
   onGenerateScript: () => void;
 }) {
   const [generating, setGenerating] = useState(false);
+  const [scriptOpen, setScriptOpen] = useState(false);
+  const [scriptData, setScriptData] = useState<any>(null);
+  const [loadingScript, setLoadingScript] = useState(false);
 
   const statusColors: Record<string, string> = {
     DRAFT: "bg-gray-500/20 text-gray-400",
@@ -477,92 +484,168 @@ function EpisodeCard({
     setGenerating(false);
   };
 
+  const toggleScript = async () => {
+    if (scriptOpen) {
+      setScriptOpen(false);
+      return;
+    }
+    if (!scriptData) {
+      setLoadingScript(true);
+      try {
+        const res = await fetch(`/api/podcast/scripts?episodeId=${episode.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          setScriptData(data.script);
+        }
+      } catch (err) {
+        console.error("Failed to load script", err);
+      }
+      setLoadingScript(false);
+    }
+    setScriptOpen(true);
+  };
+
   return (
-    <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-4 hover:border-gray-700 transition-colors group">
-      <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-lg font-bold text-violet-400 flex-shrink-0">
-          {episode.episodeNumber}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <h3 className="text-sm font-semibold text-white truncate">
-              {episode.title || `Episode ${episode.episodeNumber}`}
-            </h3>
-            <span
-              className={cn(
-                "text-[10px] px-2 py-0.5 rounded-full font-medium",
-                statusColors[episode.status] || statusColors.DRAFT
-              )}
-            >
-              {episode.status}
-            </span>
+    <div className="bg-gray-900/50 border border-gray-800 rounded-2xl hover:border-gray-700 transition-colors group">
+      <div className="p-4">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-lg font-bold text-violet-400 flex-shrink-0">
+            {episode.episodeNumber}
           </div>
-          <div className="flex items-center gap-3 text-[11px] text-gray-500">
-            <span className="flex items-center gap-1">
-              <Clock className="w-3 h-3" /> {episode.durationMin} min
-            </span>
-            <span className="flex items-center gap-1">
-              <Users className="w-3 h-3" /> {episode.participants.length}{" "}
-              speakers
-            </span>
-            <span className="flex items-center gap-1">
-              <MessageSquare className="w-3 h-3" /> {topicSegments.length}{" "}
-              topics
-            </span>
-          </div>
-          {topicSegments.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-2">
-              {topicSegments.map((s) => (
-                <span
-                  key={s.id}
-                  className="text-[10px] px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20"
-                >
-                  {s.topicTitle || "Untitled Topic"}
-                </span>
-              ))}
-            </div>
-          )}
-          {/* Generate Script / View Script buttons */}
-          <div className="flex gap-2 mt-3">
-            {canGenerate && (
-              <button
-                onClick={handleGenerate}
-                disabled={generating}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 disabled:opacity-50 transition-colors"
-              >
-                {generating ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : (
-                  <Sparkles className="w-3 h-3" />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-sm font-semibold text-white truncate">
+                {episode.title || `Episode ${episode.episodeNumber}`}
+              </h3>
+              <span
+                className={cn(
+                  "text-[10px] px-2 py-0.5 rounded-full font-medium",
+                  statusColors[episode.status] || statusColors.DRAFT
                 )}
-                {generating ? "Generating..." : "Generate Script"}
-              </button>
-            )}
-            {hasScript && (
-              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                <FileText className="w-3 h-3" />
-                Script Ready
+              >
+                {episode.status}
               </span>
+            </div>
+            <div className="flex items-center gap-3 text-[11px] text-gray-500">
+              <span className="flex items-center gap-1">
+                <Clock className="w-3 h-3" /> {episode.durationMin} min
+              </span>
+              <span className="flex items-center gap-1">
+                <Users className="w-3 h-3" /> {episode.participants.length}{" "}
+                speakers
+              </span>
+              <span className="flex items-center gap-1">
+                <MessageSquare className="w-3 h-3" /> {topicSegments.length}{" "}
+                topics
+              </span>
+            </div>
+            {topicSegments.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {topicSegments.map((s) => (
+                  <span
+                    key={s.id}
+                    className="text-[10px] px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20"
+                  >
+                    {s.topicTitle || "Untitled Topic"}
+                  </span>
+                ))}
+              </div>
             )}
+            {/* Action buttons */}
+            <div className="flex gap-2 mt-3">
+              {canGenerate && (
+                <button
+                  onClick={handleGenerate}
+                  disabled={generating}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 disabled:opacity-50 transition-colors"
+                >
+                  {generating ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-3 h-3" />
+                  )}
+                  {generating ? "Generating..." : "Generate Script"}
+                </button>
+              )}
+              {hasScript && (
+                <>
+                  <button
+                    onClick={toggleScript}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-colors cursor-pointer"
+                  >
+                    {loadingScript ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : scriptOpen ? (
+                      <ChevronUp className="w-3 h-3" />
+                    ) : (
+                      <Eye className="w-3 h-3" />
+                    )}
+                    {scriptOpen ? "Hide Script" : "View Script"}
+                  </button>
+                  <button
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-violet-500/10 text-violet-400 border border-violet-500/20 hover:bg-violet-500/20 transition-colors cursor-pointer"
+                    onClick={() => alert("Audio generation coming in Phase 4 — ElevenLabs TTS pipeline")}
+                  >
+                    <Volume2 className="w-3 h-3" />
+                    Generate Audio
+                  </button>
+                </>
+              )}
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={onEdit}
-            className="p-1.5 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-white"
-            title="Edit episode"
-          >
-            <Edit3 className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={onDelete}
-            className="p-1.5 rounded-lg hover:bg-red-500/10 text-gray-400 hover:text-red-400"
-            title="Delete episode"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={onEdit}
+              className="p-1.5 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-white"
+              title="Edit episode"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={onDelete}
+              className="p-1.5 rounded-lg hover:bg-red-500/10 text-gray-400 hover:text-red-400"
+              title="Delete episode"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Script Viewer Panel */}
+      {scriptOpen && scriptData && (
+        <div className="border-t border-gray-800 bg-gray-950/50 rounded-b-2xl">
+          <div className="p-4 max-h-[500px] overflow-y-auto space-y-1">
+            {scriptData.segments?.map((seg: any, si: number) => (
+              <div key={si} className="mb-4">
+                <div className="text-[10px] uppercase tracking-wider text-gray-600 mb-2 flex items-center gap-2">
+                  <span className="h-px flex-1 bg-gray-800" />
+                  <span>{seg.type}: {seg.topicTitle || seg.type}</span>
+                  <span className="h-px flex-1 bg-gray-800" />
+                </div>
+                {seg.lines?.map((line: any, li: number) => (
+                  <div
+                    key={li}
+                    className="flex gap-3 py-1.5 hover:bg-gray-800/30 rounded-lg px-2 -mx-2 transition-colors"
+                  >
+                    <span className="text-[11px] font-semibold text-violet-400 whitespace-nowrap min-w-[100px]">
+                      {line.speaker || line.characterName}:
+                    </span>
+                    <span className="text-[12px] text-gray-300 leading-relaxed">
+                      {line.text || line.dialogue}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ))}
+            {!scriptData.segments && (
+              <pre className="text-[11px] text-gray-400 whitespace-pre-wrap">
+                {JSON.stringify(scriptData, null, 2)}
+              </pre>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
