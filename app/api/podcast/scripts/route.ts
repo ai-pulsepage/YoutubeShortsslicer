@@ -10,12 +10,12 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { episodeId } = await req.json();
+    const { episodeId, provider } = await req.json();
     if (!episodeId) {
       return NextResponse.json({ error: "episodeId required" }, { status: 400 });
     }
 
-    const result = await generateEpisodeScript(episodeId, session.user.id);
+    const result = await generateEpisodeScript(episodeId, session.user.id, provider);
 
     // RunPod dispatch — script arrives later via webhook
     if ("dispatched" in result) {

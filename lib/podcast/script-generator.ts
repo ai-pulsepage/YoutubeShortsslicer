@@ -49,6 +49,7 @@ export interface PodcastScript {
 export async function generateEpisodeScript(
   episodeId: string,
   userId: string,
+  provider?: "mistral" | "deepseek",
   onProgress?: (msg: string) => void
 ): Promise<PodcastScript | { dispatched: true; message: string }> {
   const log = (msg: string) => {
@@ -100,14 +101,13 @@ export async function generateEpisodeScript(
     }),
   }));
 
-  // 4. Try RunPod (Redis queue) first, fall back to DeepSeek API
-  const redisUrl = process.env.REDIS_URL;
-  const useRunPod = redisUrl && !process.env.PODCAST_USE_DEEPSEEK;
+  // 4. Route based on UI toggle
+  const useRunPod = provider === "mistral" && process.env.REDIS_URL;
 
   if (useRunPod) {
     try {
       log("Dispatching to RunPod Mistral worker...");
-      await dispatchToRunPod(episode, characterProfiles, redisUrl);
+      await dispatchToRunPod(episode, characterProfiles, process.env.REDIS_URL!);
 
       // Mark as in-progress
       await prisma.podcastEpisode.update({
@@ -121,8 +121,8 @@ export async function generateEpisodeScript(
     }
   }
 
-  // FALLBACK: Generate locally with DeepSeek API
-  log("Using DeepSeek API (fallback)...");
+  // DeepSeek (selected or fallback)
+  log("Using DeepSeek API...");
   return generateWithDeepSeek(episode, characterProfiles, episodeId, log);
 }
 

@@ -23,6 +23,8 @@ import {
   Sparkles,
   Zap,
   Eye,
+  Brain,
+  Cpu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -120,6 +122,7 @@ export default function ShowDetailPage() {
   const [sponsors, setSponsors] = useState<Sponsor[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"episodes" | "settings">("episodes");
+  const [llmProvider, setLlmProvider] = useState<"mistral" | "deepseek">("mistral");
   const [episodeModal, setEpisodeModal] = useState<{
     open: boolean;
     editEpisode?: Episode;
@@ -207,9 +210,13 @@ export default function ShowDetailPage() {
     const res = await fetch("/api/podcast/scripts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ episodeId: id }),
+      body: JSON.stringify({ episodeId: id, provider: llmProvider }),
     });
     if (res.ok) {
+      const data = await res.json();
+      if (data.dispatched) {
+        alert("Script generation dispatched to Mistral on RunPod. It will appear when ready.");
+      }
       loadAll();
     } else {
       const err = await res.json();
@@ -269,6 +276,40 @@ export default function ShowDetailPage() {
           <Plus className="w-4 h-4" />
           New Episode
         </button>
+      </div>
+
+      {/* LLM Provider Toggle */}
+      <div className="flex items-center gap-3 bg-gray-900/50 border border-gray-800 rounded-xl px-4 py-2.5">
+        <span className="text-xs text-gray-500 uppercase tracking-wider">AI Engine</span>
+        <div className="flex items-center bg-gray-800 rounded-lg p-0.5">
+          <button
+            onClick={() => setLlmProvider("mistral")}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+              llmProvider === "mistral"
+                ? "bg-violet-600 text-white shadow-lg"
+                : "text-gray-400 hover:text-white"
+            )}
+          >
+            <Brain className="w-3.5 h-3.5" />
+            Mistral (RunPod)
+          </button>
+          <button
+            onClick={() => setLlmProvider("deepseek")}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+              llmProvider === "deepseek"
+                ? "bg-emerald-600 text-white shadow-lg"
+                : "text-gray-400 hover:text-white"
+            )}
+          >
+            <Cpu className="w-3.5 h-3.5" />
+            DeepSeek (API)
+          </button>
+        </div>
+        <span className="text-[10px] text-gray-600">
+          {llmProvider === "mistral" ? "Self-hosted • Brave Search" : "Cloud API • Fallback"}
+        </span>
       </div>
 
       {/* Cast */}
