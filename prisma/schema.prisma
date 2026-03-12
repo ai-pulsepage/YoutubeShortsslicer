@@ -84,6 +84,11 @@ model User {
   schedules     ContentSchedule[]
   documentaries Documentary[]
 
+  // Podcast
+  podcastCharacters PodcastCharacter[]
+  podcastShows      PodcastShow[]
+  podcastSponsors   PodcastSponsor[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -555,4 +560,266 @@ model GenJob {
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+// ─── AI Podcast System ───────────────────────────────────
+
+enum CharacterRole {
+  HOST
+  GUEST
+  WILDCARD
+}
+
+enum Archetype {
+  FIREBRAND
+  PROVOCATEUR
+  BULLDOZER
+  SNIPER
+  PROFESSOR
+  PHILOSOPHER
+  ANALYST
+  SKEPTIC
+  COMEDIAN
+  STORYTELLER
+  WILDCARD_PERSONALITY
+  HYPE_MAN
+  MEDIATOR
+  DEVILS_ADVOCATE
+  EMPATH
+  ELDER
+}
+
+enum Generation {
+  SILENT
+  BOOMER
+  GEN_X
+  MILLENNIAL
+  GEN_Z
+  GEN_ALPHA
+}
+
+enum ShowFormat {
+  SOLO
+  TWO_HOST
+  HOST_PLUS_GUESTS
+  ROUNDTABLE
+}
+
+enum ContentFilter {
+  UNHINGED
+  MODERATE
+  FAMILY_FRIENDLY
+}
+
+enum PodcastEpisodeStatus {
+  DRAFT
+  SCRIPTING
+  RECORDING
+  ASSEMBLING
+  READY
+  APPROVED
+  PUBLISHED
+  REJECTED
+  FAILED_PODCAST
+}
+
+enum SegmentType {
+  INTRO
+  TOPIC
+  AD_BREAK
+  OUTRO
+}
+
+enum SourceMode {
+  URLS
+  AUTO_RESEARCH
+  MANUAL_PREMISE
+}
+
+enum AdStyle {
+  CASUAL
+  HYPE
+  SINCERE
+  COMEDIC
+}
+
+enum ImageModel {
+  FLUX
+  CHROMA
+  JUGGERNAUT
+}
+
+model PodcastCharacter {
+  id                String        @id @default(cuid())
+  userId            String
+  name              String
+  role              CharacterRole @default(GUEST)
+  archetype         Archetype     @default(ANALYST)
+
+  // Visual Identity
+  avatarUrl         String?
+  avatarPrompt      String?       @db.Text
+  imageModel        ImageModel    @default(FLUX)
+
+  // Voice
+  voiceId           String?                           // ElevenLabs voice ID
+  speechRate        Float         @default(1.0)
+
+  // Generation & Worldview
+  generation        Generation    @default(MILLENNIAL)
+  politicalLeaning  String?       @db.Text
+  religiousView     String?       @db.Text
+  coreBeliefs       Json          @default("[]")
+  hotButtons        Json          @default("[]")
+
+  // Memory
+  memories          Json          @default("[]")
+  memoryAutoUpdate  Boolean       @default(true)
+
+  // Stats
+  episodeCount      Int           @default(0)
+
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Relations (join tables)
+  showHosts         PodcastShowHost[]
+  showDefaultGuests PodcastShowGuest[]
+  episodeParticipants EpisodeParticipant[]
+
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+}
+
+model PodcastShow {
+  id                String        @id @default(cuid())
+  userId            String
+  name              String
+  description       String?       @db.Text
+  coverArtUrl       String?
+  showFormat        ShowFormat    @default(HOST_PLUS_GUESTS)
+  contentFilter     ContentFilter @default(UNHINGED)
+  defaultDurationMin Int          @default(30)
+
+  // Jingle
+  jingleUrl         String?
+  jinglePrompt      String?       @db.Text
+
+  // Distribution
+  spotifyRssUrl     String?
+  language          String        @default("en")
+
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hosts             PodcastShowHost[]
+  defaultGuests     PodcastShowGuest[]
+  episodes          PodcastEpisode[]
+
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+}
+
+// Join: Show <-> Host Characters
+model PodcastShowHost {
+  id          String           @id @default(cuid())
+  showId      String
+  characterId String
+
+  show        PodcastShow      @relation(fields: [showId], references: [id], onDelete: Cascade)
+  character   PodcastCharacter @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([showId, characterId])
+}
+
+// Join: Show <-> Default Guest Characters
+model PodcastShowGuest {
+  id          String           @id @default(cuid())
+  showId      String
+  characterId String
+
+  show        PodcastShow      @relation(fields: [showId], references: [id], onDelete: Cascade)
+  character   PodcastCharacter @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([showId, characterId])
+}
+
+model PodcastEpisode {
+  id                String               @id @default(cuid())
+  showId            String
+  episodeNumber     Int                   @default(0)
+  title             String?
+  description       String?               @db.Text
+  durationMin       Int                   @default(30)
+  transcript        Json?                 // Full dialogue turns
+  audioUrl          String?
+  audioDuration     Float?
+  transcriptHtml    String?               @db.Text
+  status            PodcastEpisodeStatus  @default(DRAFT)
+  errorMsg          String?               @db.Text
+  publishedAt       DateTime?
+
+  show              PodcastShow           @relation(fields: [showId], references: [id], onDelete: Cascade)
+  segments          EpisodeSegment[]
+  participants      EpisodeParticipant[]
+
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+}
+
+// Join: Episode <-> Participant Characters
+model EpisodeParticipant {
+  id          String           @id @default(cuid())
+  episodeId   String
+  characterId String
+
+  episode     PodcastEpisode   @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  character   PodcastCharacter @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([episodeId, characterId])
+}
+
+model EpisodeSegment {
+  id            String      @id @default(cuid())
+  episodeId     String
+  order         Int
+  type          SegmentType @default(TOPIC)
+  durationMin   Int         @default(10)
+
+  // Topic segments
+  topicTitle    String?
+  topicContent  String?     @db.Text
+  sourceUrls    Json        @default("[]")
+  sourceMode    SourceMode  @default(MANUAL_PREMISE)
+
+  // Ad segments
+  sponsorId     String?
+
+  // Generated content
+  transcript    Json?       // Dialogue for this segment
+
+  episode       PodcastEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  sponsor       PodcastSponsor? @relation(fields: [sponsorId], references: [id], onDelete: SetNull)
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([episodeId, order])
+}
+
+model PodcastSponsor {
+  id            String   @id @default(cuid())
+  userId        String
+  brandName     String
+  tagline       String?
+  talkingPoints Json     @default("[]")
+  promoCode     String?
+  promoUrl      String?
+  adStyle       AdStyle  @default(CASUAL)
+  adScript      String?  @db.Text
+  maxDurationSec Int     @default(60)
+  active        Boolean  @default(true)
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  segments      EpisodeSegment[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
