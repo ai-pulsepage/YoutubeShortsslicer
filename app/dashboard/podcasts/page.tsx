@@ -1065,8 +1065,9 @@ function CreateShowModal({
   const [guestIds, setGuestIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
-  const hosts = characters.filter((c) => c.role === "HOST");
-  const guests = characters.filter((c) => c.role !== "HOST");
+  // Any character can be a host OR guest — mutual exclusion
+  const availableForHost = characters.filter((c) => !guestIds.includes(c.id));
+  const availableForGuest = characters.filter((c) => !hostIds.includes(c.id));
 
   const handleSave = async () => {
     if (!name.trim()) return;
@@ -1158,40 +1159,32 @@ function CreateShowModal({
 
           {/* Host Assignment */}
           <div>
-            <label className="text-xs text-gray-400 mb-1 block">Hosts</label>
-            {hosts.length === 0 ? (
-              <p className="text-xs text-gray-600">No host characters created yet.</p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {hosts.map((c) => (
-                  <button key={c.id}
-                    onClick={() => setHostIds(hostIds.includes(c.id) ? hostIds.filter((id) => id !== c.id) : [...hostIds, c.id])}
-                    className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border transition-colors",
-                      hostIds.includes(c.id) ? "bg-blue-500/15 border-blue-500/30 text-blue-400" : "bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600")}>
-                    🎙️ {c.name} {hostIds.includes(c.id) && <Check className="w-3 h-3" />}
-                  </button>
-                ))}
-              </div>
-            )}
+            <label className="text-xs text-gray-400 mb-1 block">Hosts <span className="text-gray-600">— auto-included in every episode</span></label>
+            <div className="flex flex-wrap gap-2">
+              {availableForHost.map((c) => (
+                <button key={c.id}
+                  onClick={() => setHostIds(hostIds.includes(c.id) ? hostIds.filter((id) => id !== c.id) : [...hostIds, c.id])}
+                  className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border transition-colors",
+                    hostIds.includes(c.id) ? "bg-blue-500/15 border-blue-500/30 text-blue-400" : "bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600")}>
+                  🎙️ {c.name} {hostIds.includes(c.id) && <Check className="w-3 h-3" />}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Guest Assignment */}
           <div>
-            <label className="text-xs text-gray-400 mb-1 block">Default Guests</label>
-            {guests.length === 0 ? (
-              <p className="text-xs text-gray-600">No guest characters created yet.</p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {guests.map((c) => (
-                  <button key={c.id}
-                    onClick={() => setGuestIds(guestIds.includes(c.id) ? guestIds.filter((id) => id !== c.id) : [...guestIds, c.id])}
-                    className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border transition-colors",
-                      guestIds.includes(c.id) ? "bg-violet-500/15 border-violet-500/30 text-violet-400" : "bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600")}>
-                    🗣️ {c.name} {guestIds.includes(c.id) && <Check className="w-3 h-3" />}
-                  </button>
-                ))}
-              </div>
-            )}
+            <label className="text-xs text-gray-400 mb-1 block">Default Guests <span className="text-gray-600">— characters not assigned as hosts</span></label>
+            <div className="flex flex-wrap gap-2">
+              {availableForGuest.map((c) => (
+                <button key={c.id}
+                  onClick={() => setGuestIds(guestIds.includes(c.id) ? guestIds.filter((id) => id !== c.id) : [...guestIds, c.id])}
+                  className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border transition-colors",
+                    guestIds.includes(c.id) ? "bg-violet-500/15 border-violet-500/30 text-violet-400" : "bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600")}>
+                  🗣️ {c.name} {guestIds.includes(c.id) && <Check className="w-3 h-3" />}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
