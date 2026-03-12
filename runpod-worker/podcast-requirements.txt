@@ -1,0 +1,6 @@
+# Podcast Worker Dependencies
+# Install on RunPod: pip install -r podcast-requirements.txt
+vllm>=0.6.0
+redis
+requests
+beautifulsoup4

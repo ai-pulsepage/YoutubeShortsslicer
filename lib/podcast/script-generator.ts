@@ -2,15 +2,17 @@
  * Podcast Script Generator
  *
  * Takes episode data (segments, characters, topics) and generates
- * multi-character dialogue scripts using DeepSeek / Gemini.
+ * multi-character dialogue scripts.
+ *
+ * Routing:
+ *   PRIMARY:  Push job to Redis → RunPod Mistral-Large worker
+ *   FALLBACK: DeepSeek API (uses existing DEEPSEEK_API_KEY env var)
  *
  * Pipeline:
  *   1. Load episode + characters + show config
  *   2. Build character personality prompts (from archetypes.ts)
- *   3. For each TOPIC segment → generate dialogue chunk
- *   4. For INTRO/OUTRO → generate host monologue
- *   5. For AD_BREAK → generate host-read ad copy
- *   6. Save full script to episode record
+ *   3. Dispatch to RunPod OR generate locally via DeepSeek
+ *   4. Save full script to episode record
  */
 
 import { prisma } from "@/lib/prisma";
@@ -48,7 +50,7 @@ export async function generateEpisodeScript(
   episodeId: string,
   userId: string,
   onProgress?: (msg: string) => void
-): Promise<PodcastScript> {
+): Promise<PodcastScript | { dispatched: true; message: string }> {
   const log = (msg: string) => {
     console.log(`[PODCAST] ${msg}`);
     onProgress?.(msg);
@@ -72,10 +74,10 @@ export async function generateEpisodeScript(
   if (episode.show.userId !== userId) throw new Error("Unauthorized");
 
   // 2. Gather characters
-  const hostChars = episode.show.hosts.map((h) => h.character);
+  const hostChars = episode.show.hosts.map((h: any) => h.character);
   const guestChars = episode.participants
-    .map((p) => p.character)
-    .filter((c) => !hostChars.some((h) => h.id === c.id));
+    .map((p: any) => p.character)
+    .filter((c: any) => !hostChars.some((h: any) => h.id === c.id));
   const allChars = [...hostChars, ...guestChars];
 
   if (allChars.length === 0) throw new Error("No characters assigned");
@@ -83,10 +85,10 @@ export async function generateEpisodeScript(
   log(`Generating script for "${episode.title || `Ep ${episode.episodeNumber}`}" with ${allChars.length} characters`);
 
   // 3. Build character prompts
-  const characterProfiles = allChars.map((c) => ({
+  const characterProfiles = allChars.map((c: any) => ({
     id: c.id,
     name: c.name,
-    role: hostChars.some((h) => h.id === c.id) ? "HOST" : "GUEST",
+    role: hostChars.some((h: any) => h.id === c.id) ? "HOST" : "GUEST",
     prompt: buildCharacterPrompt({
       name: c.name,
       archetype: c.archetype as Archetype,
@@ -98,7 +100,73 @@ export async function generateEpisodeScript(
     }),
   }));
 
-  // 4. Generate each segment
+  // 4. Try RunPod (Redis queue) first, fall back to DeepSeek API
+  const redisUrl = process.env.REDIS_URL;
+  const useRunPod = redisUrl && !process.env.PODCAST_USE_DEEPSEEK;
+
+  if (useRunPod) {
+    try {
+      log("Dispatching to RunPod Mistral worker...");
+      await dispatchToRunPod(episode, characterProfiles, redisUrl);
+
+      // Mark as in-progress
+      await prisma.podcastEpisode.update({
+        where: { id: episodeId },
+        data: { status: "SCRIPTING" },
+      });
+
+      return { dispatched: true, message: "Job sent to RunPod — script will arrive via webhook" };
+    } catch (err: any) {
+      log(`RunPod dispatch failed: ${err.message}, falling back to DeepSeek`);
+    }
+  }
+
+  // FALLBACK: Generate locally with DeepSeek API
+  log("Using DeepSeek API (fallback)...");
+  return generateWithDeepSeek(episode, characterProfiles, episodeId, log);
+}
+
+// ─── RunPod Dispatch ────────────────────────────────────
+
+async function dispatchToRunPod(
+  episode: any,
+  characters: { id: string; name: string; role: string; prompt: string }[],
+  redisUrl: string
+) {
+  const { getRedis } = await import("@/lib/documentary/redis-client");
+  const redis = getRedis();
+
+  const job = {
+    jobId: `podcast_${episode.id}_${Date.now()}`,
+    episodeId: episode.id,
+    showName: episode.show.name,
+    episodeTitle: episode.title || `Episode ${episode.episodeNumber}`,
+    contentFilter: episode.show.contentFilter,
+    characters,
+    segments: episode.segments.map((s: any) => ({
+      segmentId: s.id,
+      type: s.type,
+      topicTitle: s.topicTitle,
+      topicContent: s.topicContent,
+      sourceUrls: s.sourceUrls || [],
+      sourceMode: s.sourceMode,
+      durationMin: s.durationMin,
+      sponsorId: s.sponsorId,
+    })),
+  };
+
+  await redis.lpush("podcast_jobs", JSON.stringify(job));
+  console.log(`[PODCAST] Job ${job.jobId} pushed to Redis queue`);
+}
+
+// ─── DeepSeek Fallback (segment-by-segment) ─────────────
+
+async function generateWithDeepSeek(
+  episode: any,
+  characterProfiles: { id: string; name: string; role: string; prompt: string }[],
+  episodeId: string,
+  log: (msg: string) => void
+): Promise<PodcastScript> {
   const scriptSegments: ScriptSegment[] = [];
   const contentFilter = episode.show.contentFilter;
 
@@ -113,7 +181,7 @@ export async function generateEpisodeScript(
           characterProfiles,
           episode.title || `Episode ${episode.episodeNumber}`,
           episode.show.name,
-          episode.segments.filter((s) => s.type === "TOPIC").map((s) => s.topicTitle || ""),
+          episode.segments.filter((s: any) => s.type === "TOPIC").map((s: any) => s.topicTitle || ""),
           contentFilter
         );
         break;
@@ -157,7 +225,7 @@ export async function generateEpisodeScript(
     });
   }
 
-  // 5. Build final script
+  // Build final script
   const script: PodcastScript = {
     episodeId,
     showName: episode.show.name,
@@ -169,7 +237,7 @@ export async function generateEpisodeScript(
     segments: scriptSegments,
   };
 
-  // 6. Save script to DB and update status
+  // Save script to DB and update status
   await prisma.podcastEpisode.update({
     where: { id: episodeId },
     data: {

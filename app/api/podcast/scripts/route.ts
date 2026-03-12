@@ -15,13 +15,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "episodeId required" }, { status: 400 });
     }
 
-    const script = await generateEpisodeScript(episodeId, session.user.id);
+    const result = await generateEpisodeScript(episodeId, session.user.id);
 
+    // RunPod dispatch — script arrives later via webhook
+    if ("dispatched" in result) {
+      return NextResponse.json({
+        success: true,
+        dispatched: true,
+        message: result.message,
+      });
+    }
+
+    // DeepSeek fallback — script returned inline
     return NextResponse.json({
       success: true,
-      lineCount: script.segments.reduce((s, seg) => s + seg.lines.length, 0),
-      estimatedDuration: script.totalEstimatedDuration,
-      segments: script.segments.map((s) => ({
+      dispatched: false,
+      lineCount: result.segments.reduce((s, seg) => s + seg.lines.length, 0),
+      estimatedDuration: result.totalEstimatedDuration,
+      segments: result.segments.map((s) => ({
         type: s.type,
         topic: s.topicTitle,
         lineCount: s.lines.length,
