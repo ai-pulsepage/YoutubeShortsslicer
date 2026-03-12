@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useState, useEffect, useCallback } from "react";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   Radio,
@@ -10,22 +10,16 @@ import {
   Edit3,
   Users,
   Mic,
-  User,
   Loader2,
   ChevronLeft,
-  Play,
   Clock,
   Link2,
   Search,
   MessageSquare,
-  Megaphone,
-  ArrowUp,
-  ArrowDown,
   X,
   Check,
-  Globe,
   FileText,
-  Sparkles,
+  Save,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -39,7 +33,6 @@ type Segment = {
   sourceUrls: string[];
   sourceMode: string;
   sponsorId: string | null;
-  sponsor?: { brandName: string } | null;
 };
 
 type Character = {
@@ -72,6 +65,7 @@ type Show = {
   coverArtUrl: string | null;
   jingleUrl: string | null;
   jinglePrompt: string | null;
+  language: string;
   hosts: { character: Character }[];
   defaultGuests: { character: Character }[];
   _count: { episodes: number };
@@ -86,36 +80,35 @@ type Sponsor = {
 };
 
 const SHOW_FORMATS = [
-  { id: "SOLO", name: "Solo Host", desc: "One host, solo commentary", icon: "🎙️" },
-  { id: "TWO_HOST", name: "Two Hosts", desc: "Two co-hosts bantering", icon: "🎙️🎙️" },
-  { id: "HOST_PLUS_GUESTS", name: "Host + Guests", desc: "Host brings on guests", icon: "🎙️🗣️" },
-  { id: "ROUNDTABLE", name: "Roundtable", desc: "Multiple equal voices", icon: "🔄" },
+  { id: "SOLO", name: "Solo Host", icon: "🎙️" },
+  { id: "TWO_HOST", name: "Two Hosts", icon: "🎙️🎙️" },
+  { id: "HOST_PLUS_GUESTS", name: "Host + Guests", icon: "🎙️🗣️" },
+  { id: "ROUNDTABLE", name: "Roundtable", icon: "🔄" },
 ];
 
 const CONTENT_FILTERS = [
-  { id: "UNHINGED", name: "Unhinged", desc: "No content restrictions", color: "red" },
-  { id: "MODERATE", name: "Moderate", desc: "Light language filter", color: "amber" },
-  { id: "FAMILY_FRIENDLY", name: "Family Friendly", desc: "Clean language only", color: "emerald" },
+  { id: "UNHINGED", name: "Unhinged", color: "red" },
+  { id: "MODERATE", name: "Moderate", color: "amber" },
+  { id: "FAMILY_FRIENDLY", name: "Family Friendly", color: "emerald" },
 ];
 
 const DURATIONS = [15, 30, 45, 60];
 
-const SEGMENT_TYPE_INFO: Record<string, { icon: string; color: string; label: string }> = {
-  INTRO: { icon: "🎬", color: "blue", label: "Intro" },
-  TOPIC: { icon: "💬", color: "violet", label: "Topic" },
-  AD_BREAK: { icon: "📢", color: "amber", label: "Ad Break" },
-  OUTRO: { icon: "👋", color: "emerald", label: "Outro" },
+const SEGMENT_TYPE_INFO: Record<string, { icon: string; label: string }> = {
+  INTRO: { icon: "🎬", label: "Intro" },
+  TOPIC: { icon: "💬", label: "Topic" },
+  AD_BREAK: { icon: "📢", label: "Ad Break" },
+  OUTRO: { icon: "👋", label: "Outro" },
 };
 
 const SOURCE_MODES = [
-  { id: "URLS", icon: <Link2 className="w-3.5 h-3.5" />, label: "Paste URLs", desc: "Scrape specific articles" },
-  { id: "AUTO_RESEARCH", icon: <Search className="w-3.5 h-3.5" />, label: "Auto-Research", desc: "AI finds sources" },
-  { id: "MANUAL_PREMISE", icon: <MessageSquare className="w-3.5 h-3.5" />, label: "Manual Premise", desc: "Argue from beliefs" },
+  { id: "URLS", label: "Paste URLs" },
+  { id: "AUTO_RESEARCH", label: "Auto-Research" },
+  { id: "MANUAL_PREMISE", label: "Manual Premise" },
 ];
 
 export default function ShowDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const showId = params.showId as string;
 
   const [show, setShow] = useState<Show | null>(null);
@@ -124,9 +117,13 @@ export default function ShowDetailPage() {
   const [sponsors, setSponsors] = useState<Sponsor[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"episodes" | "settings">("episodes");
-  const [showCreateEpisode, setShowCreateEpisode] = useState(false);
+  const [episodeModal, setEpisodeModal] = useState<{
+    open: boolean;
+    editEpisode?: Episode;
+  }>({ open: false });
 
-  useEffect(() => {
+  const loadAll = useCallback(() => {
+    setLoading(true);
     Promise.all([
       fetch(`/api/podcast/shows`).then((r) => r.json()),
       fetch(`/api/podcast/episodes?showId=${showId}`).then((r) => r.json()),
@@ -134,7 +131,9 @@ export default function ShowDetailPage() {
       fetch(`/api/podcast/sponsors`).then((r) => r.json()),
     ])
       .then(([shows, eps, chars, spons]) => {
-        const s = (Array.isArray(shows) ? shows : []).find((s: Show) => s.id === showId);
+        const s = (Array.isArray(shows) ? shows : []).find(
+          (s: Show) => s.id === showId
+        );
         setShow(s || null);
         setEpisodes(Array.isArray(eps) ? eps : []);
         setAllCharacters(Array.isArray(chars) ? chars : []);
@@ -144,22 +143,55 @@ export default function ShowDetailPage() {
       .catch(() => setLoading(false));
   }, [showId]);
 
-  const createEpisode = async (data: {
+  useEffect(() => {
+    loadAll();
+  }, [loadAll]);
+
+  const saveEpisode = async (data: {
     title: string;
     durationMin: number;
     participantIds: string[];
     segments: any[];
+    editId?: string;
   }) => {
-    const res = await fetch("/api/podcast/episodes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ showId, ...data }),
-    });
-    if (res.ok) {
-      const ep = await res.json();
-      setEpisodes([ep, ...episodes]);
-      setShowCreateEpisode(false);
+    if (data.editId) {
+      // Update existing episode title/duration
+      await fetch(`/api/podcast/episodes?id=${data.editId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: data.title || undefined,
+          durationMin: data.durationMin,
+        }),
+      });
+      // Update each segment
+      for (const seg of data.segments) {
+        if (seg.id) {
+          await fetch(`/api/podcast/segments?id=${seg.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: seg.type,
+              durationMin: seg.durationMin,
+              topicTitle: seg.topicTitle || null,
+              topicContent: seg.topicContent || null,
+              sourceUrls: seg.sourceUrls?.filter((u: string) => u.trim()) || [],
+              sourceMode: seg.sourceMode,
+              sponsorId: seg.sponsorId || null,
+            }),
+          });
+        }
+      }
+    } else {
+      // Create new
+      await fetch("/api/podcast/episodes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ showId, ...data }),
+      });
     }
+    setEpisodeModal({ open: false });
+    loadAll();
   };
 
   const deleteEpisode = async (id: string, title: string) => {
@@ -180,7 +212,10 @@ export default function ShowDetailPage() {
     return (
       <div className="text-center py-20 text-gray-500">
         Show not found.{" "}
-        <Link href="/dashboard/podcasts" className="text-violet-400 hover:underline">
+        <Link
+          href="/dashboard/podcasts"
+          className="text-violet-400 hover:underline"
+        >
           Go back
         </Link>
       </div>
@@ -206,12 +241,12 @@ export default function ShowDetailPage() {
             {show.name}
           </h1>
           <p className="text-sm text-gray-400 mt-0.5">
-            {show.showFormat.replace(/_/g, " ")} • {show.defaultDurationMin} min •{" "}
-            {show._count.episodes} episodes
+            {show.showFormat.replace(/_/g, " ")} •{" "}
+            {show.defaultDurationMin} min • {show._count.episodes} episodes
           </p>
         </div>
         <button
-          onClick={() => setShowCreateEpisode(true)}
+          onClick={() => setEpisodeModal({ open: true })}
           className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-violet-600 hover:bg-violet-500 text-white transition-all"
         >
           <Plus className="w-4 h-4" />
@@ -221,7 +256,9 @@ export default function ShowDetailPage() {
 
       {/* Cast */}
       <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-4">
-        <h3 className="text-xs text-gray-500 uppercase tracking-wider mb-3">Cast</h3>
+        <h3 className="text-xs text-gray-500 uppercase tracking-wider mb-3">
+          Cast
+        </h3>
         <div className="flex items-center gap-3 flex-wrap">
           {hostChars.map((c) => (
             <CharacterBadge key={c.id} character={c} role="Host" />
@@ -266,10 +303,11 @@ export default function ShowDetailPage() {
               <FileText className="w-12 h-12 text-gray-700 mx-auto mb-3" />
               <h3 className="text-white font-semibold mb-1">No episodes yet</h3>
               <p className="text-gray-500 text-sm mb-4">
-                Create your first episode — set topics, add guests, assign sponsors
+                Create your first episode — set topics, add guests, assign
+                sponsors
               </p>
               <button
-                onClick={() => setShowCreateEpisode(true)}
+                onClick={() => setEpisodeModal({ open: true })}
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm bg-violet-600 hover:bg-violet-500 text-white"
               >
                 <Plus className="w-4 h-4" /> Create Episode
@@ -277,51 +315,40 @@ export default function ShowDetailPage() {
             </div>
           ) : (
             episodes.map((ep) => (
-              <EpisodeCard key={ep.id} episode={ep} onDelete={() => deleteEpisode(ep.id, ep.title || `Ep ${ep.episodeNumber}`)} showId={showId} />
+              <EpisodeCard
+                key={ep.id}
+                episode={ep}
+                onEdit={() => setEpisodeModal({ open: true, editEpisode: ep })}
+                onDelete={() =>
+                  deleteEpisode(
+                    ep.id,
+                    ep.title || `Ep ${ep.episodeNumber}`
+                  )
+                }
+              />
             ))
           )}
         </div>
       )}
 
-      {/* Settings (basic for now) */}
+      {/* Settings — now editable */}
       {tab === "settings" && (
-        <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-6 space-y-4">
-          <h3 className="text-sm font-semibold text-white">Show Settings</h3>
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <p className="text-gray-500 text-xs mb-1">Format</p>
-              <p className="text-white">{show.showFormat.replace(/_/g, " ")}</p>
-            </div>
-            <div>
-              <p className="text-gray-500 text-xs mb-1">Content Filter</p>
-              <p className="text-white">{show.contentFilter}</p>
-            </div>
-            <div>
-              <p className="text-gray-500 text-xs mb-1">Default Duration</p>
-              <p className="text-white">{show.defaultDurationMin} minutes</p>
-            </div>
-            <div>
-              <p className="text-gray-500 text-xs mb-1">Language</p>
-              <p className="text-white">English</p>
-            </div>
-          </div>
-          {show.description && (
-            <div>
-              <p className="text-gray-500 text-xs mb-1">Description</p>
-              <p className="text-sm text-gray-300">{show.description}</p>
-            </div>
-          )}
-        </div>
+        <ShowSettingsEditor
+          show={show}
+          allCharacters={allCharacters}
+          onSaved={loadAll}
+        />
       )}
 
-      {/* Create Episode Modal */}
-      {showCreateEpisode && (
-        <CreateEpisodeModal
+      {/* Episode Modal (create + edit) */}
+      {episodeModal.open && (
+        <EpisodeModal
           show={show}
           allCharacters={allCharacters}
           sponsors={sponsors}
-          onClose={() => setShowCreateEpisode(false)}
-          onCreate={createEpisode}
+          editEpisode={episodeModal.editEpisode}
+          onClose={() => setEpisodeModal({ open: false })}
+          onSave={saveEpisode}
         />
       )}
     </div>
@@ -330,7 +357,13 @@ export default function ShowDetailPage() {
 
 // ─── Character Badge ────────────────────────────────────
 
-function CharacterBadge({ character, role }: { character: Character; role: string }) {
+function CharacterBadge({
+  character,
+  role,
+}: {
+  character: Character;
+  role: string;
+}) {
   return (
     <div className="flex items-center gap-2 bg-gray-800/50 rounded-full px-3 py-1.5 border border-gray-700">
       {character.avatarUrl ? (
@@ -341,14 +374,24 @@ function CharacterBadge({ character, role }: { character: Character; role: strin
         </div>
       )}
       <span className="text-xs font-medium text-white">{character.name}</span>
-      <span className="text-[9px] uppercase text-gray-500 tracking-wider">{role}</span>
+      <span className="text-[9px] uppercase text-gray-500 tracking-wider">
+        {role}
+      </span>
     </div>
   );
 }
 
-// ─── Episode Card ───────────────────────────────────────
+// ─── Episode Card (with Edit button) ────────────────────
 
-function EpisodeCard({ episode, onDelete, showId }: { episode: Episode; onDelete: () => void; showId: string }) {
+function EpisodeCard({
+  episode,
+  onEdit,
+  onDelete,
+}: {
+  episode: Episode;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
   const statusColors: Record<string, string> = {
     DRAFT: "bg-gray-500/20 text-gray-400",
     SCRIPTING: "bg-blue-500/20 text-blue-400",
@@ -374,7 +417,12 @@ function EpisodeCard({ episode, onDelete, showId }: { episode: Episode; onDelete
             <h3 className="text-sm font-semibold text-white truncate">
               {episode.title || `Episode ${episode.episodeNumber}`}
             </h3>
-            <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-medium", statusColors[episode.status] || statusColors.DRAFT)}>
+            <span
+              className={cn(
+                "text-[10px] px-2 py-0.5 rounded-full font-medium",
+                statusColors[episode.status] || statusColors.DRAFT
+              )}
+            >
               {episode.status}
             </span>
           </div>
@@ -383,17 +431,21 @@ function EpisodeCard({ episode, onDelete, showId }: { episode: Episode; onDelete
               <Clock className="w-3 h-3" /> {episode.durationMin} min
             </span>
             <span className="flex items-center gap-1">
-              <Users className="w-3 h-3" /> {episode.participants.length} speakers
+              <Users className="w-3 h-3" /> {episode.participants.length}{" "}
+              speakers
             </span>
             <span className="flex items-center gap-1">
-              <MessageSquare className="w-3 h-3" /> {topicSegments.length} topics
+              <MessageSquare className="w-3 h-3" /> {topicSegments.length}{" "}
+              topics
             </span>
           </div>
-          {/* Topic pills */}
           {topicSegments.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-2">
               {topicSegments.map((s) => (
-                <span key={s.id} className="text-[10px] px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20">
+                <span
+                  key={s.id}
+                  className="text-[10px] px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20"
+                >
                   {s.topicTitle || "Untitled Topic"}
                 </span>
               ))}
@@ -401,7 +453,18 @@ function EpisodeCard({ episode, onDelete, showId }: { episode: Episode; onDelete
           )}
         </div>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button onClick={onDelete} className="p-1.5 rounded-lg hover:bg-red-500/10 text-gray-400 hover:text-red-400">
+          <button
+            onClick={onEdit}
+            className="p-1.5 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-white"
+            title="Edit episode"
+          >
+            <Edit3 className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={onDelete}
+            className="p-1.5 rounded-lg hover:bg-red-500/10 text-gray-400 hover:text-red-400"
+            title="Delete episode"
+          >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -410,28 +473,277 @@ function EpisodeCard({ episode, onDelete, showId }: { episode: Episode; onDelete
   );
 }
 
-// ─── Create Episode Modal ───────────────────────────────
+// ─── Show Settings Editor ───────────────────────────────
 
-function CreateEpisodeModal({
+function ShowSettingsEditor({
+  show,
+  allCharacters,
+  onSaved,
+}: {
+  show: Show;
+  allCharacters: Character[];
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState(show.name);
+  const [description, setDescription] = useState(show.description || "");
+  const [showFormat, setShowFormat] = useState(show.showFormat);
+  const [contentFilter, setContentFilter] = useState(show.contentFilter);
+  const [defaultDurationMin, setDefaultDurationMin] = useState(
+    show.defaultDurationMin
+  );
+  const [hostIds, setHostIds] = useState(
+    show.hosts.map((h) => h.character.id)
+  );
+  const [guestIds, setGuestIds] = useState(
+    show.defaultGuests.map((g) => g.character.id)
+  );
+  const [saving, setSaving] = useState(false);
+
+  const hosts = allCharacters.filter((c) => c.role === "HOST");
+  const nonHosts = allCharacters.filter(
+    (c) => c.role !== "HOST" && !hostIds.includes(c.id)
+  );
+
+  const handleSave = async () => {
+    setSaving(true);
+    await fetch(`/api/podcast/shows?id=${show.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: name.trim(),
+        description: description.trim() || null,
+        showFormat,
+        contentFilter,
+        defaultDurationMin,
+        hostIds,
+        defaultGuestIds: guestIds,
+      }),
+    });
+    setSaving(false);
+    onSaved();
+  };
+
+  return (
+    <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-6 space-y-5">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-white">Show Settings</h3>
+        <button
+          onClick={handleSave}
+          disabled={saving || !name.trim()}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-50"
+        >
+          {saving ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Save className="w-3.5 h-3.5" />
+          )}
+          Save Changes
+        </button>
+      </div>
+
+      {/* Name */}
+      <div>
+        <label className="text-xs text-gray-400 mb-1 block">Show Name</label>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:border-violet-500 focus:outline-none"
+        />
+      </div>
+
+      {/* Description */}
+      <div>
+        <label className="text-xs text-gray-400 mb-1 block">Description</label>
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={2}
+          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:border-violet-500 focus:outline-none resize-none"
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        {/* Format */}
+        <div>
+          <label className="text-xs text-gray-400 mb-1 block">Format</label>
+          <div className="grid grid-cols-2 gap-1.5">
+            {SHOW_FORMATS.map((f) => (
+              <button
+                key={f.id}
+                onClick={() => setShowFormat(f.id)}
+                className={cn(
+                  "px-2 py-1.5 rounded-lg text-[10px] border transition-colors text-left",
+                  showFormat === f.id
+                    ? "bg-violet-500/15 border-violet-500/30 text-violet-400"
+                    : "bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600"
+                )}
+              >
+                {f.icon} {f.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Content Filter */}
+        <div>
+          <label className="text-xs text-gray-400 mb-1 block">
+            Content Filter
+          </label>
+          <div className="flex gap-1.5">
+            {CONTENT_FILTERS.map((f) => (
+              <button
+                key={f.id}
+                onClick={() => setContentFilter(f.id)}
+                className={cn(
+                  "flex-1 py-1.5 rounded-lg text-[10px] border text-center transition-colors",
+                  contentFilter === f.id
+                    ? "bg-violet-500/15 border-violet-500/30 text-violet-400"
+                    : "bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600"
+                )}
+              >
+                {f.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Duration */}
+      <div>
+        <label className="text-xs text-gray-400 mb-1 block">
+          Default Duration
+        </label>
+        <div className="flex gap-2">
+          {DURATIONS.map((d) => (
+            <button
+              key={d}
+              onClick={() => setDefaultDurationMin(d)}
+              className={cn(
+                "flex-1 py-2 rounded-lg text-xs border text-center transition-colors",
+                defaultDurationMin === d
+                  ? "bg-violet-500/15 border-violet-500/30 text-violet-400"
+                  : "bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600"
+              )}
+            >
+              {d}m
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Hosts */}
+      <div>
+        <label className="text-xs text-gray-400 mb-1 block">
+          Hosts{" "}
+          <span className="text-gray-600">
+            — auto-included in every episode
+          </span>
+        </label>
+        {hosts.length === 0 ? (
+          <p className="text-xs text-gray-600">
+            No host characters created yet.
+          </p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {hosts.map((c) => (
+              <button
+                key={c.id}
+                onClick={() =>
+                  setHostIds(
+                    hostIds.includes(c.id)
+                      ? hostIds.filter((id) => id !== c.id)
+                      : [...hostIds, c.id]
+                  )
+                }
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border transition-colors",
+                  hostIds.includes(c.id)
+                    ? "bg-blue-500/15 border-blue-500/30 text-blue-400"
+                    : "bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600"
+                )}
+              >
+                🎙️ {c.name}{" "}
+                {hostIds.includes(c.id) && <Check className="w-3 h-3" />}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Default Guests */}
+      <div>
+        <label className="text-xs text-gray-400 mb-1 block">
+          Default Guests
+        </label>
+        {nonHosts.length === 0 ? (
+          <p className="text-xs text-gray-600">No available guest characters.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {nonHosts.map((c) => (
+              <button
+                key={c.id}
+                onClick={() =>
+                  setGuestIds(
+                    guestIds.includes(c.id)
+                      ? guestIds.filter((id) => id !== c.id)
+                      : [...guestIds, c.id]
+                  )
+                }
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border transition-colors",
+                  guestIds.includes(c.id)
+                    ? "bg-violet-500/15 border-violet-500/30 text-violet-400"
+                    : "bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600"
+                )}
+              >
+                🗣️ {c.name}{" "}
+                {guestIds.includes(c.id) && <Check className="w-3 h-3" />}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Episode Modal (Create + Edit) ──────────────────────
+
+function EpisodeModal({
   show,
   allCharacters,
   sponsors,
+  editEpisode,
   onClose,
-  onCreate,
+  onSave,
 }: {
   show: Show;
   allCharacters: Character[];
   sponsors: Sponsor[];
+  editEpisode?: Episode;
   onClose: () => void;
-  onCreate: (data: any) => void;
+  onSave: (data: any) => void;
 }) {
-  const [title, setTitle] = useState("");
-  const [durationMin, setDurationMin] = useState(show.defaultDurationMin);
-  const [selectedGuests, setSelectedGuests] = useState<string[]>(
-    show.defaultGuests.map((g) => g.character.id)
+  const isEdit = !!editEpisode;
+
+  const [title, setTitle] = useState(editEpisode?.title || "");
+  const [durationMin, setDurationMin] = useState(
+    editEpisode?.durationMin || show.defaultDurationMin
   );
+  const [selectedGuests, setSelectedGuests] = useState<string[]>(() => {
+    if (editEpisode) {
+      // For editing: show all non-host participants as selected guests
+      const hostCharIds = show.hosts.map((h) => h.character.id);
+      return editEpisode.participants
+        .map((p) => p.character.id)
+        .filter((id) => !hostCharIds.includes(id));
+    }
+    return show.defaultGuests.map((g) => g.character.id);
+  });
   const [segments, setSegments] = useState<
     {
+      id?: string;
       type: string;
       durationMin: number;
       topicTitle: string;
@@ -440,15 +752,34 @@ function CreateEpisodeModal({
       sourceMode: string;
       sponsorId: string;
     }[]
-  >([
-    { type: "INTRO", durationMin: 2, topicTitle: "", topicContent: "", sourceUrls: [], sourceMode: "MANUAL_PREMISE", sponsorId: "" },
-    { type: "TOPIC", durationMin: durationMin - 4, topicTitle: "", topicContent: "", sourceUrls: [], sourceMode: "MANUAL_PREMISE", sponsorId: "" },
-    { type: "OUTRO", durationMin: 2, topicTitle: "", topicContent: "", sourceUrls: [], sourceMode: "MANUAL_PREMISE", sponsorId: "" },
-  ]);
+  >(() => {
+    if (editEpisode?.segments?.length) {
+      return editEpisode.segments.map((s) => ({
+        id: s.id,
+        type: s.type,
+        durationMin: s.durationMin,
+        topicTitle: s.topicTitle || "",
+        topicContent: s.topicContent || "",
+        sourceUrls: s.sourceUrls || [],
+        sourceMode: s.sourceMode || "MANUAL_PREMISE",
+        sponsorId: s.sponsorId || "",
+      }));
+    }
+    return [
+      { type: "INTRO", durationMin: 2, topicTitle: "", topicContent: "", sourceUrls: [], sourceMode: "MANUAL_PREMISE", sponsorId: "" },
+      { type: "TOPIC", durationMin: durationMin - 4, topicTitle: "", topicContent: "", sourceUrls: [], sourceMode: "MANUAL_PREMISE", sponsorId: "" },
+      { type: "OUTRO", durationMin: 2, topicTitle: "", topicContent: "", sourceUrls: [], sourceMode: "MANUAL_PREMISE", sponsorId: "" },
+    ];
+  });
   const [saving, setSaving] = useState(false);
 
+  // Host characters are LOCKED IN — they are not selectable as guests
+  const hostCharIds = show.hosts.map((h) => h.character.id);
+  const hostChars = show.hosts.map((h) => h.character);
+
+  // Only show non-host characters in the guest picker
   const availableGuests = allCharacters.filter(
-    (c) => !show.hosts.some((h) => h.character.id === c.id)
+    (c) => !hostCharIds.includes(c.id)
   );
 
   const addSegment = (type: string) => {
@@ -461,7 +792,6 @@ function CreateEpisodeModal({
       sourceMode: "MANUAL_PREMISE",
       sponsorId: "",
     };
-    // Insert before outro
     const outroIndex = segments.findIndex((s) => s.type === "OUTRO");
     if (outroIndex >= 0) {
       const copy = [...segments];
@@ -496,22 +826,26 @@ function CreateEpisodeModal({
 
   const removeSourceUrl = (segIndex: number, urlIndex: number) => {
     const copy = [...segments];
-    copy[segIndex].sourceUrls = copy[segIndex].sourceUrls.filter((_, i) => i !== urlIndex);
+    copy[segIndex].sourceUrls = copy[segIndex].sourceUrls.filter(
+      (_, i) => i !== urlIndex
+    );
     setSegments(copy);
   };
 
-  const handleCreate = () => {
+  const handleSave = () => {
     setSaving(true);
-    onCreate({
+    onSave({
+      editId: editEpisode?.id,
       title: title || undefined,
       durationMin,
       participantIds: selectedGuests,
       segments: segments.map((s) => ({
+        id: s.id,
         type: s.type,
         durationMin: s.durationMin,
         topicTitle: s.topicTitle || null,
         topicContent: s.topicContent || null,
-        sourceUrls: s.sourceUrls.filter((u) => u.trim()),
+        sourceUrls: s.sourceUrls?.filter((u) => u.trim()) || [],
         sourceMode: s.sourceMode,
         sponsorId: s.sponsorId || null,
       })),
@@ -525,7 +859,10 @@ function CreateEpisodeModal({
       <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-3xl shadow-2xl max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
-          <h2 className="text-lg font-semibold text-white">New Episode — {show.name}</h2>
+          <h2 className="text-lg font-semibold text-white">
+            {isEdit ? `Edit Episode ${editEpisode.episodeNumber}` : "New Episode"}{" "}
+            — {show.name}
+          </h2>
           <button onClick={onClose} className="text-gray-500 hover:text-white">
             <X className="w-5 h-5" />
           </button>
@@ -535,7 +872,9 @@ function CreateEpisodeModal({
           {/* Title & Duration */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-xs text-gray-400 mb-1 block">Episode Title</label>
+              <label className="text-xs text-gray-400 mb-1 block">
+                Episode Title
+              </label>
               <input
                 type="text"
                 value={title}
@@ -545,7 +884,9 @@ function CreateEpisodeModal({
               />
             </div>
             <div>
-              <label className="text-xs text-gray-400 mb-1 block">Target Duration</label>
+              <label className="text-xs text-gray-400 mb-1 block">
+                Target Duration
+              </label>
               <div className="flex gap-2">
                 {DURATIONS.map((d) => (
                   <button
@@ -565,35 +906,66 @@ function CreateEpisodeModal({
             </div>
           </div>
 
-          {/* Guest Selection */}
+          {/* HOSTS — locked in, not selectable */}
+          {hostChars.length > 0 && (
+            <div>
+              <label className="text-xs text-gray-400 mb-2 block">
+                Hosts{" "}
+                <span className="text-blue-400/60">
+                  — always included (set in show settings)
+                </span>
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {hostChars.map((c) => (
+                  <div
+                    key={c.id}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs border bg-blue-500/10 border-blue-500/20 text-blue-400"
+                  >
+                    🎙️ {c.name}
+                    <Mic className="w-3 h-3 text-blue-500/50" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* GUESTS — selectable */}
           <div>
             <label className="text-xs text-gray-400 mb-2 block">
-              Guests <span className="text-gray-600">— hosts are auto-included</span>
+              Guests{" "}
+              <span className="text-gray-600">— select who to include</span>
             </label>
-            <div className="flex flex-wrap gap-2">
-              {availableGuests.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() =>
-                    setSelectedGuests(
+            {availableGuests.length === 0 ? (
+              <p className="text-xs text-gray-600">
+                No guest characters available.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {availableGuests.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() =>
+                      setSelectedGuests(
+                        selectedGuests.includes(c.id)
+                          ? selectedGuests.filter((id) => id !== c.id)
+                          : [...selectedGuests, c.id]
+                      )
+                    }
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs border transition-colors",
                       selectedGuests.includes(c.id)
-                        ? selectedGuests.filter((id) => id !== c.id)
-                        : [...selectedGuests, c.id]
-                    )
-                  }
-                  className={cn(
-                    "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs border transition-colors",
-                    selectedGuests.includes(c.id)
-                      ? "bg-violet-500/15 border-violet-500/30 text-violet-400"
-                      : "bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600"
-                  )}
-                >
-                  <span>{c.role === "HOST" ? "🎙️" : "🗣️"}</span>
-                  {c.name}
-                  {selectedGuests.includes(c.id) && <Check className="w-3 h-3" />}
-                </button>
-              ))}
-            </div>
+                        ? "bg-violet-500/15 border-violet-500/30 text-violet-400"
+                        : "bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600"
+                    )}
+                  >
+                    🗣️ {c.name}
+                    {selectedGuests.includes(c.id) && (
+                      <Check className="w-3 h-3" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Segment Rundown */}
@@ -630,36 +1002,53 @@ function CreateEpisodeModal({
 
             <div className="space-y-2">
               {segments.map((seg, i) => {
-                const info = SEGMENT_TYPE_INFO[seg.type] || SEGMENT_TYPE_INFO.TOPIC;
+                const info =
+                  SEGMENT_TYPE_INFO[seg.type] || SEGMENT_TYPE_INFO.TOPIC;
                 return (
-                  <div key={i} className="bg-gray-800/50 border border-gray-800 rounded-xl p-3 space-y-2">
+                  <div
+                    key={i}
+                    className="bg-gray-800/50 border border-gray-800 rounded-xl p-3 space-y-2"
+                  >
                     {/* Segment Header */}
                     <div className="flex items-center gap-2">
                       <span className="text-sm">{info.icon}</span>
-                      <span className="text-xs font-medium text-white flex-1">{info.label}</span>
+                      <span className="text-xs font-medium text-white flex-1">
+                        {info.label}
+                      </span>
                       <input
                         type="number"
                         value={seg.durationMin}
-                        onChange={(e) => updateSegment(i, "durationMin", parseInt(e.target.value) || 1)}
+                        onChange={(e) =>
+                          updateSegment(
+                            i,
+                            "durationMin",
+                            parseInt(e.target.value) || 1
+                          )
+                        }
                         className="w-14 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-white text-center"
                         min={1}
                         max={60}
                       />
                       <span className="text-[10px] text-gray-500">min</span>
                       {seg.type !== "INTRO" && seg.type !== "OUTRO" && (
-                        <button onClick={() => removeSegment(i)} className="p-1 text-gray-500 hover:text-red-400">
+                        <button
+                          onClick={() => removeSegment(i)}
+                          className="p-1 text-gray-500 hover:text-red-400"
+                        >
                           <X className="w-3 h-3" />
                         </button>
                       )}
                     </div>
 
-                    {/* Topic segment fields */}
+                    {/* Topic fields */}
                     {seg.type === "TOPIC" && (
                       <>
                         <input
                           type="text"
                           value={seg.topicTitle}
-                          onChange={(e) => updateSegment(i, "topicTitle", e.target.value)}
+                          onChange={(e) =>
+                            updateSegment(i, "topicTitle", e.target.value)
+                          }
                           placeholder="Topic title (e.g., 'Is AI Taking Jobs?')"
                           className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none"
                         />
@@ -669,15 +1058,17 @@ function CreateEpisodeModal({
                           {SOURCE_MODES.map((m) => (
                             <button
                               key={m.id}
-                              onClick={() => updateSegment(i, "sourceMode", m.id)}
+                              onClick={() =>
+                                updateSegment(i, "sourceMode", m.id)
+                              }
                               className={cn(
-                                "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] border transition-colors flex-1",
+                                "px-2.5 py-1.5 rounded-lg text-[10px] border transition-colors flex-1",
                                 seg.sourceMode === m.id
                                   ? "bg-violet-500/15 border-violet-500/30 text-violet-400"
                                   : "bg-gray-900 border-gray-700 text-gray-500 hover:border-gray-600"
                               )}
                             >
-                              {m.icon} {m.label}
+                              {m.label}
                             </button>
                           ))}
                         </div>
@@ -690,11 +1081,16 @@ function CreateEpisodeModal({
                                 <input
                                   type="url"
                                   value={url}
-                                  onChange={(e) => updateSourceUrl(i, ui, e.target.value)}
+                                  onChange={(e) =>
+                                    updateSourceUrl(i, ui, e.target.value)
+                                  }
                                   placeholder="https://news-article-link.com/..."
                                   className="flex-1 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-[10px] text-white placeholder-gray-600 focus:border-violet-500 focus:outline-none"
                                 />
-                                <button onClick={() => removeSourceUrl(i, ui)} className="text-gray-500 hover:text-red-400">
+                                <button
+                                  onClick={() => removeSourceUrl(i, ui)}
+                                  className="text-gray-500 hover:text-red-400"
+                                >
                                   <X className="w-3 h-3" />
                                 </button>
                               </div>
@@ -712,7 +1108,9 @@ function CreateEpisodeModal({
                         {seg.sourceMode === "MANUAL_PREMISE" && (
                           <textarea
                             value={seg.topicContent}
-                            onChange={(e) => updateSegment(i, "topicContent", e.target.value)}
+                            onChange={(e) =>
+                              updateSegment(i, "topicContent", e.target.value)
+                            }
                             placeholder="Describe the debate premise..."
                             rows={2}
                             className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none resize-none"
@@ -721,19 +1119,24 @@ function CreateEpisodeModal({
                       </>
                     )}
 
-                    {/* Ad Break fields */}
+                    {/* Ad Break */}
                     {seg.type === "AD_BREAK" && (
                       <select
                         value={seg.sponsorId}
-                        onChange={(e) => updateSegment(i, "sponsorId", e.target.value)}
+                        onChange={(e) =>
+                          updateSegment(i, "sponsorId", e.target.value)
+                        }
                         className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:border-violet-500 focus:outline-none"
                       >
                         <option value="">Select sponsor...</option>
-                        {sponsors.filter((s) => s.active).map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.brandName} {s.promoCode ? `(${s.promoCode})` : ""}
-                          </option>
-                        ))}
+                        {sponsors
+                          .filter((s) => s.active)
+                          .map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.brandName}{" "}
+                              {s.promoCode ? `(${s.promoCode})` : ""}
+                            </option>
+                          ))}
                       </select>
                     )}
                   </div>
@@ -747,12 +1150,16 @@ function CreateEpisodeModal({
         <div className="flex items-center gap-2 px-6 py-4 border-t border-gray-800">
           <div className="flex-1" />
           <button
-            onClick={handleCreate}
+            onClick={handleSave}
             disabled={saving}
             className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-medium bg-violet-600 hover:bg-violet-500 text-white transition-colors disabled:opacity-50"
           >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-            Create Episode
+            {saving ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Check className="w-4 h-4" />
+            )}
+            {isEdit ? "Save Changes" : "Create Episode"}
           </button>
         </div>
       </div>
