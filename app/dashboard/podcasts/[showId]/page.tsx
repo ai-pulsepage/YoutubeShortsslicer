@@ -380,6 +380,7 @@ export default function ShowDetailPage() {
               <EpisodeCard
                 key={ep.id}
                 episode={ep}
+                showId={show.id}
                 onEdit={() => setEpisodeModal({ open: true, editEpisode: ep })}
                 onDelete={() =>
                   deleteEpisode(
@@ -448,11 +449,13 @@ function CharacterBadge({
 
 function EpisodeCard({
   episode,
+  showId,
   onEdit,
   onDelete,
   onGenerateScript,
 }: {
   episode: Episode;
+  showId: string;
   onEdit: () => void;
   onDelete: () => void;
   onGenerateScript: () => void;
@@ -514,9 +517,11 @@ function EpisodeCard({
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <h3 className="text-sm font-semibold text-white truncate">
-                {episode.title || `Episode ${episode.episodeNumber}`}
-              </h3>
+              <Link href={`/dashboard/podcasts/${showId}/episodes/${episode.id}`}>
+                <h3 className="text-sm font-semibold text-white truncate hover:text-violet-400 transition-colors cursor-pointer">
+                  {episode.title || `Episode ${episode.episodeNumber}`}
+                </h3>
+              </Link>
               <span
                 className={cn(
                   "text-[10px] px-2 py-0.5 rounded-full font-medium",
