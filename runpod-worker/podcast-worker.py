@@ -9,7 +9,7 @@ Generates multi-character podcast dialogue using:
 
 Listens on Redis queue `podcast_jobs`, reports results via webhook.
 
-Setup on RunPod:
+Setup on RunPod (2× A100 PCIe 80GB, 265GB volume):
   1. pip install -r podcast-requirements.txt
   2. Start vLLM:
      python -m vllm.entrypoints.openai.api_server \
