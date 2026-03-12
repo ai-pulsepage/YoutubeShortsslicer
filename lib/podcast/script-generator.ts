@@ -105,23 +105,23 @@ export async function generateEpisodeScript(
   const useRunPod = provider === "mistral" && process.env.REDIS_URL;
 
   if (useRunPod) {
-    try {
-      log("Dispatching to RunPod Mistral worker...");
-      await dispatchToRunPod(episode, characterProfiles, process.env.REDIS_URL!);
+    log("Dispatching to RunPod Mistral worker...");
+    await dispatchToRunPod(episode, characterProfiles, process.env.REDIS_URL!);
 
-      // Mark as in-progress
-      await prisma.podcastEpisode.update({
-        where: { id: episodeId },
-        data: { status: "SCRIPTING" },
-      });
+    // Mark as in-progress
+    await prisma.podcastEpisode.update({
+      where: { id: episodeId },
+      data: { status: "SCRIPTING" },
+    });
 
-      return { dispatched: true, message: "Job sent to RunPod — script will arrive via webhook" };
-    } catch (err: any) {
-      log(`RunPod dispatch failed: ${err.message}, falling back to DeepSeek`);
-    }
+    return { dispatched: true, message: "Job sent to RunPod — script will arrive via webhook" };
   }
 
-  // DeepSeek (selected or fallback)
+  if (provider === "mistral" && !process.env.REDIS_URL) {
+    throw new Error("Mistral selected but REDIS_URL is not configured. Set REDIS_URL or switch to DeepSeek.");
+  }
+
+  // DeepSeek — only if explicitly selected via the toggle
   log("Using DeepSeek API...");
   return generateWithDeepSeek(episode, characterProfiles, episodeId, log);
 }
