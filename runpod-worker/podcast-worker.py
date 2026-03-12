@@ -9,12 +9,12 @@ Generates multi-character podcast dialogue using:
 
 Listens on Redis queue `podcast_jobs`, reports results via webhook.
 
-Setup on RunPod (2× A100 PCIe 80GB, 265GB volume):
+Setup on RunPod (1× A100 PCIe 40/80GB, 100GB volume):
   1. pip install -r podcast-requirements.txt
   2. Start vLLM:
      python -m vllm.entrypoints.openai.api_server \
-       --model mistralai/Mistral-Large-Instruct-2411 \
-       --tensor-parallel-size 2 \
+       --model mistralai/Mistral-Small-Instruct-2503 \
+       --tensor-parallel-size 1 \
        --max-model-len 32768 \
        --gpu-memory-utilization 0.90 \
        --port 8000 &
@@ -156,7 +156,7 @@ def call_mistral(system_prompt: str, user_prompt: str, temperature: float = 0.85
     resp = requests.post(
         f"{VLLM_BASE_URL}/v1/chat/completions",
         json={
-            "model": "mistralai/Mistral-Large-Instruct-2411",
+            "model": "mistralai/Mistral-Small-Instruct-2503",
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
