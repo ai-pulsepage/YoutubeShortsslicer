@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generateVoiceover } from "@/lib/tts";
-import { uploadBuffer } from "@/lib/storage";
+import { uploadBufferToR2 as uploadBuffer } from "@/lib/storage";
 
 /**
  * POST /api/podcast/audio/generate

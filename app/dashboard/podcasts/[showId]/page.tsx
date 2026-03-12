@@ -587,13 +587,13 @@ function EpisodeCard({
                     )}
                     {scriptOpen ? "Hide Script" : "View Script"}
                   </button>
-                  <button
+                  <Link
+                    href={`/dashboard/podcasts/${showId}/episodes/${episode.id}`}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-violet-500/10 text-violet-400 border border-violet-500/20 hover:bg-violet-500/20 transition-colors cursor-pointer"
-                    onClick={() => alert("Audio generation coming in Phase 4 — ElevenLabs TTS pipeline")}
                   >
                     <Volume2 className="w-3 h-3" />
                     Generate Audio
-                  </button>
+                  </Link>
                 </>
               )}
             </div>
