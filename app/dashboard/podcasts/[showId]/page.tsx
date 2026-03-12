@@ -20,6 +20,9 @@ import {
   Check,
   FileText,
   Save,
+  Sparkles,
+  Zap,
+  Eye,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -200,6 +203,20 @@ export default function ShowDetailPage() {
     setEpisodes(episodes.filter((e) => e.id !== id));
   };
 
+  const generateScript = async (id: string) => {
+    const res = await fetch("/api/podcast/scripts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ episodeId: id }),
+    });
+    if (res.ok) {
+      loadAll();
+    } else {
+      const err = await res.json();
+      alert(`Script generation failed: ${err.error}`);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -325,6 +342,7 @@ export default function ShowDetailPage() {
                     ep.title || `Ep ${ep.episodeNumber}`
                   )
                 }
+                onGenerateScript={() => generateScript(ep.id)}
               />
             ))
           )}
@@ -387,11 +405,15 @@ function EpisodeCard({
   episode,
   onEdit,
   onDelete,
+  onGenerateScript,
 }: {
   episode: Episode;
   onEdit: () => void;
   onDelete: () => void;
+  onGenerateScript: () => void;
 }) {
+  const [generating, setGenerating] = useState(false);
+
   const statusColors: Record<string, string> = {
     DRAFT: "bg-gray-500/20 text-gray-400",
     SCRIPTING: "bg-blue-500/20 text-blue-400",
@@ -405,6 +427,14 @@ function EpisodeCard({
   };
 
   const topicSegments = episode.segments.filter((s) => s.type === "TOPIC");
+  const canGenerate = episode.status === "DRAFT" && topicSegments.length > 0;
+  const hasScript = episode.status !== "DRAFT";
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    await onGenerateScript();
+    setGenerating(false);
+  };
 
   return (
     <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-4 hover:border-gray-700 transition-colors group">
@@ -451,6 +481,29 @@ function EpisodeCard({
               ))}
             </div>
           )}
+          {/* Generate Script / View Script buttons */}
+          <div className="flex gap-2 mt-3">
+            {canGenerate && (
+              <button
+                onClick={handleGenerate}
+                disabled={generating}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 disabled:opacity-50 transition-colors"
+              >
+                {generating ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Sparkles className="w-3 h-3" />
+                )}
+                {generating ? "Generating..." : "Generate Script"}
+              </button>
+            )}
+            {hasScript && (
+              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                <FileText className="w-3 h-3" />
+                Script Ready
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           <button

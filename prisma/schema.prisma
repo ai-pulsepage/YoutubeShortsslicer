@@ -749,6 +749,7 @@ model PodcastEpisode {
   description       String?               @db.Text
   durationMin       Int                   @default(30)
   transcript        Json?                 // Full dialogue turns
+  scriptJson        Json?                 // Generated podcast script
   audioUrl          String?
   audioDuration     Float?
   transcriptHtml    String?               @db.Text
