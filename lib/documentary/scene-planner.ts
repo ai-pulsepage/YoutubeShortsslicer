@@ -10,6 +10,7 @@
 
 import { prisma } from "@/lib/prisma";
 import type { StoryScript } from "./story-writer";
+import { repairAndParseJSON } from "./json-repair";
 
 // Types for the AI response — kept lean for token efficiency
 interface PlannedScene {
@@ -161,14 +162,8 @@ export async function planScenes(
 
     console.log(`[ScenePlanner] Received ${content.length} chars of JSON`);
 
-    // Parse with truncation repair
-    let plan: ScenePlan;
-    try {
-        plan = JSON.parse(content);
-    } catch (parseError) {
-        console.warn(`[ScenePlanner] JSON parse failed, attempting truncation repair...`);
-        plan = repairTruncatedJSON(content);
-    }
+    // Parse with robust repair
+    const plan: ScenePlan = repairAndParseJSON(content);
 
     // Validate we have required structure
     if (!plan.assets || !plan.scenes) {
@@ -196,78 +191,7 @@ export async function planScenes(
     );
 }
 
-/**
- * Repairs truncated JSON by closing open arrays/objects
- */
-function repairTruncatedJSON(content: string): ScenePlan {
-    // Remove any control characters
-    let cleaned = content.replace(/[\x00-\x1F\x7F]/g, ' ');
 
-    // Try to find the last valid point and close the JSON
-    // Count open/close braces and brackets
-    let braces = 0;
-    let brackets = 0;
-    let inString = false;
-    let lastValidIdx = 0;
-
-    for (let i = 0; i < cleaned.length; i++) {
-        const char = cleaned[i];
-        if (char === '"' && (i === 0 || cleaned[i - 1] !== '\\')) {
-            inString = !inString;
-            continue;
-        }
-        if (inString) continue;
-
-        if (char === '{') braces++;
-        if (char === '}') { braces--; lastValidIdx = i; }
-        if (char === '[') brackets++;
-        if (char === ']') { brackets--; lastValidIdx = i; }
-    }
-
-    // If we have unclosed structures, truncate to last valid close and add closers
-    if (braces > 0 || brackets > 0) {
-        // Find the last complete array element or object
-        let truncated = cleaned.substring(0, lastValidIdx + 1);
-
-        // Remove any trailing comma
-        truncated = truncated.replace(/,\s*$/, '');
-
-        // Close any open structures
-        for (let i = 0; i < brackets; i++) truncated += ']';
-        for (let i = 0; i < braces; i++) truncated += '}';
-
-        console.log(`[ScenePlanner] Repaired truncated JSON: closed ${braces} braces, ${brackets} brackets`);
-
-        try {
-            return JSON.parse(truncated);
-        } catch (e) {
-            // Still failed — try more aggressive truncation
-        }
-    }
-
-    // Last resort: find the assets array at minimum
-    const assetsMatch = cleaned.match(/"assets"\s*:\s*(\[[\s\S]*?\])/);
-    if (assetsMatch) {
-        console.warn(`[ScenePlanner] Extracting assets-only from truncated response`);
-        const assets = JSON.parse(assetsMatch[1]);
-        return {
-            assets,
-            scenes: [{
-                title: "Full Documentary",
-                narrationText: "",
-                duration: 300,
-                shots: assets.map((a: PlannedAsset) => ({
-                    action: a.description,
-                    mood: "wonder",
-                    assetsUsed: [a.label],
-                    duration: 5,
-                })),
-            }],
-        };
-    }
-
-    throw new Error(`Scene planner returned unparseable JSON (${content.length} chars). First 200: ${content.substring(0, 200)}`);
-}
 
 /**
  * Assigns verbatim script text from the original segments to each scene.
