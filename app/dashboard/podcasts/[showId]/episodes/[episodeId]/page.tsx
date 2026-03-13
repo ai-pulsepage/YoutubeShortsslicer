@@ -183,7 +183,6 @@ export default function EpisodeDetailPage() {
   };
 
   const resetToDraft = async () => {
-    if (!confirm("Reset this episode back to DRAFT? The current script will be cleared.")) return;
     try {
       const res = await fetch(`/api/podcast/episodes?id=${episodeId}`, {
         method: "PUT",
