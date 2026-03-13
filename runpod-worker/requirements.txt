@@ -13,3 +13,4 @@ Pillow
 redis
 boto3
 requests
+scipy

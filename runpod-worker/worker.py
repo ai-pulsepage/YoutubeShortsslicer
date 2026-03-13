@@ -5,6 +5,7 @@ Python worker that runs on RunPod RTX 4090 pod.
 Listens to Redis for generation jobs and processes them with:
 - Flux.1: Reference image generation
 - Wan2.2: Image-conditioned video generation
+- MusicGen: Background music / jingle generation
 
 Deploy: Upload this folder to RunPod pod, then run:
   pip install -r requirements.txt
@@ -235,6 +236,57 @@ def generate_video(
     torch.cuda.empty_cache()
 
 
+# ─── MusicGen Audio Generation ─────────────────────────
+_musicgen_model = None
+_musicgen_processor = None
+
+def get_musicgen():
+    """Lazy-load MusicGen medium model (~3.3GB VRAM)."""
+    global _musicgen_model, _musicgen_processor
+    if _musicgen_model is None:
+        from transformers import AutoProcessor, MusicgenForConditionalGeneration
+        model_id = "facebook/musicgen-medium"
+        print(f"🔄 Loading MusicGen medium...")
+        _musicgen_processor = AutoProcessor.from_pretrained(model_id, cache_dir="/workspace/hf_cache")
+        _musicgen_model = MusicgenForConditionalGeneration.from_pretrained(
+            model_id,
+            cache_dir="/workspace/hf_cache",
+            torch_dtype=torch.float16,
+        ).to("cuda")
+        print(f"✅ MusicGen loaded")
+    return _musicgen_model, _musicgen_processor
+
+
+def generate_music(prompt: str, output_path: str, duration_sec: int = 15):
+    """Generate music audio from a text prompt."""
+    model, processor = get_musicgen()
+    import scipy.io.wavfile as wavfile
+
+    inputs = processor(
+        text=[prompt],
+        padding=True,
+        return_tensors="pt",
+    ).to("cuda")
+
+    # MusicGen generates at 32kHz, tokens = duration * 50
+    max_new_tokens = int(duration_sec * 50)
+    print(f"  🎵 Generating {duration_sec}s of music ({max_new_tokens} tokens)...")
+
+    with torch.no_grad():
+        audio_values = model.generate(**inputs, max_new_tokens=max_new_tokens)
+
+    # Save as WAV
+    sampling_rate = model.config.audio_encoder.sampling_rate
+    audio_data = audio_values[0, 0].cpu().numpy()
+    wavfile.write(output_path, rate=sampling_rate, data=audio_data)
+    print(f"  🎵 Music generated: {output_path}")
+
+    # Cleanup
+    del audio_values, inputs
+    gc.collect()
+    torch.cuda.empty_cache()
+
+
 def process_job(job: dict, r: redis.Redis):
     """Process a single generation job."""
     job_id = job.get("jobId", "unknown")
@@ -308,6 +360,27 @@ def process_job(job: dict, r: redis.Redis):
                     "outputPath": r2_key,
                     "lastFramePath": last_frame_key,
                     "type": "video",
+                }
+
+            elif job_type == "musicgen_generate":
+                # Generate background music / jingle
+                duration = job.get("duration", 15)
+                output_file = os.path.join(tmpdir, f"{job_id}.wav")
+                generate_music(prompt, output_file, duration_sec=duration)
+
+                # Upload to R2
+                r2_key = f"podcast-audio/music/{job_id}.wav"
+                upload_to_r2(output_file, r2_key, "audio/wav")
+
+                # Build public URL
+                output_url = f"https://{R2_BUCKET}.{R2_ENDPOINT.replace('https://', '')}/{r2_key}"
+
+                result = {
+                    "jobId": job_id,
+                    "status": "completed",
+                    "outputPath": r2_key,
+                    "output_url": output_url,
+                    "type": "music",
                 }
 
             else:
