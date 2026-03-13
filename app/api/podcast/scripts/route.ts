@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
 
     const result = await generateEpisodeScript(episodeId, session.user.id, provider);
 
-    // RunPod dispatch — script arrives later via webhook
+    // Both RunPod and DeepSeek now return dispatched (background generation)
     if ("dispatched" in result) {
       return NextResponse.json({
         success: true,
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // DeepSeek fallback — script returned inline
+    // Direct result (shouldn't happen with current flow but kept as fallback)
     return NextResponse.json({
       success: true,
       dispatched: false,

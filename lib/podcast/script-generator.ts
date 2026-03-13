@@ -124,7 +124,27 @@ export async function generateEpisodeScript(
 
   // DeepSeek — only if explicitly selected via the toggle
   log("Using DeepSeek API...");
-  return generateWithDeepSeek(episode, characterProfiles, episodeId, log);
+
+  // Mark as SCRIPTING immediately so frontend can poll
+  await prisma.podcastEpisode.update({
+    where: { id: episodeId },
+    data: { status: "SCRIPTING" },
+  });
+
+  // Fire-and-forget — generate in background, don't await
+  generateWithDeepSeek(episode, characterProfiles, episodeId, log).catch(async (err) => {
+    console.error(`[PODCAST] Background script generation failed: ${err.message}`);
+    try {
+      await prisma.podcastEpisode.update({
+        where: { id: episodeId },
+        data: { status: "FAILED_PODCAST" },
+      });
+    } catch (dbErr) {
+      console.error(`[PODCAST] Failed to mark episode as FAILED_PODCAST`, dbErr);
+    }
+  });
+
+  return { dispatched: true, message: "Script generation started — polling for updates" };
 }
 
 // ─── RunPod Dispatch ────────────────────────────────────
@@ -238,12 +258,12 @@ async function generateWithDeepSeek(
     segments: scriptSegments,
   };
 
-  // Save script to DB and update status
+  // Save script to DB and mark READY
   await prisma.podcastEpisode.update({
     where: { id: episodeId },
     data: {
       scriptJson: JSON.stringify(script) as any,
-      status: "SCRIPTING",
+      status: "READY",
     },
   });
 

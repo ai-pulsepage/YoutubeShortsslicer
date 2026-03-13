@@ -165,6 +165,39 @@ export default function EpisodeDetailPage() {
     }
   }, [episode, scriptData, fetchScript]);
 
+  // ─── Poll while SCRIPTING ────────────────────────────────
+  // Auto-refresh every 10 seconds while episode is generating
+  useEffect(() => {
+    if (!episode || episode.status !== "SCRIPTING") return;
+
+    setGenerating(true); // Keep button disabled during background generation
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/podcast/episodes?showId=${showId}`);
+        if (!res.ok) return;
+        const episodes = await res.json();
+        const ep = episodes.find((e: any) => e.id === episodeId);
+        if (ep) {
+          setEpisode(ep);
+          if (ep.status !== "SCRIPTING") {
+            // Generation finished (READY or FAILED_PODCAST)
+            setGenerating(false);
+            clearInterval(interval);
+            if (ep.status === "READY" || ep.scriptJson) {
+              // Auto-load the completed script
+              fetchScript();
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Polling error", err);
+      }
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [episode?.status, showId, episodeId, fetchScript]);
+
   const generateScript = async () => {
     if (!episode) return;
     setGenerating(true);
@@ -177,20 +210,21 @@ export default function EpisodeDetailPage() {
       const data = await res.json();
       if (!res.ok) {
         alert(`Script generation failed: ${data.error || "Unknown error"}`);
+        setGenerating(false);
       } else if (data.dispatched) {
-        // RunPod job — poll for completion
-        alert("✅ Script generation dispatched to RunPod. Refresh in a minute to see results.");
+        // Generation running in background — polling will detect completion
+        await fetchEpisode();
+        // Note: generating stays true — polling useEffect will clear it
       } else if (data.script) {
-        // DeepSeek — script returned inline
+        // Direct result (unlikely now but kept as fallback)
         setScriptData(data.script);
+        await fetchEpisode();
+        setGenerating(false);
       }
-      // Always refetch episode + script from DB (script is saved server-side)
-      await fetchEpisode();
-      await fetchScript();
     } catch (err: any) {
       alert(`Script generation failed: ${err.message}`);
+      setGenerating(false);
     }
-    setGenerating(false);
   };
 
   const resetToDraft = async () => {
@@ -485,20 +519,14 @@ export default function EpisodeDetailPage() {
           ) : episode.status === "SCRIPTING" ? (
             <div className="p-8 text-center">
               <Loader2 className="w-8 h-8 animate-spin text-violet-400 mx-auto mb-3" />
-              <p className="text-sm text-gray-400">Script is being generated on RunPod...</p>
+              <p className="text-sm text-gray-400">Script is being generated with 3-pass AI architecture...</p>
               <p className="text-xs text-gray-600 mt-1">
-                This can take 1-3 minutes. Refresh to check for updates.
+                Content AI → Director AI → Voice AI — typically 15-25 minutes. Auto-checking every 10s.
               </p>
-              <button
-                onClick={() => {
-                  fetchEpisode();
-                  fetchScript();
-                }}
-                className="mt-4 flex items-center gap-1.5 px-4 py-2 mx-auto rounded-xl text-xs font-medium bg-violet-500/10 text-violet-400 border border-violet-500/20 hover:bg-violet-500/20 transition-colors"
-              >
-                <RefreshCw className="w-3 h-3" />
-                Check for Updates
-              </button>
+              <div className="mt-4 flex items-center justify-center gap-2 text-[10px] text-gray-600">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Polling for completion...
+              </div>
             </div>
           ) : (
             <div className="p-8 text-center">
