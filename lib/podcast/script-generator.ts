@@ -316,135 +316,97 @@ async function generateTopicDialogue(
     ? "Light profanity allowed but not excessive."
     : "No content restrictions. Raw, unfiltered language is fine. Characters can swear, be crass, use slang.";
 
-  // Target ~150 words per minute of speech
   const totalTargetWords = durationMin * 150;
 
-  const characterBlock = characters
-    .map((c) => `=== ${c.name} (${c.role}) ===\n${c.prompt}`)
-    .join("\n\n");
+  // ─── Extract character perspective summaries for Content AI ──────
+  // Pass 1 doesn't get full personality — just ideological angles
+  const perspectives = characters.map((c) => {
+    const lines = c.prompt.split("\n");
+    const political = lines.find((l) => l.startsWith("POLITICAL WORLDVIEW:"))?.replace("POLITICAL WORLDVIEW:", "").trim() || "";
+    const beliefs = lines.filter((l) => l.startsWith("- ")).map((l) => l.replace("- ", "")).join("; ");
+    return {
+      id: c.id,
+      name: c.name,
+      role: c.role,
+      angle: political || beliefs || c.role,
+    };
+  });
 
-  // ─── Define natural conversation beats ─────────────────
-  // Each beat mirrors how real debates flow organically
-
+  // ─── Define beats ──────────────────────────────────────────
   const beats = [
-    {
-      name: "Opening Takes",
-      fraction: 0.2,
-      instruction: `ROUND 1 — OPENING TAKES
-Each character states their initial position on the topic. The host frames the question, then each guest gives their raw first take.
-- The host should pose the topic with attitude, not neutrally
-- Each guest opens with their strongest, most confident position
-- Early disagreement should be visible but not yet explosive
-- Characters should reference their worldview (political leaning, generational perspective)
-- This is laying groundwork — plant seeds that will explode later`,
-    },
-    {
-      name: "Challenge & Push Back",
-      fraction: 0.25,
-      instruction: `ROUND 2 — CHALLENGES & PUSH BACK
-Characters directly attack each other's opening positions. The gloves start coming off.
-- Characters should QUOTE what someone just said and tear it apart
-- Use specific counter-examples, data, or experience to challenge
-- The host should take sides here — they're not neutral
-- Characters should interrupt, cut each other off mid-thought
-- Include moments of "Wait, wait, wait — are you seriously saying..."
-- Cross-talk and overlapping reactions`,
-    },
-    {
-      name: "Personal Stories & Anecdotes",
-      fraction: 0.2,
-      instruction: `ROUND 3 — PERSONAL STORIES & ANECDOTES
-Characters get personal. They share stories from their own experience that support their position.
-- Characters should tell SHORT but vivid personal anecdotes: "I remember when..." "My uncle was a..." "I saw this firsthand when..."
-- Anecdotes should be tied to their GENERATIONAL CONTEXT and CORE BELIEFS
-- Other characters should react emotionally to the stories — agreement, disbelief, or "That's exactly the problem!"
-- This round humanizes the debate — it's not just abstract talking points anymore
-- The host might share their own experience that surprises the guests`,
-    },
-    {
-      name: "Escalation & Hot Buttons",
-      fraction: 0.2,
-      instruction: `ROUND 4 — ESCALATION & HOT BUTTONS
-Someone hits a nerve. The debate gets genuinely heated.
-- A character should accidentally or deliberately trigger another character's HOT BUTTON topic
-- Emotional intensity increases — raised voices, personal attacks, "You don't know what you're talking about!"
-- Characters abandon their polished arguments and speak from raw emotion
-- Someone says something that genuinely shocks the room
-- The host should try to control it but also be affected themselves
-- Include at least one moment of uncomfortable silence after a bomb drops`,
-    },
-    {
-      name: "Landing & Final Words",
-      fraction: 0.15,
-      instruction: `ROUND 5 — LANDING & FINAL WORDS
-The debate winds down. Not everyone agrees, but positions have shifted.
-- The host pulls things together with a closing observation
-- Each character gets one final word — their "hill to die on" take
-- Someone might concede a small point — "Look, you're not WRONG about that part, but..."
-- End with tension still in the air — NOT a neat resolution
-- The audience should feel like this debate could keep going
-- The host transitions out with something like "We could go all night on this, but..."`,
-    },
+    { name: "Opening Takes", fraction: 0.2, phase: "opening" },
+    { name: "Challenge & Push Back", fraction: 0.25, phase: "challenge" },
+    { name: "Deep Dive & Evidence", fraction: 0.25, phase: "evidence" },
+    { name: "Escalation & Hot Buttons", fraction: 0.15, phase: "escalation" },
+    { name: "Landing & Final Words", fraction: 0.15, phase: "landing" },
   ];
 
-  // ─── Generate each round, feeding context forward ────────
   const allLines: DialogueLine[] = [];
   let conversationSoFar = "";
 
   for (const beat of beats) {
     const roundTargetWords = Math.round(totalTargetWords * beat.fraction);
-    const roundTargetLines = Math.max(6, Math.round(roundTargetWords / 25)); // ~25 words per line
-
-    const contextBlock = conversationSoFar
-      ? `\nCONVERSATION SO FAR (continue from here, do NOT repeat):\n${conversationSoFar}\n`
-      : "";
-
-    const systemPrompt = `You are writing part of a podcast debate segment. Write ONLY this round of the conversation.
-
-CHARACTERS:
-${characterBlock}
-
-TOPIC: ${topicTitle}
-${topicContent ? `CONTEXT: ${topicContent}` : ""}
-
-CONTENT FILTER: ${filterNote}
-
-${beat.instruction}
-${contextBlock}
-
-TARGET: Write ~${roundTargetLines} dialogue lines (~${roundTargetWords} words). Each line should be a FULL thought — not one-word reactions. Average 20-35 words per line. If someone is telling a story, that line can be 40-60 words.
-
-CRITICAL RULES:
-1. Characters MUST stay in their archetype personality throughout
-2. Every line must have a real "speaker" name from the character list — NEVER "Unknown"
-3. Lines should be SUBSTANTIAL — full sentences, not "Yeah" or "Right" alone
-4. The conversation should flow NATURALLY — people react to what was JUST said
-5. Include natural speech patterns: false starts, self-corrections, trailing off...
-
-OUTPUT: JSON array ONLY:
-[
-  { "speaker": "CharacterName", "characterId": "charId", "text": "...", "emotion": "angry" }
-]
-
-Emotions: "neutral", "excited", "amused", "serious", "angry", "sarcastic", "concerned", "passionate", "dismissive", "shocked"`;
-
-    const userPrompt = sourceUrls.length > 0
-      ? `Generate ROUND: ${beat.name} for topic "${topicTitle}"\n\nSOURCE ARTICLES:\n${sourceUrls.map((u) => `- ${u}`).join("\n")}`
-      : `Generate ROUND: ${beat.name} for topic "${topicTitle}"`;
 
     try {
-      const roundLines = await callLLMForDialogue(systemPrompt, userPrompt);
+      // ═══════════════════════════════════════════════════════
+      // PASS 1: CONTENT AI — "The Journalist"
+      // Generates raw expert-level arguments with SPECIFIC facts
+      // NO character personalities — just substance from each angle
+      // ═══════════════════════════════════════════════════════
+
+      const contentPrompt = buildContentPrompt(
+        topicTitle, topicContent, sourceUrls, perspectives, beat, roundTargetWords, conversationSoFar
+      );
+
+      console.log(`[PODCAST] Pass 1 (Content): ${beat.name}...`);
+      const rawContent = await callDeepSeekRaw(
+        contentPrompt.system,
+        contentPrompt.user
+      );
+
+      // ═══════════════════════════════════════════════════════
+      // PASS 2: DIRECTOR AI — "The Choreographer"
+      // Takes raw content and designs the conversation FLOW
+      // Uses turn-taking theory, adjacency pairs, preference org
+      // ═══════════════════════════════════════════════════════
+
+      const directorPrompt = buildDirectorPrompt(
+        rawContent, characters, beat, roundTargetWords, conversationSoFar
+      );
+
+      console.log(`[PODCAST] Pass 2 (Director): ${beat.name}...`);
+      const structuredFlow = await callDeepSeekRaw(
+        directorPrompt.system,
+        directorPrompt.user
+      );
+
+      // ═══════════════════════════════════════════════════════
+      // PASS 3: VOICE AI — "The Voice Actor"
+      // Takes structured conversation and translates through
+      // each character's personality, intelligence level, and
+      // speech patterns. Adds disfluency markers.
+      // ═══════════════════════════════════════════════════════
+
+      const voicePrompt = buildVoicePrompt(
+        structuredFlow, characters, filterNote, beat
+      );
+
+      console.log(`[PODCAST] Pass 3 (Voice): ${beat.name}...`);
+      const roundLines = await callLLMForDialogue(
+        voicePrompt.system,
+        voicePrompt.user
+      );
+
       allLines.push(...roundLines);
 
-      // Build context of what's been said for the next round
       conversationSoFar += roundLines
         .map((l) => `${l.speaker}: ${l.text}`)
         .join("\n") + "\n";
 
-      console.log(`[PODCAST] Beat "${beat.name}": ${roundLines.length} lines, ~${roundLines.reduce((s, l) => s + (l.text?.split(/\s+/).length || 0), 0)} words`);
+      const wordCount = roundLines.reduce((s, l) => s + (l.text?.split(/\s+/).length || 0), 0);
+      console.log(`[PODCAST] Beat "${beat.name}": ${roundLines.length} lines, ~${wordCount} words (3-pass)`);
     } catch (err: any) {
       console.error(`[PODCAST] Beat "${beat.name}" failed: ${err.message}`);
-      // Continue with other beats — partial dialogue is better than none
     }
   }
 
@@ -452,6 +414,363 @@ Emotions: "neutral", "excited", "amused", "serious", "angry", "sarcastic", "conc
   console.log(`[PODCAST] Topic "${topicTitle}" complete: ${allLines.length} lines, ~${totalWords} words, ~${Math.round(totalWords / 150)} min estimated`);
 
   return allLines;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// THREE-PASS PROMPT BUILDERS
+// ═══════════════════════════════════════════════════════════════
+
+function buildContentPrompt(
+  topicTitle: string,
+  topicContent: string,
+  sourceUrls: string[],
+  perspectives: { id: string; name: string; role: string; angle: string }[],
+  beat: { name: string; phase: string },
+  targetWords: number,
+  conversationSoFar: string
+): { system: string; user: string } {
+
+  const phaseInstructions: Record<string, string> = {
+    opening: `PHASE: OPENING TAKES
+Generate each perspective's initial position on the topic.
+- Each perspective should lead with their STRONGEST, most specific argument
+- Include at least one SPECIFIC fact per perspective (a name, date, statistic, event, or policy)
+- One perspective should make a claim that will be difficult for the others to counter
+- Plant 2-3 factual seeds that will be developed deeper in later rounds
+- Don't just state opinions — provide the REASONING and EVIDENCE behind each position`,
+
+    challenge: `PHASE: CHALLENGES & PUSH BACK
+Generate direct challenges to the positions stated in the conversation so far.
+- Each challenge must ADDRESS A SPECIFIC CLAIM from the conversation — quote it or paraphrase it
+- Provide counter-evidence: opposing statistics, historical counter-examples, logical flaws
+- Include at least one "drill-down moment" — one perspective spends 3-4 sentences explaining a specific aspect in granular detail (e.g. the timeline of Iran's enrichment program, specific trade agreement clauses, specific policy outcomes with numbers)
+- Some challenges should be strong, others should be partial agreements that pivot to a different point
+- Include evidence that is genuinely hard to dismiss`,
+
+    evidence: `PHASE: DEEP DIVE & EVIDENCE
+Generate the most substantive part of the debate — this is where real depth happens.
+- Each perspective provides their MOST DETAILED, SPECIFIC arguments
+- Include extended explanations: a perspective spends 4-6 sentences on ONE specific sub-topic with real facts, names, dates, and numbers
+- Include a moment where one perspective brings up something the others hadn't considered — a genuinely new angle
+- One perspective should cite a specific historical parallel with DETAIL (not just "it happened before")
+- Include a sub-point where two perspectives partially agree on a specific fact but disagree on its interpretation
+- This round should contain the HIGHEST density of specific facts in the entire topic`,
+
+    escalation: `PHASE: ESCALATION & HOT BUTTONS
+Generate the emotional peak of the debate.
+- One perspective pushes a point that hits the others personally — not just intellectually
+- Include a provocative claim that is partially true but framed in the most inflammatory way
+- One perspective should oversimplify a complex issue deliberately to make a emotional point
+- Include a moment of genuine moral/ethical disagreement — not just policy disagreement
+- One perspective should bring up a consequence that the others are uncomfortable acknowledging`,
+
+    landing: `PHASE: LANDING & FINAL WORDS
+Generate closing arguments that reflect evolution from the debate.
+- Each perspective should have SHIFTED slightly from their opening position — not reversed, but nuanced
+- Include one moment of unexpected concession: a perspective admits the other side has a point on ONE specific thing
+- The moderator observation should synthesize what was actually debated — not a generic summary
+- End with genuine unresolved tension on a specific sub-question
+- At least one perspective should end with a forward-looking question that lingers`,
+  };
+
+  const perspectiveBlock = perspectives
+    .map((p, i) => `PERSPECTIVE_${String.fromCharCode(65 + i)} (${p.angle}): Argue from a ${p.angle} viewpoint`)
+    .join("\n");
+
+  const previousContext = conversationSoFar
+    ? `\nPREVIOUS CONVERSATION CONTENT (reference and build on this — do NOT repeat the same points):\n${conversationSoFar}\n`
+    : "";
+
+  const sourceBlock = sourceUrls.length > 0
+    ? `\nSOURCE REFERENCES:\n${sourceUrls.map((u) => `- ${u}`).join("\n")}\n`
+    : "";
+
+  const system = `You are a senior investigative journalist and researcher preparing substantive debate content for an expert panel.
+
+Your job is to generate the RAW ARGUMENTS, FACTS, AND EVIDENCE for a debate — NOT the final dialogue. Another system will convert this into character voices later.
+
+${perspectiveBlock}
+MODERATOR: Guides discussion, asks probing follow-up questions, challenges all sides
+
+TOPIC: ${topicTitle}
+${topicContent ? `CONTEXT: ${topicContent}` : ""}
+${sourceBlock}
+
+${phaseInstructions[beat.phase] || phaseInstructions.opening}
+${previousContext}
+
+SUBSTANCE REQUIREMENTS:
+- Every claim MUST include at least one SPECIFIC: a person's name, a date, a statistic, a policy name, a dollar amount, a treaty, a historical event with year
+- Do NOT use vague references like "the data shows" or "experts say" — name the data, name the expert
+- When making a comparison, use specific numbers: "60% enrichment vs. the 90% needed for weaponization" not "close to weapons-grade"
+- Include at least one fact that is genuinely surprising or lesser-known
+- Arguments should BUILD on each other — address what was said before, don't just introduce new unrelated points
+
+TARGET: ~${targetWords} words total across all perspectives.
+
+OUTPUT FORMAT: Write as labeled paragraphs:
+MODERATOR: [their framing/question]
+PERSPECTIVE_A: [their argument with evidence]
+PERSPECTIVE_B: [their counter-argument with evidence]
+PERSPECTIVE_A: [response]
+etc.
+
+Write substantive prose — not bullet points. Each perspective entry should be 2-5 sentences.`;
+
+  return {
+    system,
+    user: `Generate ${beat.name} content for the topic: "${topicTitle}"`,
+  };
+}
+
+function buildDirectorPrompt(
+  rawContent: string,
+  characters: { id: string; name: string; role: string; prompt: string }[],
+  beat: { name: string; phase: string },
+  targetWords: number,
+  conversationSoFar: string
+): { system: string; user: string } {
+
+  const characterList = characters
+    .map((c) => `- ${c.name} (${c.role}): ID=${c.id}`)
+    .join("\n");
+
+  const phaseFlow: Record<string, string> = {
+    opening: `FLOW PATTERN FOR OPENING:
+- Host opens by framing the topic as a question to the room — addressing one guest by name first
+- The addressed guest gives their take (2-3 sentences of substance)
+- The OTHER guest jumps in unprompted: "Can I jump in here?" or "See, here's the thing..."
+- Host reacts briefly, then asks a follow-up to either guest
+- Allow 1-2 exchanges where two speakers go back and forth before the third joins
+- End with a setup statement that will provoke the challenge round`,
+
+    challenge: `FLOW PATTERN FOR CHALLENGE:
+- One guest directly quotes or paraphrases what another guest said and challenges it
+- The challenged guest defends (2-3 sentences) — the host should NOT intervene immediately
+- After the defense, the host asks a pointed follow-up: "But what about [specific thing]?"
+- Include a moment where TWO speakers agree on a specific FACT before disagreeing on its meaning
+- Allow one speaker to hold the floor for an extended point (4+ sentences) while others add short interjections: "Right" / "But—" / "Hold on"
+- The guest who's been quiet should self-select: "You know, I haven't said much about this, but..."`,
+
+    evidence: `FLOW PATTERN FOR DEEP DIVE:
+- The host asks a SPECIFIC question that forces detailed evidence: "Give me the actual numbers on that"
+- One guest provides a detailed, multi-sentence explanation with specifics — this is a MONOLOGUE moment (4-6 sentences)
+- During the monologue, include 1-2 SHORT interjections from others: "Exactly" or "That's the problem though"
+- After the monologue, the other guest responds with their own counter-evidence — also detailed
+- Include a SEGUE moment where the conversation naturally drifts to a related sub-topic through a specific connection
+- Two guests may agree on a factual point and have a brief 2-3 turn agreement run before the third disrupts it
+- Host bridges between sub-topics: "OK but that brings up another question..."`,
+
+    escalation: `FLOW PATTERN FOR ESCALATION:
+- The conversation is flowing normally, then ONE guest says something that triggers another's emotional core
+- The triggered guest's response is IMMEDIATE and intense — they interrupt or talk over
+- Allow a rapid-fire 2-turn exchange between the two heated speakers while the third watches
+- The observer then cuts in: "WHOA, hold on" or "Both of you, stop for a second"
+- Include one moment of SILENCE — marked as a pause or beat — after something hits hard
+- The guest who was triggered may try to regain composure but fail: "Look, I'm sorry but—no, actually I'm NOT sorry"
+- Host should be affected too — not just moderating, feeling the tension`,
+
+    landing: `FLOW PATTERN FOR LANDING:
+- Host pulls back from the heat: "Alright, let's bring it down a notch"
+- Each guest gets a closing thought — but NOT round-robin. The host asks each one specifically
+- One guest should CONCEDE something small but genuine before stating their final position
+- Another guest should respond to the concession with surprise: "Wait, did you just agree with me on that?"
+- The host closes with their own take — something personal, not just a summary
+- End with an unresolved question — the host names it explicitly: "The question nobody answered tonight is..."`,
+  };
+
+  const previousContext = conversationSoFar
+    ? `\nCONVERSATION SO FAR (design the flow to continue naturally from here):\n${conversationSoFar.slice(-2000)}\n`
+    : "";
+
+  const system = `You are a podcast conversation director. Your job is to take RAW DEBATE CONTENT and design how the conversation FLOWS between specific characters.
+
+You are applying the Sacks-Schegloff-Jefferson turn-taking model and conversation analysis principles to create natural, dynamic dialogue structure.
+
+CHARACTERS:
+${characterList}
+
+Map the perspectives from the content to these characters:
+- MODERATOR → the HOST character
+- PERSPECTIVE_A, B, C → the GUEST characters (assign based on ideological alignment)
+
+TURN-TAKING RULES:
+1. CURRENT SPEAKER SELECTS NEXT: The host can direct a question to a specific guest by name
+2. SELF-SELECTION: A guest can jump in without being asked: "Can I say something?", "Hold on", "You know what though—"
+3. CONTINUATION: If nobody responds to a point, the current speaker can continue with additional detail
+4. NOT ROUND-ROBIN: Two speakers can exchange 3-4 lines before the third joins. One speaker can hold the floor for a long point while others add interjections.
+
+ADJACENCY PAIR RULES:
+- After a QUESTION → the addressed person MUST answer (can't be skipped)
+- After a CLAIM → someone CHALLENGES or AGREES (not both immediately — pick one, let the other react later)
+- After a STORY/ANECDOTE → others REACT emotionally before making their own point
+- After a STRONG STATEMENT → allow a BEAT (pause) before response
+
+PREFERENCE ORGANIZATION:
+- AGREEMENT should be quick and build energy: "Yeah exactly, and actually—" continuing the thought
+- DISAGREEMENT should be delayed and mitigated: "Well... I mean, I see what you're saying, but the issue is really..."
+- PARTIAL AGREEMENT before pivot: "You're right that X happened, but you're drawing the wrong conclusion because Y"
+- NOT EVERY LINE IS DISAGREEMENT — sometimes two speakers agree for 2-3 turns before the third disrupts
+
+${phaseFlow[beat.phase] || phaseFlow.opening}
+${previousContext}
+
+TARGET: ~${targetWords} words across ~${Math.max(6, Math.round(targetWords / 30))} turns/lines.
+
+OUTPUT FORMAT — Write a structured conversation plan:
+
+TURN 1 | [CharacterName] | [SELECTED_BY: host question / SELF_SELECT / CONTINUES] | [their content from the raw material — 2-5 sentences of substance, facts, and arguments] | [Flow note: "sets up challenge" / "builds on previous" / "segue to sub-topic"]
+TURN 2 | [CharacterName] | [INTERJECTION during turn 1] | [1-3 words: "Right" / "Exactly" / "But—"] | [backchannel]
+TURN 3 | [CharacterName] | [RESPONDS to turn 1] | [their response content] | [Flow note]
+etc.
+
+Include INTERJECTION lines — these are short backchannel responses ("mm-hmm", "right", "but wait—") that happen DURING someone else's extended turn. Mark these as INTERJECTION type.`;
+
+  return {
+    system,
+    user: `Design the conversation flow for beat "${beat.name}" using this raw content:\n\n${rawContent}`,
+  };
+}
+
+function buildVoicePrompt(
+  structuredFlow: string,
+  characters: { id: string; name: string; role: string; prompt: string }[],
+  filterNote: string,
+  beat: { name: string; phase: string }
+): { system: string; user: string } {
+
+  // Build condensed character voice profiles with intelligence tiers
+  const voiceProfiles = characters.map((c) => {
+    const lines = c.prompt.split("\n");
+    const archLine = lines.find((l) => l.includes("PERSONALITY:"))
+      ? lines.slice(lines.findIndex((l) => l.includes("PERSONALITY:")) + 1).find((l) => l.trim())?.trim()
+      : "";
+
+    // Determine archetype family from prompt content for intelligence filtering
+    const isAggressive = /Firebrand|Provocateur|Bulldozer|Sniper/i.test(c.prompt);
+    const isIntellectual = /Professor|Philosopher|Analyst|Skeptic/i.test(c.prompt);
+    const isEntertainer = /Comedian|Storyteller|Wildcard|Hype Man/i.test(c.prompt);
+    const isDiplomatic = /Mediator|Devil's Advocate|Empath|Elder/i.test(c.prompt);
+
+    let intelligenceFilter = "";
+    if (isAggressive) {
+      intelligenceFilter = `INTELLIGENCE FILTER: ${c.name} is NOT an intellectual. When presented with complex arguments or data:
+- They latch onto ONE fragment and ignore the nuance
+- They oversimplify: "I don't care about your percentages — they want to kill us"
+- They may MISREPRESENT what someone said, accidentally or deliberately
+- They argue from gut feeling, emotion, and conviction — not analysis
+- When confronted with evidence they can't counter, they change the subject or attack the messenger
+- Their strength is emotional conviction, not factual accuracy`;
+    } else if (isIntellectual) {
+      intelligenceFilter = `INTELLIGENCE FILTER: ${c.name} processes complex information well:
+- They synthesize multiple data points into coherent analysis
+- They ask follow-up questions that reveal logical flaws
+- They may be condescending about others' inability to grasp nuance
+- They cite evidence while acknowledging limitations: "The data suggests X, but the sample was limited"
+- Their weakness is over-intellectualizing emotional issues`;
+    } else if (isEntertainer) {
+      intelligenceFilter = `INTELLIGENCE FILTER: ${c.name} deflects complexity with humor or stories:
+- They use analogies and stories instead of data to make points
+- They occasionally drop a truth bomb that cuts through the noise
+- They may appear to be joking but land devastating points
+- They redirect tense moments with humor, sometimes inappropriately`;
+    } else if (isDiplomatic) {
+      intelligenceFilter = `INTELLIGENCE FILTER: ${c.name} contextualizes complexity through experience:
+- They connect current issues to broader historical patterns
+- They see multiple sides but have their own bias they're not fully aware of
+- They mediate between others' positions but eventually reveal their own strong opinion
+- They use "I've seen this before" to add depth, not to dismiss`;
+    }
+
+    // Extract generation for speech pattern matching
+    const genLine = lines.find((l) => l.includes("GENERATIONAL CONTEXT:"));
+    const isGenZ = /Gen Z|Generation Z|born 1997/i.test(c.prompt);
+    const isBoomer = /Boomer|born 1946/i.test(c.prompt);
+    const isGenX = /Gen X|Generation X|born 1965/i.test(c.prompt);
+    const isMillennial = /Millennial|born 1981/i.test(c.prompt);
+
+    let speechPatterns = "";
+    if (isGenZ) {
+      speechPatterns = `SPEECH PATTERNS:
+- Filler words: "like", "I mean", "lowkey", "no cap", "um", "uh"
+- Heavy disfluency: false starts, self-corrections, trailing sentences with "..."
+- Hedging before disagreement: "I mean... look, I don't know about that"
+- Surprise agreement: "Okay wait, I actually... huh. Yeah, that's a good point"
+- Verbal processing: thinks out loud, backtracks: "Wait no, that's not what I—yeah, actually it IS what I mean"`;
+    } else if (isBoomer || isGenX) {
+      speechPatterns = `SPEECH PATTERNS:
+- Measured, deliberate speech with purposeful pauses
+- Filler words: "Look...", "Here's the thing...", "I'll tell you what..."
+- Disagreement is calm but firm: "Well... I don't know about that"
+- References to experience are SPECIFIC, not generic: "In '03, when I was covering the buildup to Iraq..."
+- Limit historical references to MAX 2 per beat — each must ADD new information`;
+    } else if (isMillennial) {
+      speechPatterns = `SPEECH PATTERNS:
+- Emphatic, repetitive when passionate
+- False starts when angry: "The thing is—no, let me back up—the REAL thing is..."
+- Starts sentences, abandons them, restarts louder
+- Grudging agreement: "Fine, okay, THAT part is true, but—"
+- References to personal experience as ultimate authority`;
+    } else {
+      speechPatterns = `SPEECH PATTERNS:
+- Natural, conversational tone with occasional "um" and "uh"
+- Disagreement with hedging: "I see your point, but..."
+- Agreement that builds: "And to add to that..."`;
+    }
+
+    return `CHARACTER: ${c.name} (ID: ${c.id}, Role: ${c.role})
+${intelligenceFilter}
+${speechPatterns}`;
+  }).join("\n\n---\n\n");
+
+  const system = `You are an expert dialogue writer and voice actor. Your job is to take a STRUCTURED CONVERSATION PLAN and translate each line into natural, authentic character voice.
+
+CRITICAL: You are NOT generating new content. The substance, arguments, and facts are ALREADY in the structured plan. Your job is to make each line SOUND like the character speaking it — their vocabulary, cadence, intelligence level, emotional reactions, and verbal tics.
+
+${voiceProfiles}
+
+CONTENT FILTER: ${filterNote}
+
+VOICE TRANSLATION RULES:
+1. KEEP ALL FACTS AND EVIDENCE from the structured plan — do not remove or water down specific claims, numbers, dates, or names
+2. TRANSFORM the delivery through the character's voice and intelligence level:
+   - An aggressive character given a nuanced argument should SIMPLIFY it and deliver it with conviction
+   - An intellectual character should ADD qualifiers and cite sources
+   - A diplomatic character should CONTEXTUALIZE with experience
+3. ADD natural disfluency markers — these are NOT random, they serve specific functions:
+   - "Um" before complex thoughts (planning marker)
+   - "Well..." before disagreement (dispreference marker)
+   - "Look..." before commanding attention
+   - "I mean..." before self-correction
+   - "You know what" before an insight
+   - Trailing "..." when losing train of thought or when emotional
+4. INTERJECTION lines should be very short (1-5 words): "Right", "Exactly", "But wait—", "Mm-hmm", "Hold on"
+5. LONG TURNS (monologues) should show the speaker building their argument over 3-6 sentences within a single "text" field — not broken into separate lines
+6. When a character AGREES, make it sound GENUINE and SPECIFIC: "You know what, Kevin's right about the enrichment timeline specifically..."
+7. When a character DISAGREES, make the DELAY audible: "Well... okay. I hear you. But here's where that falls apart—"
+8. Each character's SIGNATURE PHRASES should appear at MOST once per beat — NOT every line
+9. Characters should OCCASIONALLY reference what they heard another character say by PARAPHRASING it, not just pivoting to their own point
+
+CRITICAL ANTI-REPETITION RULES:
+- If a character already said "I know what I know" in a previous beat, they CANNOT say it again
+- If a character already referenced a specific historical event, they should reference a DIFFERENT one
+- No character should make the same argument in different words
+- Vary sentence length: mix punchy 5-word reactions with detailed 40-word explanations
+
+OUTPUT: JSON array ONLY — every element must have ALL of these fields:
+[
+  { "speaker": "CharacterName", "characterId": "charId", "text": "...", "emotion": "angry" }
+]
+
+VALID SPEAKER NAMES: ${characters.map((c) => `"${c.name}"`).join(", ")}
+VALID CHARACTER IDS: ${characters.map((c) => `"${c.id}"`).join(", ")}
+
+Emotions: "neutral", "excited", "amused", "serious", "angry", "sarcastic", "concerned", "passionate", "dismissive", "shocked", "hesitant", "resigned", "defiant"`;
+
+  return {
+    system,
+    user: `Translate this structured conversation plan into voiced dialogue for beat "${beat.name}":\n\n${structuredFlow}`,
+  };
 }
 
 async function generateAdBreak(
@@ -522,16 +841,68 @@ STRUCTURE:
 3. TEASE — Hint at next time or make a recurring sign-off.
 4. SIGN-OFF — The host's signature closing line. Make it memorable and consistent.
 
-ALL lines MUST have "speaker": "${host.name}" — never "Unknown".
+ALL lines MUST have "speaker": "${host.name}" and "characterId": "${host.id}" — never "Unknown".
 
 OUTPUT: JSON array of dialogue lines. 3-5 lines, brief, natural, IN CHARACTER.
 Emotions: "neutral", "excited", "amused", "serious", "sarcastic"`;
 
-  return callLLMForDialogue(systemPrompt, `Write the outro for "${showName}".`);
+  try {
+    const lines = await callLLMForDialogue(systemPrompt, `Write the outro for "${showName}".`);
+    if (lines.length > 0) return lines;
+    console.warn("[PODCAST] Outro returned empty — using fallback");
+  } catch (err: any) {
+    console.error(`[PODCAST] Outro generation failed: ${err.message} — using fallback`);
+  }
+
+  // Fallback outro if LLM returns empty or fails
+  return [
+    { speaker: host.name, characterId: host.id, text: `That's all the time we have for today, folks. ${guests.map((g) => g.name).join(" and ")}, appreciate you being here.`, emotion: "serious", duration: 6 },
+    { speaker: host.name, characterId: host.id, text: `We'll be back next time with more to unpack. Until then — stay sharp.`, emotion: "neutral", duration: 4 },
+    { speaker: host.name, characterId: host.id, text: `This has been ${showName}. I'm ${host.name}. Take care.`, emotion: "neutral", duration: 3 },
+  ];
 }
 
-// ─── LLM Call ───────────────────────────────────────────
+// ─── LLM Calls ──────────────────────────────────────────
 
+// Raw text response — used for Pass 1 (Content) and Pass 2 (Director)
+async function callDeepSeekRaw(
+  systemPrompt: string,
+  userPrompt: string
+): Promise<string> {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  const apiBase = process.env.DEEPSEEK_API_BASE || "https://api.deepseek.com";
+  if (!apiKey) throw new Error("DEEPSEEK_API_KEY not configured");
+
+  const res = await fetch(`${apiBase}/v1/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: "deepseek-chat",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      temperature: 0.9,
+      max_tokens: 16384,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`DeepSeek raw error: ${res.status} — ${err}`);
+  }
+
+  const data = await res.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error("Empty DeepSeek raw response");
+
+  return content;
+}
+
+// JSON dialogue response — used for Pass 3 (Voice) and standalone segments
 async function callLLMForDialogue(
   systemPrompt: string,
   userPrompt: string
@@ -564,8 +935,8 @@ async function callDeepSeek(
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
-      temperature: 0.85,
-      max_tokens: 8192,
+      temperature: 0.9,
+      max_tokens: 16384,
       response_format: { type: "json_object" },
     }),
   });
