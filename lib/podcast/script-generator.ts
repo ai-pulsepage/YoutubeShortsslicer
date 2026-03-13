@@ -191,6 +191,10 @@ async function generateWithDeepSeek(
   const scriptSegments: ScriptSegment[] = [];
   const contentFilter = episode.show.contentFilter;
 
+  // Track cross-topic context for natural transitions
+  let topicIndex = 0;
+  let previousTopicSummary = "";
+
   for (const seg of episode.segments) {
     log(`Segment ${seg.order + 1}: ${seg.type} — ${seg.topicTitle || "untitled"}`);
 
@@ -215,8 +219,14 @@ async function generateWithDeepSeek(
           (seg.sourceUrls as string[]) || [],
           seg.sourceMode,
           seg.durationMin,
-          contentFilter
+          contentFilter,
+          topicIndex,
+          previousTopicSummary
         );
+        // Update cross-topic context for next topic
+        topicIndex++;
+        const lastFewLines = lines.slice(-4).map((l) => `${l.speaker}: ${l.text}`).join("\n");
+        previousTopicSummary = `Previous topic "${seg.topicTitle}" ended with:\n${lastFewLines}`;
         break;
 
       case "AD_BREAK":
@@ -328,7 +338,9 @@ async function generateTopicDialogue(
   sourceUrls: string[],
   sourceMode: string,
   durationMin: number,
-  contentFilter: string
+  contentFilter: string,
+  topicIndex: number = 0,
+  previousTopicSummary: string = ""
 ): Promise<DialogueLine[]> {
   const filterNote = contentFilter === "FAMILY_FRIENDLY"
     ? "Keep language completely clean."
@@ -375,7 +387,8 @@ async function generateTopicDialogue(
       // ═══════════════════════════════════════════════════════
 
       const contentPrompt = buildContentPrompt(
-        topicTitle, topicContent, sourceUrls, perspectives, beat, roundTargetWords, conversationSoFar
+        topicTitle, topicContent, sourceUrls, perspectives, beat, roundTargetWords, conversationSoFar,
+        topicIndex, previousTopicSummary
       );
 
       console.log(`[PODCAST] Pass 1 (Content): ${beat.name}...`);
@@ -447,7 +460,9 @@ function buildContentPrompt(
   perspectives: { id: string; name: string; role: string; angle: string }[],
   beat: { name: string; phase: string },
   targetWords: number,
-  conversationSoFar: string
+  conversationSoFar: string,
+  topicIndex: number = 0,
+  previousTopicSummary: string = ""
 ): { system: string; user: string } {
 
   const phaseInstructions: Record<string, string> = {
@@ -497,6 +512,14 @@ Generate closing arguments that reflect evolution from the debate.
     .map((p, i) => `PERSPECTIVE_${String.fromCharCode(65 + i)} (${p.angle}): Argue from a ${p.angle} viewpoint`)
     .join("\n");
 
+  const topicTransitionNote = topicIndex > 0 && previousTopicSummary
+    ? `\nIMPORTANT — TOPIC TRANSITION:\nThis is topic #${topicIndex + 1} in the SAME episode. The panelists have been talking already.
+Do NOT re-introduce the show or say "Welcome" or "Our topic tonight." Instead, transition organically.
+The host should naturally segue: "Alright, let's shift gears..." or "Now, the other thing I wanted to get into..." or "Before we wrap, there's another powder keg..."
+Reference lingering energy or emotions from the previous topic. Characters should carry their mood forward.
+${previousTopicSummary}\n`
+    : "";
+
   const previousContext = conversationSoFar
     ? `\nPREVIOUS CONVERSATION CONTENT (reference and build on this — do NOT repeat the same points):\n${conversationSoFar}\n`
     : "";
@@ -517,7 +540,7 @@ ${topicContent ? `CONTEXT: ${topicContent}` : ""}
 ${sourceBlock}
 
 ${phaseInstructions[beat.phase] || phaseInstructions.opening}
-${previousContext}
+${topicTransitionNote}${previousContext}
 
 SUBSTANCE REQUIREMENTS:
 - Every claim MUST include at least one SPECIFIC: a person's name, a date, a statistic, a policy name, a dollar amount, a treaty, a historical event with year
@@ -868,8 +891,10 @@ Emotions: "neutral", "excited", "amused", "serious", "sarcastic"`;
 
   try {
     const lines = await callLLMForDialogue(systemPrompt, `Write the outro for "${showName}".`);
-    if (lines.length > 0) return lines;
-    console.warn("[PODCAST] Outro returned empty — using fallback");
+    // Check that lines have actual text content, not just empty speaker fields
+    const validLines = lines.filter((l) => l.text && l.text.trim().length > 0);
+    if (validLines.length > 0) return validLines;
+    console.warn("[PODCAST] Outro returned empty/invalid text — using fallback");
   } catch (err: any) {
     console.error(`[PODCAST] Outro generation failed: ${err.message} — using fallback`);
   }
