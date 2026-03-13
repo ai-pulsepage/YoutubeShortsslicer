@@ -315,52 +315,142 @@ async function generateTopicDialogue(
     ? "Light profanity allowed but not excessive."
     : "No content restrictions. Raw, unfiltered language is fine. Characters can swear, be crass, use slang.";
 
-  // Target ~15 words per second of speech, ~150 words per minute
-  const targetWordCount = durationMin * 150;
-  const targetLines = Math.max(8, Math.round(durationMin * 5));
+  // Target ~150 words per minute of speech
+  const totalTargetWords = durationMin * 150;
 
   const characterBlock = characters
     .map((c) => `=== ${c.name} (${c.role}) ===\n${c.prompt}`)
     .join("\n\n");
 
-  const systemPrompt = `You are a podcast script writer. Write a HEATED, NATURAL debate segment between these characters.
+  // ─── Define natural conversation beats ─────────────────
+  // Each beat mirrors how real debates flow organically
+
+  const beats = [
+    {
+      name: "Opening Takes",
+      fraction: 0.2,
+      instruction: `ROUND 1 — OPENING TAKES
+Each character states their initial position on the topic. The host frames the question, then each guest gives their raw first take.
+- The host should pose the topic with attitude, not neutrally
+- Each guest opens with their strongest, most confident position
+- Early disagreement should be visible but not yet explosive
+- Characters should reference their worldview (political leaning, generational perspective)
+- This is laying groundwork — plant seeds that will explode later`,
+    },
+    {
+      name: "Challenge & Push Back",
+      fraction: 0.25,
+      instruction: `ROUND 2 — CHALLENGES & PUSH BACK
+Characters directly attack each other's opening positions. The gloves start coming off.
+- Characters should QUOTE what someone just said and tear it apart
+- Use specific counter-examples, data, or experience to challenge
+- The host should take sides here — they're not neutral
+- Characters should interrupt, cut each other off mid-thought
+- Include moments of "Wait, wait, wait — are you seriously saying..."
+- Cross-talk and overlapping reactions`,
+    },
+    {
+      name: "Personal Stories & Anecdotes",
+      fraction: 0.2,
+      instruction: `ROUND 3 — PERSONAL STORIES & ANECDOTES
+Characters get personal. They share stories from their own experience that support their position.
+- Characters should tell SHORT but vivid personal anecdotes: "I remember when..." "My uncle was a..." "I saw this firsthand when..."
+- Anecdotes should be tied to their GENERATIONAL CONTEXT and CORE BELIEFS
+- Other characters should react emotionally to the stories — agreement, disbelief, or "That's exactly the problem!"
+- This round humanizes the debate — it's not just abstract talking points anymore
+- The host might share their own experience that surprises the guests`,
+    },
+    {
+      name: "Escalation & Hot Buttons",
+      fraction: 0.2,
+      instruction: `ROUND 4 — ESCALATION & HOT BUTTONS
+Someone hits a nerve. The debate gets genuinely heated.
+- A character should accidentally or deliberately trigger another character's HOT BUTTON topic
+- Emotional intensity increases — raised voices, personal attacks, "You don't know what you're talking about!"
+- Characters abandon their polished arguments and speak from raw emotion
+- Someone says something that genuinely shocks the room
+- The host should try to control it but also be affected themselves
+- Include at least one moment of uncomfortable silence after a bomb drops`,
+    },
+    {
+      name: "Landing & Final Words",
+      fraction: 0.15,
+      instruction: `ROUND 5 — LANDING & FINAL WORDS
+The debate winds down. Not everyone agrees, but positions have shifted.
+- The host pulls things together with a closing observation
+- Each character gets one final word — their "hill to die on" take
+- Someone might concede a small point — "Look, you're not WRONG about that part, but..."
+- End with tension still in the air — NOT a neat resolution
+- The audience should feel like this debate could keep going
+- The host transitions out with something like "We could go all night on this, but..."`,
+    },
+  ];
+
+  // ─── Generate each round, feeding context forward ────────
+  const allLines: DialogueLine[] = [];
+  let conversationSoFar = "";
+
+  for (const beat of beats) {
+    const roundTargetWords = Math.round(totalTargetWords * beat.fraction);
+    const roundTargetLines = Math.max(6, Math.round(roundTargetWords / 25)); // ~25 words per line
+
+    const contextBlock = conversationSoFar
+      ? `\nCONVERSATION SO FAR (continue from here, do NOT repeat):\n${conversationSoFar}\n`
+      : "";
+
+    const systemPrompt = `You are writing part of a podcast debate segment. Write ONLY this round of the conversation.
 
 CHARACTERS:
 ${characterBlock}
 
-RULES:
-1. Characters MUST stay in their archetype. Bulldozers steamroll. Skeptics question. Mediators try to find common ground.
-2. Characters MUST argue from their worldview — political leaning, religious views, generational perspective.
-3. Characters MUST hit each other's hot buttons when the topic allows it.
-4. Include interruptions, talking over each other, emotional escalation, and moments of surprising agreement.
-5. This is NOT a polite panel discussion. This is a REAL argument between people with strong opinions.
-6. Include at least one moment where a character says something that genuinely surprises the others.
-7. Hosts should moderate but also have their own opinions — they're not neutral.
-8. Guests should push back against the host when they disagree.
+TOPIC: ${topicTitle}
+${topicContent ? `CONTEXT: ${topicContent}` : ""}
 
 CONTENT FILTER: ${filterNote}
 
-TARGET: ~${targetLines} lines, ~${targetWordCount} words total. Duration target: ${durationMin} minutes.
+${beat.instruction}
+${contextBlock}
 
-OUTPUT FORMAT — respond with ONLY a JSON array:
+TARGET: Write ~${roundTargetLines} dialogue lines (~${roundTargetWords} words). Each line should be a FULL thought — not one-word reactions. Average 20-35 words per line. If someone is telling a story, that line can be 40-60 words.
+
+CRITICAL RULES:
+1. Characters MUST stay in their archetype personality throughout
+2. Every line must have a real "speaker" name from the character list — NEVER "Unknown"
+3. Lines should be SUBSTANTIAL — full sentences, not "Yeah" or "Right" alone
+4. The conversation should flow NATURALLY — people react to what was JUST said
+5. Include natural speech patterns: false starts, self-corrections, trailing off...
+
+OUTPUT: JSON array ONLY:
 [
-  { "speaker": "CharacterName", "characterId": "charId", "text": "...", "emotion": "angry" },
-  { "speaker": "CharacterName", "characterId": "charId", "text": "...", "emotion": "sarcastic" }
+  { "speaker": "CharacterName", "characterId": "charId", "text": "...", "emotion": "angry" }
 ]
 
-Emotions: "neutral", "excited", "amused", "serious", "angry", "sarcastic", "concerned", "passionate", "dismissive", "shocked"
-Do NOT include stage directions or action descriptions. Only spoken dialogue.`;
+Emotions: "neutral", "excited", "amused", "serious", "angry", "sarcastic", "concerned", "passionate", "dismissive", "shocked"`;
 
-  let userPrompt = `TOPIC: ${topicTitle}\n`;
-  if (topicContent) {
-    userPrompt += `\nPREMISE/CONTEXT:\n${topicContent}\n`;
-  }
-  if (sourceUrls.length > 0) {
-    userPrompt += `\nSOURCE ARTICLES (summarize and reference during debate):\n${sourceUrls.map((u) => `- ${u}`).join("\n")}\n`;
-  }
-  userPrompt += `\nGenerate the debate segment now. Make it HEATED and REAL.`;
+    const userPrompt = sourceUrls.length > 0
+      ? `Generate ROUND: ${beat.name} for topic "${topicTitle}"\n\nSOURCE ARTICLES:\n${sourceUrls.map((u) => `- ${u}`).join("\n")}`
+      : `Generate ROUND: ${beat.name} for topic "${topicTitle}"`;
 
-  return callLLMForDialogue(systemPrompt, userPrompt);
+    try {
+      const roundLines = await callLLMForDialogue(systemPrompt, userPrompt);
+      allLines.push(...roundLines);
+
+      // Build context of what's been said for the next round
+      conversationSoFar += roundLines
+        .map((l) => `${l.speaker}: ${l.text}`)
+        .join("\n") + "\n";
+
+      console.log(`[PODCAST] Beat "${beat.name}": ${roundLines.length} lines, ~${roundLines.reduce((s, l) => s + (l.text?.split(/\s+/).length || 0), 0)} words`);
+    } catch (err: any) {
+      console.error(`[PODCAST] Beat "${beat.name}" failed: ${err.message}`);
+      // Continue with other beats — partial dialogue is better than none
+    }
+  }
+
+  const totalWords = allLines.reduce((s, l) => s + (l.text?.split(/\s+/).length || 0), 0);
+  console.log(`[PODCAST] Topic "${topicTitle}" complete: ${allLines.length} lines, ~${totalWords} words, ~${Math.round(totalWords / 150)} min estimated`);
+
+  return allLines;
 }
 
 async function generateAdBreak(
