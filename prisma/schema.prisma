@@ -663,6 +663,7 @@ model PodcastCharacter {
 
   // Voice
   voiceId           String?                           // ElevenLabs voice ID
+  voiceRefPath      String?                           // R2 path to Dia voice reference WAV (5-10s clip)
   speechRate        Float         @default(1.0)
 
   // Generation & Worldview

@@ -21,6 +21,7 @@ import {
   Pause,
   Image as ImageIcon,
   Sparkles,
+  Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -80,6 +81,7 @@ type Character = {
   archetype: string;
   generation: string;
   voiceId: string | null;
+  voiceRefPath: string | null;
   avatarUrl: string | null;
   avatarPrompt: string | null;
   imageModel: string;
@@ -537,6 +539,12 @@ function CharacterModal({
   const [playingPreview, setPlayingPreview] = useState<string | null>(null);
   const [audioRef, setAudioRef] = useState<HTMLAudioElement | null>(null);
 
+  // Dia voice ref state
+  const [voiceTab, setVoiceTab] = useState<"elevenlabs" | "dia">("elevenlabs");
+  const [voiceRefPath, setVoiceRefPath] = useState(editCharacter?.voiceRefPath || "");
+  const [uploadingVoiceRef, setUploadingVoiceRef] = useState(false);
+  const [voiceRefFile, setVoiceRefFile] = useState<File | null>(null);
+
   const [saving, setSaving] = useState(false);
   const [step, setStep] = useState(0); // 0: personality, 1: worldview, 2: voice
 
@@ -574,6 +582,7 @@ function CharacterModal({
       generation,
       imageModel,
       voiceId: voiceId || null,
+      voiceRefPath: voiceRefPath || null,
       politicalLeaning: politicalLeaning || null,
       religiousView: religiousView || null,
       coreBeliefs,
@@ -861,54 +870,196 @@ function CharacterModal({
 
           {step === 2 && (
             <>
-              {/* Voice Selection */}
-              <div>
-                <label className="text-xs text-gray-400 mb-2 block">ElevenLabs Voice</label>
-                {loadingVoices ? (
-                  <div className="flex items-center gap-2 py-8 justify-center text-gray-500">
-                    <Loader2 className="w-4 h-4 animate-spin" /> Loading voices...
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 gap-1.5 max-h-[400px] overflow-y-auto">
-                    {voices.map((v: any) => (
-                      <button
-                        key={v.voice_id || v.id}
-                        onClick={() => setVoiceId(v.voice_id || v.id)}
-                        className={cn(
-                          "flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left transition-colors",
-                          voiceId === (v.voice_id || v.id)
-                            ? "bg-violet-500/15 border-violet-500/30"
-                            : "bg-gray-800/50 border-gray-800 hover:border-gray-700"
-                        )}
-                      >
+              {/* Voice Engine Sub-tabs */}
+              <div className="flex items-center bg-gray-800 rounded-lg p-0.5 border border-gray-700 mb-4">
+                <button
+                  onClick={() => setVoiceTab("elevenlabs")}
+                  className={cn(
+                    "flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+                    voiceTab === "elevenlabs" ? "bg-violet-600 text-white" : "text-gray-500 hover:text-gray-300"
+                  )}
+                >
+                  ✨ ElevenLabs (Cloud)
+                </button>
+                <button
+                  onClick={() => setVoiceTab("dia")}
+                  className={cn(
+                    "flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+                    voiceTab === "dia" ? "bg-emerald-600 text-white" : "text-gray-500 hover:text-gray-300"
+                  )}
+                >
+                  🎙️ Dia (Self-Hosted)
+                </button>
+              </div>
+
+              {/* ElevenLabs Voice Tab */}
+              {voiceTab === "elevenlabs" && (
+                <div>
+                  <label className="text-xs text-gray-400 mb-2 block">ElevenLabs Voice</label>
+                  {loadingVoices ? (
+                    <div className="flex items-center gap-2 py-8 justify-center text-gray-500">
+                      <Loader2 className="w-4 h-4 animate-spin" /> Loading voices...
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-1.5 max-h-[400px] overflow-y-auto">
+                      {voices.map((v: any) => (
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            playPreview(v.voice_id || v.id, v.preview_url);
-                          }}
-                          className="p-1.5 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-400"
+                          key={v.voice_id || v.id}
+                          onClick={() => setVoiceId(v.voice_id || v.id)}
+                          className={cn(
+                            "flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left transition-colors",
+                            voiceId === (v.voice_id || v.id)
+                              ? "bg-violet-500/15 border-violet-500/30"
+                              : "bg-gray-800/50 border-gray-800 hover:border-gray-700"
+                          )}
                         >
-                          {playingPreview === (v.voice_id || v.id) ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              playPreview(v.voice_id || v.id, v.preview_url);
+                            }}
+                            className="p-1.5 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-400"
+                          >
+                            {playingPreview === (v.voice_id || v.id) ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                          </button>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-white truncate">{v.name}</p>
+                            <p className="text-[10px] text-gray-500 truncate">
+                              {v.labels?.accent || ""} {v.labels?.gender || ""} {v.labels?.age || ""}
+                            </p>
+                          </div>
+                          {voiceId === (v.voice_id || v.id) && (
+                            <Check className="w-4 h-4 text-violet-400 flex-shrink-0" />
+                          )}
                         </button>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-white truncate">{v.name}</p>
-                          <p className="text-[10px] text-gray-500 truncate">
-                            {v.labels?.accent || ""} {v.labels?.gender || ""} {v.labels?.age || ""}
-                          </p>
+                      ))}
+                      {voices.length === 0 && (
+                        <p className="text-sm text-gray-500 text-center py-8">
+                          No voices found. Add voices to your ElevenLabs account first.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Dia Voice Tab */}
+              {voiceTab === "dia" && (
+                <div>
+                  <label className="text-xs text-gray-400 mb-2 block">Dia Voice Reference (5-10 second clip)</label>
+
+                  {/* Current voice ref status */}
+                  {voiceRefPath ? (
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 mb-3">
+                      <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                        <Check className="w-4 h-4 text-emerald-400" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm text-emerald-400 font-medium">Voice reference uploaded</p>
+                        <p className="text-[10px] text-gray-500 truncate">{voiceRefPath}</p>
+                      </div>
+                      <button
+                        onClick={async () => {
+                          if (!isEdit || !editCharacter) return;
+                          await fetch(`/api/podcast/characters/voice-ref?characterId=${editCharacter.id}`, { method: "DELETE" });
+                          setVoiceRefPath("");
+                        }}
+                        className="text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded bg-red-500/10 hover:bg-red-500/20"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-lg border-2 border-dashed border-gray-700 text-center mb-3">
+                      <p className="text-sm text-gray-500">No voice reference uploaded yet</p>
+                      <p className="text-[10px] text-gray-600 mt-1">If no reference is set, a predefined voice will be used</p>
+                    </div>
+                  )}
+
+                  {/* Upload area */}
+                  <div className="space-y-3">
+                    <div
+                      className={cn(
+                        "p-6 rounded-lg border-2 border-dashed transition-colors cursor-pointer text-center",
+                        voiceRefFile
+                          ? "border-emerald-500/40 bg-emerald-500/5"
+                          : "border-gray-700 hover:border-gray-600"
+                      )}
+                      onClick={() => document.getElementById("voice-ref-input")?.click()}
+                    >
+                      <input
+                        id="voice-ref-input"
+                        type="file"
+                        accept=".wav,.mp3,audio/wav,audio/mpeg"
+                        className="hidden"
+                        onChange={(e) => setVoiceRefFile(e.target.files?.[0] || null)}
+                      />
+                      {voiceRefFile ? (
+                        <div>
+                          <p className="text-sm text-emerald-400 font-medium">{voiceRefFile.name}</p>
+                          <p className="text-[10px] text-gray-500 mt-1">{(voiceRefFile.size / 1024).toFixed(0)} KB — Click to change</p>
                         </div>
-                        {voiceId === (v.voice_id || v.id) && (
-                          <Check className="w-4 h-4 text-violet-400 flex-shrink-0" />
+                      ) : (
+                        <div>
+                          <Upload className="w-6 h-6 mx-auto text-gray-600 mb-2" />
+                          <p className="text-sm text-gray-400">Click to select a WAV or MP3 file</p>
+                          <p className="text-[10px] text-gray-600 mt-1">5-10 seconds of clean speech, max 10MB</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {voiceRefFile && isEdit && editCharacter && (
+                      <button
+                        onClick={async () => {
+                          setUploadingVoiceRef(true);
+                          try {
+                            const formData = new FormData();
+                            formData.append("characterId", editCharacter.id);
+                            formData.append("file", voiceRefFile);
+                            const res = await fetch("/api/podcast/characters/voice-ref", {
+                              method: "POST",
+                              body: formData,
+                            });
+                            const data = await res.json();
+                            if (res.ok) {
+                              setVoiceRefPath(data.r2Key);
+                              setVoiceRefFile(null);
+                            } else {
+                              alert(`Upload failed: ${data.error}`);
+                            }
+                          } catch (err: any) {
+                            alert(`Upload error: ${err.message}`);
+                          }
+                          setUploadingVoiceRef(false);
+                        }}
+                        disabled={uploadingVoiceRef}
+                        className="w-full px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-medium flex items-center justify-center gap-2"
+                      >
+                        {uploadingVoiceRef ? (
+                          <><Loader2 className="w-4 h-4 animate-spin" /> Uploading to R2...</>
+                        ) : (
+                          <><Upload className="w-4 h-4" /> Upload Voice Reference</>
                         )}
                       </button>
-                    ))}
-                    {voices.length === 0 && (
-                      <p className="text-sm text-gray-500 text-center py-8">
-                        No voices found. Add voices to your ElevenLabs account first.
+                    )}
+
+                    {voiceRefFile && !isEdit && (
+                      <p className="text-xs text-amber-400 bg-amber-500/10 rounded-lg p-2 text-center">
+                        💡 Save the character first, then edit to upload voice reference
                       </p>
                     )}
                   </div>
-                )}
-              </div>
+
+                  {/* Info */}
+                  <div className="mt-4 p-3 rounded-lg bg-gray-800/50 border border-gray-800">
+                    <p className="text-[10px] text-gray-500 leading-relaxed">
+                      <strong className="text-gray-400">Dia Voice Cloning:</strong> Upload a 5-10 second clip of clear speech.
+                      The voice reference is stored permanently in R2 and auto-syncs to the Dia server when generating.
+                      No need to re-upload when restarting RunPod.
+                    </p>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>

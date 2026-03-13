@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generateVoiceover, diaHealthCheck } from "@/lib/tts";
 import type { TtsEngine } from "@/lib/tts";
+import { syncVoiceRefFromR2 } from "@/lib/tts/dia";
 import { uploadBufferToR2 as uploadBuffer, getR2PublicUrl } from "@/lib/storage";
 
 /**
@@ -51,11 +52,12 @@ export async function POST(req: NextRequest) {
 
   // Build character voice maps
   const voiceMap: Record<string, string> = {};       // ElevenLabs voiceId map
-  const diaVoiceMap: Record<string, string> = {};    // Dia voice reference map
+  const diaVoiceMap: Record<string, string> = {};    // Dia voice reference filename map
+  const voiceRefR2Map: Record<string, string> = {};  // Character name → R2 voiceRefPath (for R2→Dia sync)
   const hostParticipant = episode.participants.find((p: any) => p.character.role === "HOST") || episode.participants[0];
   const hostVoiceId = hostParticipant?.character?.voiceId || "";
 
-  // Default Dia predefined voices for characters without explicit refs
+  // Default Dia predefined voices for characters without voice refs in R2
   const defaultDiaVoices = [
     "voice_01.wav", "voice_02.wav", "voice_03.wav", "voice_04.wav",
     "voice_05.wav", "voice_06.wav", "voice_07.wav", "voice_08.wav",
@@ -65,8 +67,16 @@ export async function POST(req: NextRequest) {
     const p = episode.participants[pi] as any;
     const name = p.character.name;
     voiceMap[name] = p.character.voiceId || hostVoiceId;
-    // Dia voice: use character's diaVoiceRef if set, otherwise assign a default predefined voice
-    diaVoiceMap[name] = p.character.diaVoiceRef || defaultDiaVoices[pi % defaultDiaVoices.length];
+
+    // Dia voice: use voiceRefPath from R2 if available, otherwise predefined
+    if (p.character.voiceRefPath) {
+      // R2-stored voice ref — extract filename from path (e.g., "podcast-voices/abc123/reference.wav" → "ref-abc123.wav")
+      const refFilename = `ref-${p.character.id}.wav`;
+      diaVoiceMap[name] = refFilename;
+      voiceRefR2Map[name] = p.character.voiceRefPath;
+    } else {
+      diaVoiceMap[name] = defaultDiaVoices[pi % defaultDiaVoices.length];
+    }
   }
   if (hostVoiceId) {
     voiceMap["Unknown"] = hostVoiceId;
@@ -125,7 +135,7 @@ export async function POST(req: NextRequest) {
   console.log(`[Podcast Audio] Generating ${allLines.length} voice clips for "${episode.title}" via ${engine}`);
 
   // ─── Fire-and-forget: generate in background ────────────
-  generateAudioInBackground(episodeId, script, allLines, voiceMap, diaVoiceMap, hostVoiceId, engine).catch(async (err) => {
+  generateAudioInBackground(episodeId, script, allLines, voiceMap, diaVoiceMap, voiceRefR2Map, hostVoiceId, engine).catch(async (err) => {
     console.error(`[Podcast Audio] Fatal background error: ${err.message}`);
     try {
       await prisma.podcastEpisode.update({
@@ -156,6 +166,7 @@ async function generateAudioInBackground(
   allLines: { speaker: string; text: string; segIdx: number; lineIdx: number }[],
   voiceMap: Record<string, string>,
   diaVoiceMap: Record<string, string>,
+  voiceRefR2Map: Record<string, string>,
   hostVoiceId: string,
   engine: TtsEngine,
 ) {
@@ -164,6 +175,20 @@ async function generateAudioInBackground(
   let failCount = 0;
   const audioFormat = engine === "dia" ? "wav" : "mp3";
   const mimeType = engine === "dia" ? "audio/wav" : "audio/mpeg";
+
+  // Sync R2 voice refs to Dia server before generating
+  if (engine === "dia" && Object.keys(voiceRefR2Map).length > 0) {
+    console.log(`[Podcast Audio] Syncing ${Object.keys(voiceRefR2Map).length} voice refs from R2 to Dia server...`);
+    for (const [charName, r2Key] of Object.entries(voiceRefR2Map)) {
+      try {
+        const filename = diaVoiceMap[charName];
+        await syncVoiceRefFromR2(r2Key, filename);
+        console.log(`[Podcast Audio]   ✓ Synced voice for ${charName}: ${filename}`);
+      } catch (err: any) {
+        console.warn(`[Podcast Audio]   ✗ Failed to sync voice for ${charName}: ${err.message} — will use predefined fallback`);
+      }
+    }
+  }
 
   for (let i = 0; i < allLines.length; i++) {
     const line = allLines[i];
@@ -180,7 +205,7 @@ async function generateAudioInBackground(
         voiceId,
         narratorStyle: "conversational",
         diaVoiceRef: engine === "dia" ? diaVoiceRef : undefined,
-        diaVoiceMode: engine === "dia" ? "predefined" : undefined,
+        diaVoiceMode: engine === "dia" ? (voiceRefR2Map[line.speaker] ? "clone" : "predefined") : undefined,
       });
 
       // Upload to R2
