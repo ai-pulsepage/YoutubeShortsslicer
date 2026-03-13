@@ -11,6 +11,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const { episodeId, provider } = await req.json();
+    console.log(`[PODCAST SCRIPT] Received request: episodeId=${episodeId}, provider=${provider}`);
     if (!episodeId) {
       return NextResponse.json({ error: "episodeId required" }, { status: 400 });
     }

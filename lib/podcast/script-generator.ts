@@ -102,6 +102,7 @@ export async function generateEpisodeScript(
   }));
 
   // 4. Route based on UI toggle
+  log(`Provider received: "${provider}" | REDIS_URL set: ${!!process.env.REDIS_URL}`);
   const useRunPod = provider === "mistral" && process.env.REDIS_URL;
 
   if (useRunPod) {
