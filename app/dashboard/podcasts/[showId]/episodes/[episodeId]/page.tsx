@@ -640,6 +640,12 @@ function AudioStepPanel({
   const [audioResult, setAudioResult] = useState<any>(null);
   const [playingIdx, setPlayingIdx] = useState<number | null>(null);
   const [audioRef, setAudioRef] = useState<HTMLAudioElement | null>(null);
+  const [audioEngine, setAudioEngine] = useState<"elevenlabs" | "dia">(() => {
+    if (typeof window !== "undefined") {
+      return (localStorage.getItem("podcast-audio-engine") as "elevenlabs" | "dia") || "elevenlabs";
+    }
+    return "elevenlabs";
+  });
 
   // Check if audio clips already exist in scriptData
   const existingClips = scriptData?.audioClips || [];
@@ -684,7 +690,7 @@ function AudioStepPanel({
       const res = await fetch("/api/podcast/audio/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ episodeId: episode.id }),
+        body: JSON.stringify({ episodeId: episode.id, engine: audioEngine }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -733,7 +739,30 @@ function AudioStepPanel({
             </span>
           )}
         </h2>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          {/* Engine toggle */}
+          {!generatingAudio && (
+            <div className="flex items-center bg-gray-800 rounded-lg p-0.5 border border-gray-700">
+              <button
+                onClick={() => { setAudioEngine("elevenlabs"); localStorage.setItem("podcast-audio-engine", "elevenlabs"); }}
+                className={cn(
+                  "px-3 py-1 rounded-md text-[10px] font-medium transition-all",
+                  audioEngine === "elevenlabs" ? "bg-violet-600 text-white" : "text-gray-500 hover:text-gray-300"
+                )}
+              >
+                ElevenLabs
+              </button>
+              <button
+                onClick={() => { setAudioEngine("dia"); localStorage.setItem("podcast-audio-engine", "dia"); }}
+                className={cn(
+                  "px-3 py-1 rounded-md text-[10px] font-medium transition-all",
+                  audioEngine === "dia" ? "bg-emerald-600 text-white" : "text-gray-500 hover:text-gray-300"
+                )}
+              >
+                Dia (Self-Hosted)
+              </button>
+            </div>
+          )}
           {!hasAudio && scriptData && (
             <button
               onClick={generateAudio}

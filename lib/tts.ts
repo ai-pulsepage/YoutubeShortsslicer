@@ -22,8 +22,13 @@ import {
     generateSpeech as xttsGenerate,
     listVoices as xttsListVoices,
 } from "./tts/xtts";
+import {
+    generateSpeech as diaGenerate,
+    listVoices as diaListVoices,
+    healthCheck as diaHealthCheck,
+} from "./tts/dia";
 
-export type TtsEngine = "elevenlabs" | "xtts";
+export type TtsEngine = "elevenlabs" | "xtts" | "dia";
 export type { NarratorStyle } from "./tts/narrator-style";
 
 export interface VoiceoverOptions {
@@ -33,6 +38,9 @@ export interface VoiceoverOptions {
     speed?: number;
     narratorStyle?: NarratorStyle;
     speakerWav?: string; // XTTS voice clone sample (R2 URL)
+    diaVoiceRef?: string; // Dia predefined voice filename or clone reference
+    diaVoiceMode?: "single_s1" | "single_s2" | "dialogue" | "clone" | "predefined";
+    diaSeed?: number; // Fixed seed for Dia voice consistency
 }
 
 export interface VoiceInfo {
@@ -57,6 +65,9 @@ export async function generateVoiceover(options: VoiceoverOptions): Promise<Buff
         speed,
         narratorStyle = "documentary",
         speakerWav,
+        diaVoiceRef,
+        diaVoiceMode,
+        diaSeed,
     } = options;
 
     const styleConfig = getStyleConfig(narratorStyle);
@@ -98,6 +109,17 @@ export async function generateVoiceover(options: VoiceoverOptions): Promise<Buff
             });
         }
 
+        case "dia": {
+            // Dia — self-hosted on RunPod, supports predefined voices and cloning
+            return diaGenerate({
+                text,
+                voiceRef: diaVoiceRef || voiceId, // Use diaVoiceRef if set, fall back to voiceId
+                voiceMode: diaVoiceMode || (diaVoiceRef ? "predefined" : "single_s1"),
+                speed: effectiveSpeed,
+                seed: diaSeed,
+            });
+        }
+
         default:
             throw new Error(`Unknown TTS engine: ${engine}`);
     }
@@ -130,6 +152,16 @@ export async function listAvailableVoices(engine: TtsEngine): Promise<VoiceInfo[
             }));
         }
 
+        case "dia": {
+            const voices = await diaListVoices();
+            return voices.map((v) => ({
+                id: v.id,
+                name: v.name,
+                description: v.description,
+                engine: "dia" as TtsEngine,
+            }));
+        }
+
         default:
             return [];
     }
@@ -142,5 +174,10 @@ export function estimateVoiceoverCost(text: string, engine: TtsEngine): number {
     if (engine === "elevenlabs") {
         return (text.length / 1000) * 0.30; // ~$0.30/1K chars
     }
-    return 0; // XTTS is self-hosted
+    return 0; // XTTS and Dia are self-hosted
 }
+
+/**
+ * Check if Dia TTS is available.
+ */
+export { diaHealthCheck };

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { generateVoiceover } from "@/lib/tts";
+import { generateVoiceover, diaHealthCheck } from "@/lib/tts";
+import type { TtsEngine } from "@/lib/tts";
 import { uploadBufferToR2 as uploadBuffer, getR2PublicUrl } from "@/lib/storage";
 
 /**
@@ -20,10 +21,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { episodeId } = await req.json();
+  const { episodeId, engine: requestedEngine } = await req.json();
   if (!episodeId) {
     return NextResponse.json({ error: "episodeId required" }, { status: 400 });
   }
+
+  const engine: TtsEngine = requestedEngine === "dia" ? "dia" : "elevenlabs";
 
   // Load episode with script, participants, and show
   const episode = await prisma.podcastEpisode.findUnique({
@@ -46,26 +49,47 @@ export async function POST(req: NextRequest) {
     ? JSON.parse(episode.scriptJson)
     : episode.scriptJson;
 
-  // Build character voiceId map — use host's voice as fallback for Unknown speakers
-  const voiceMap: Record<string, string> = {};
+  // Build character voice maps
+  const voiceMap: Record<string, string> = {};       // ElevenLabs voiceId map
+  const diaVoiceMap: Record<string, string> = {};    // Dia voice reference map
   const hostParticipant = episode.participants.find((p: any) => p.character.role === "HOST") || episode.participants[0];
   const hostVoiceId = hostParticipant?.character?.voiceId || "";
-  for (const p of episode.participants) {
+
+  // Default Dia predefined voices for characters without explicit refs
+  const defaultDiaVoices = [
+    "voice_01.wav", "voice_02.wav", "voice_03.wav", "voice_04.wav",
+    "voice_05.wav", "voice_06.wav", "voice_07.wav", "voice_08.wav",
+  ];
+
+  for (let pi = 0; pi < episode.participants.length; pi++) {
+    const p = episode.participants[pi] as any;
     const name = p.character.name;
     voiceMap[name] = p.character.voiceId || hostVoiceId;
+    // Dia voice: use character's diaVoiceRef if set, otherwise assign a default predefined voice
+    diaVoiceMap[name] = p.character.diaVoiceRef || defaultDiaVoices[pi % defaultDiaVoices.length];
   }
   if (hostVoiceId) {
     voiceMap["Unknown"] = hostVoiceId;
   }
+  diaVoiceMap["Unknown"] = diaVoiceMap[hostParticipant?.character?.name] || defaultDiaVoices[0];
 
-  // Validate voices before starting
-  const missingVoices = episode.participants.filter((p: any) => !p.character.voiceId);
-  if (missingVoices.length > 0) {
-    const names = missingVoices.map((p: any) => p.character.name).join(", ");
-    console.warn(`[Podcast Audio] Characters without voices (will use host fallback): ${names}`);
-  }
-  if (!hostVoiceId) {
-    return NextResponse.json({ error: "No voice IDs assigned to any characters. Assign ElevenLabs voices first." }, { status: 400 });
+  // Validate voices based on engine
+  if (engine === "elevenlabs") {
+    const missingVoices = episode.participants.filter((p: any) => !p.character.voiceId);
+    if (missingVoices.length > 0) {
+      const names = missingVoices.map((p: any) => p.character.name).join(", ");
+      console.warn(`[Podcast Audio] Characters without voices (will use host fallback): ${names}`);
+    }
+    if (!hostVoiceId) {
+      return NextResponse.json({ error: "No voice IDs assigned to any characters. Assign ElevenLabs voices first." }, { status: 400 });
+    }
+  } else if (engine === "dia") {
+    // Check Dia server is reachable
+    const health = await diaHealthCheck();
+    if (!health.healthy) {
+      return NextResponse.json({ error: `Dia TTS Server not available: ${health.message}` }, { status: 503 });
+    }
+    console.log(`[Podcast Audio] Dia TTS Server healthy — using Dia engine`);
   }
 
   // Update status to RECORDING
@@ -98,10 +122,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No dialogue lines found in script" }, { status: 400 });
   }
 
-  console.log(`[Podcast Audio] Generating ${allLines.length} voice clips for "${episode.title}"`);
+  console.log(`[Podcast Audio] Generating ${allLines.length} voice clips for "${episode.title}" via ${engine}`);
 
   // ─── Fire-and-forget: generate in background ────────────
-  generateAudioInBackground(episodeId, script, allLines, voiceMap, hostVoiceId).catch(async (err) => {
+  generateAudioInBackground(episodeId, script, allLines, voiceMap, diaVoiceMap, hostVoiceId, engine).catch(async (err) => {
     console.error(`[Podcast Audio] Fatal background error: ${err.message}`);
     try {
       await prisma.podcastEpisode.update({
@@ -116,8 +140,9 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     success: true,
     dispatched: true,
+    engine,
     totalLines: allLines.length,
-    message: `Audio generation started for ${allLines.length} dialogue lines`,
+    message: `Audio generation started for ${allLines.length} dialogue lines via ${engine}`,
   });
 }
 
@@ -130,29 +155,37 @@ async function generateAudioInBackground(
   script: any,
   allLines: { speaker: string; text: string; segIdx: number; lineIdx: number }[],
   voiceMap: Record<string, string>,
+  diaVoiceMap: Record<string, string>,
   hostVoiceId: string,
+  engine: TtsEngine,
 ) {
   const audioClips: { speaker: string; text: string; url: string; durationEstimate: number }[] = [];
   let successCount = 0;
   let failCount = 0;
+  const audioFormat = engine === "dia" ? "wav" : "mp3";
+  const mimeType = engine === "dia" ? "audio/wav" : "audio/mpeg";
 
   for (let i = 0; i < allLines.length; i++) {
     const line = allLines[i];
     const voiceId = voiceMap[line.speaker] || hostVoiceId;
+    const diaVoiceRef = diaVoiceMap[line.speaker] || "voice_01.wav";
 
-    console.log(`[Podcast Audio]   ${i + 1}/${allLines.length}: ${line.speaker} (voice: ${voiceId.substring(0, 8)}...)`);
+    const logVoice = engine === "dia" ? diaVoiceRef : `${voiceId.substring(0, 8)}...`;
+    console.log(`[Podcast Audio]   ${i + 1}/${allLines.length}: ${line.speaker} (${engine}: ${logVoice})`);
 
     try {
       const audioBuffer = await generateVoiceover({
         text: line.text,
-        engine: "elevenlabs",
+        engine,
         voiceId,
         narratorStyle: "conversational",
+        diaVoiceRef: engine === "dia" ? diaVoiceRef : undefined,
+        diaVoiceMode: engine === "dia" ? "predefined" : undefined,
       });
 
       // Upload to R2
-      const key = `podcast-audio/${episodeId}/line-${String(i).padStart(4, "0")}.mp3`;
-      await uploadBuffer(audioBuffer, key, "audio/mpeg");
+      const key = `podcast-audio/${episodeId}/line-${String(i).padStart(4, "0")}.${audioFormat}`;
+      await uploadBuffer(audioBuffer, key, mimeType);
 
       // Convert R2 key to public URL
       const publicUrl = getR2PublicUrl(key);
