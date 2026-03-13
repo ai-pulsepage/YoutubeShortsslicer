@@ -636,14 +636,33 @@ function AudioStepPanel({
   scriptData: any;
   onRefresh: () => void;
 }) {
-  const [generatingAudio, setGeneratingAudio] = useState(false);
+  const [generatingAudio, setGeneratingAudio] = useState(episode.status === "RECORDING");
   const [audioResult, setAudioResult] = useState<any>(null);
   const [playingIdx, setPlayingIdx] = useState<number | null>(null);
   const [audioRef, setAudioRef] = useState<HTMLAudioElement | null>(null);
 
   // Check if audio clips already exist in scriptData
   const existingClips = scriptData?.audioClips || [];
-  const hasAudio = existingClips.length > 0;
+  const hasAudio = existingClips.filter((c: any) => c.url).length > 0;
+  const audioProgress = scriptData?.audioProgress || null;
+  const audioStats = scriptData?.audioStats || null;
+
+  // Poll while RECORDING status — audio generating in background
+  useEffect(() => {
+    if (episode.status !== "RECORDING") {
+      if (generatingAudio && episode.status !== "RECORDING") {
+        setGeneratingAudio(false);
+      }
+      return;
+    }
+
+    setGeneratingAudio(true);
+    const interval = setInterval(() => {
+      onRefresh(); // Refresh episode + script data
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [episode.status, onRefresh, generatingAudio]);
 
   // Count dialogue lines
   const lineCount = scriptData?.segments?.reduce((sum: number, seg: any) =>
@@ -669,15 +688,22 @@ function AudioStepPanel({
       });
       const data = await res.json();
       if (res.ok) {
-        setAudioResult(data);
-        onRefresh();
+        if (data.dispatched) {
+          // Fire-and-forget — polling will detect completion
+          onRefresh();
+        } else {
+          setAudioResult(data);
+          onRefresh();
+          setGeneratingAudio(false);
+        }
       } else {
         alert(`Audio generation failed: ${data.error}`);
+        setGeneratingAudio(false);
       }
     } catch (err: any) {
       alert(`Audio generation error: ${err.message}`);
+      setGeneratingAudio(false);
     }
-    setGeneratingAudio(false);
   };
 
   const playClip = (url: string, idx: number) => {
@@ -785,8 +811,17 @@ function AudioStepPanel({
           <div className="text-center py-8">
             <Loader2 className="w-8 h-8 animate-spin text-violet-400 mx-auto mb-3" />
             <p className="text-sm text-gray-400">Generating voice audio...</p>
-            <p className="text-xs text-gray-600 mt-1">
-              {lineCount} lines × ElevenLabs TTS — this may take a few minutes.
+            {audioProgress && audioProgress !== "complete" ? (
+              <p className="text-xs text-violet-400 mt-1">
+                Progress: {audioProgress} clips processed
+              </p>
+            ) : (
+              <p className="text-xs text-gray-600 mt-1">
+                {lineCount} lines × ElevenLabs TTS — this may take 10-15 minutes.
+              </p>
+            )}
+            <p className="text-[10px] text-gray-600 mt-2">
+              Auto-refreshing every 10s. Progress is saved incrementally — nothing will be lost.
             </p>
           </div>
         )}
