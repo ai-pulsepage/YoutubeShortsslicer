@@ -202,18 +202,31 @@ export async function generateSpeechSimple(
  * These are WAV files in the server's ./voices/ directory.
  */
 export async function listVoices(): Promise<DiaVoice[]> {
-    // Dia-TTS-Server comes with 43 predefined voices
-    // We return a curated selection suitable for podcast characters
-    // The actual voice files are on the RunPod pod in /app/voices/
+    // Dia-TTS-Server comes with 43+ predefined voices
+    // These are actual voice files in the server's ./voices/ directory
     return [
-        { id: "dia_voice_01", name: "Male - Deep Authority", description: "Deep, authoritative male voice — good for hosts/moderators", filename: "voice_01.wav" },
-        { id: "dia_voice_02", name: "Male - Casual Young", description: "Casual younger male voice — good for informal guests", filename: "voice_02.wav" },
-        { id: "dia_voice_03", name: "Male - Warm Midwest", description: "Warm, measured midwestern tone", filename: "voice_03.wav" },
-        { id: "dia_voice_04", name: "Female - Professional", description: "Clear, professional female voice", filename: "voice_04.wav" },
-        { id: "dia_voice_05", name: "Female - Energetic", description: "Energetic, upbeat female voice", filename: "voice_05.wav" },
-        { id: "dia_voice_06", name: "Male - Gravel Veteran", description: "Gravelly veteran voice — great for opinionated characters", filename: "voice_06.wav" },
-        { id: "dia_voice_07", name: "Male - Academic", description: "Precise, intellectual male voice — good for expert characters", filename: "voice_07.wav" },
-        { id: "dia_voice_08", name: "Female - Southern Warmth", description: "Warm southern accent", filename: "voice_08.wav" },
+        { id: "dia_adrian", name: "Adrian", description: "Male — clear and confident", filename: "Adrian.wav" },
+        { id: "dia_eli", name: "Eli", description: "Male — warm and measured", filename: "Eli.wav" },
+        { id: "dia_michael", name: "Michael", description: "Male — deep and authoritative", filename: "Michael.wav" },
+        { id: "dia_alexander", name: "Alexander", description: "Male — polished and articulate", filename: "Alexander.wav" },
+        { id: "dia_connor", name: "Connor", description: "Male — casual and energetic", filename: "Connor.wav" },
+        { id: "dia_gabriel", name: "Gabriel", description: "Male — smooth and engaging", filename: "Gabriel.wav" },
+        { id: "dia_henry", name: "Henry", description: "Male — distinguished and mature", filename: "Henry.wav" },
+        { id: "dia_julian", name: "Julian", description: "Male — thoughtful and precise", filename: "Julian.wav" },
+        { id: "dia_everett", name: "Everett", description: "Male — low-key and relaxed", filename: "Everett.wav" },
+        { id: "dia_austin", name: "Austin", description: "Male — friendly and upbeat", filename: "Austin.wav" },
+        { id: "dia_axel", name: "Axel", description: "Male — edgy and bold", filename: "Axel.wav" },
+        { id: "dia_miles", name: "Miles", description: "Male — natural and relatable", filename: "Miles.wav" },
+        { id: "dia_alice", name: "Alice", description: "Female — bright and clear", filename: "Alice.wav" },
+        { id: "dia_emily", name: "Emily", description: "Female — warm and expressive", filename: "Emily.wav" },
+        { id: "dia_elena", name: "Elena", description: "Female — smooth and sophisticated", filename: "Elena.wav" },
+        { id: "dia_cora", name: "Cora", description: "Female — calm and assured", filename: "Cora.wav" },
+        { id: "dia_olivia", name: "Olivia", description: "Female — lively and dynamic", filename: "Olivia.wav" },
+        { id: "dia_gianna", name: "Gianna", description: "Female — rich and melodic", filename: "Gianna.wav" },
+        { id: "dia_jade", name: "Jade", description: "Female — crisp and professional", filename: "Jade.wav" },
+        { id: "dia_layla", name: "Layla", description: "Female — gentle and soothing", filename: "Layla.wav" },
+        { id: "dia_taylor", name: "Taylor", description: "Female — modern and natural", filename: "Taylor.wav" },
+        { id: "dia_abigail", name: "Abigail", description: "Female — poised and clear", filename: "Abigail.wav" },
     ];
     // Note: Once the RunPod pod is running, you can see all 43 voices
     // at http://<pod-url>/docs (Swagger UI) or the web UI

@@ -6,6 +6,12 @@ import type { TtsEngine } from "@/lib/tts";
 import { syncVoiceRefFromR2 } from "@/lib/tts/dia";
 import { uploadBufferToR2 as uploadBuffer, getR2PublicUrl } from "@/lib/storage";
 
+// Dia predefined voices — actual names from the Dia-TTS-Server voice library
+const DEFAULT_DIA_VOICES = [
+  "Adrian.wav", "Eli.wav", "Michael.wav", "Alexander.wav",
+  "Connor.wav", "Gabriel.wav", "Henry.wav", "Julian.wav",
+];
+
 /**
  * POST /api/podcast/audio/generate
  *
@@ -57,11 +63,8 @@ export async function POST(req: NextRequest) {
   const hostParticipant = episode.participants.find((p: any) => p.character.role === "HOST") || episode.participants[0];
   const hostVoiceId = hostParticipant?.character?.voiceId || "";
 
-  // Default Dia predefined voices for characters without voice refs in R2
-  const defaultDiaVoices = [
-    "voice_01.wav", "voice_02.wav", "voice_03.wav", "voice_04.wav",
-    "voice_05.wav", "voice_06.wav", "voice_07.wav", "voice_08.wav",
-  ];
+  // Default Dia predefined voices — actual names from the Dia-TTS-Server voice library
+  const defaultDiaVoices = DEFAULT_DIA_VOICES;
 
   for (let pi = 0; pi < episode.participants.length; pi++) {
     const p = episode.participants[pi] as any;
@@ -177,6 +180,7 @@ async function generateAudioInBackground(
   const mimeType = engine === "dia" ? "audio/wav" : "audio/mpeg";
 
   // Sync R2 voice refs to Dia server before generating
+  const syncFailedSet = new Set<string>(); // Track which characters failed sync
   if (engine === "dia" && Object.keys(voiceRefR2Map).length > 0) {
     console.log(`[Podcast Audio] Syncing ${Object.keys(voiceRefR2Map).length} voice refs from R2 to Dia server...`);
     for (const [charName, r2Key] of Object.entries(voiceRefR2Map)) {
@@ -186,6 +190,7 @@ async function generateAudioInBackground(
         console.log(`[Podcast Audio]   ✓ Synced voice for ${charName}: ${filename}`);
       } catch (err: any) {
         console.warn(`[Podcast Audio]   ✗ Failed to sync voice for ${charName}: ${err.message} — will use predefined fallback`);
+        syncFailedSet.add(charName);
       }
     }
   }
@@ -193,7 +198,11 @@ async function generateAudioInBackground(
   for (let i = 0; i < allLines.length; i++) {
     const line = allLines[i];
     const voiceId = voiceMap[line.speaker] || hostVoiceId;
-    const diaVoiceRef = diaVoiceMap[line.speaker] || "voice_01.wav";
+    // If sync failed for this speaker, fall back to predefined voice
+    const usePredefined = syncFailedSet.has(line.speaker) || !voiceRefR2Map[line.speaker];
+    const diaVoiceRef = usePredefined
+      ? (DEFAULT_DIA_VOICES[Object.keys(voiceMap).indexOf(line.speaker) % DEFAULT_DIA_VOICES.length] || "Adrian.wav")
+      : (diaVoiceMap[line.speaker] || "Adrian.wav");
 
     const logVoice = engine === "dia" ? diaVoiceRef : `${voiceId.substring(0, 8)}...`;
     console.log(`[Podcast Audio]   ${i + 1}/${allLines.length}: ${line.speaker} (${engine}: ${logVoice})`);
@@ -205,7 +214,7 @@ async function generateAudioInBackground(
         voiceId,
         narratorStyle: "conversational",
         diaVoiceRef: engine === "dia" ? diaVoiceRef : undefined,
-        diaVoiceMode: engine === "dia" ? (voiceRefR2Map[line.speaker] ? "clone" : "predefined") : undefined,
+        diaVoiceMode: engine === "dia" ? (usePredefined ? "predefined" : "clone") : undefined,
       });
 
       // Upload to R2
