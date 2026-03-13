@@ -126,7 +126,17 @@ export default function ShowDetailPage() {
   const [sponsors, setSponsors] = useState<Sponsor[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"episodes" | "settings">("episodes");
-  const [llmProvider, setLlmProvider] = useState<"mistral" | "deepseek">("mistral");
+  const [llmProvider, setLlmProvider] = useState<"mistral" | "deepseek">(() => {
+    if (typeof window !== "undefined") {
+      return (localStorage.getItem("podcast_llm_provider") as any) || "mistral";
+    }
+    return "mistral";
+  });
+
+  // Sync provider toggle to localStorage
+  useEffect(() => {
+    localStorage.setItem("podcast_llm_provider", llmProvider);
+  }, [llmProvider]);
   const [episodeModal, setEpisodeModal] = useState<{
     open: boolean;
     editEpisode?: Episode;
