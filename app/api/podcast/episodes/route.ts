@@ -155,7 +155,7 @@ export async function PUT(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { title, durationMin, status } = body;
+  const { title, durationMin, status, clearScript } = body;
 
   const updated = await prisma.podcastEpisode.update({
     where: { id },
@@ -163,6 +163,7 @@ export async function PUT(req: NextRequest) {
       ...(title !== undefined && { title }),
       ...(durationMin !== undefined && { durationMin }),
       ...(status !== undefined && { status }),
+      ...(clearScript && { scriptJson: null as any }),
     },
     include: {
       segments: { orderBy: { order: "asc" } },

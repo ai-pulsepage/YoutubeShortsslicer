@@ -188,10 +188,11 @@ export default function EpisodeDetailPage() {
       const res = await fetch(`/api/podcast/episodes?id=${episodeId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "DRAFT" }),
+        body: JSON.stringify({ status: "DRAFT", clearScript: true }),
       });
       if (res.ok) {
         setScriptData(null);
+        hasInitialized.current = false; // Allow step to reset to script
         await fetchEpisode();
       }
     } catch (err) {
@@ -288,7 +289,8 @@ export default function EpisodeDetailPage() {
         {episode.status !== "DRAFT" && (
           <button
             onClick={resetToDraft}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700 border border-gray-700 transition-colors"
+            disabled={generating}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-red-500/10 text-red-400 hover:text-red-300 hover:bg-red-500/20 border border-red-500/20 transition-colors disabled:opacity-30"
           >
             <RotateCcw className="w-3 h-3" />
             Reset to Draft
