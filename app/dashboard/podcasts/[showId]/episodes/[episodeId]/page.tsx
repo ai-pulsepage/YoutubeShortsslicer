@@ -126,6 +126,21 @@ export default function EpisodeDetailPage() {
       const episodes = await res.json();
       const ep = episodes.find((e: any) => e.id === episodeId);
       if (ep) {
+        // Auto-fix stuck SCRIPTING status: if script already exists, it's done
+        if (ep.status === "SCRIPTING" && ep.scriptJson) {
+          // Script exists but status never got updated — fix it
+          try {
+            await fetch(`/api/podcast/episodes?id=${episodeId}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ status: "READY" }),
+            });
+            ep.status = "READY";
+          } catch (fixErr) {
+            console.warn("Failed to auto-fix status", fixErr);
+          }
+          setGenerating(false);
+        }
         setEpisode(ep);
         // Only auto-set step on initial load — let user navigate freely after
         if (!hasInitialized.current) {
@@ -147,6 +162,10 @@ export default function EpisodeDetailPage() {
       if (res.ok) {
         const data = await res.json();
         setScriptData(data.script);
+        // If script loaded successfully but we're still in generating state, clear it
+        if (data.script && data.status && data.status !== "SCRIPTING") {
+          setGenerating(false);
+        }
       }
     } catch (err) {
       console.error("Failed to load script", err);
@@ -228,6 +247,7 @@ export default function EpisodeDetailPage() {
   };
 
   const resetToDraft = async () => {
+    setGenerating(false); // Always clear generating state on reset
     try {
       const res = await fetch(`/api/podcast/episodes?id=${episodeId}`, {
         method: "PUT",
@@ -329,12 +349,11 @@ export default function EpisodeDetailPage() {
           </div>
         </div>
 
-        {/* Reset button */}
+        {/* Reset button — always enabled when not in DRAFT */}
         {episode.status !== "DRAFT" && (
           <button
             onClick={resetToDraft}
-            disabled={generating}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-red-500/10 text-red-400 hover:text-red-300 hover:bg-red-500/20 border border-red-500/20 transition-colors disabled:opacity-30"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-red-500/10 text-red-400 hover:text-red-300 hover:bg-red-500/20 border border-red-500/20 transition-colors"
           >
             <RotateCcw className="w-3 h-3" />
             Reset to Draft
@@ -465,6 +484,7 @@ export default function EpisodeDetailPage() {
                 <>
                   <button
                     onClick={() => {
+                      fetchEpisode();
                       fetchScript();
                     }}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-gray-800 text-gray-400 hover:text-white border border-gray-700 transition-colors"
