@@ -196,6 +196,22 @@ export default function EpisodeDetailPage() {
     }
   };
 
+  const markScriptReady = async () => {
+    try {
+      const res = await fetch(`/api/podcast/episodes?id=${episodeId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "SCRIPT_READY" }),
+      });
+      if (res.ok) {
+        await fetchEpisode();
+        setActiveStep("audio");
+      }
+    } catch (err) {
+      console.error("Failed to update status", err);
+    }
+  };
+
   if (loading) {
     return (
       <div className="max-w-5xl mx-auto p-6 flex items-center justify-center min-h-[400px]">
@@ -447,6 +463,18 @@ export default function EpisodeDetailPage() {
               <p className="text-xs text-gray-600 mt-1">
                 Click "Generate Script" to create dialogue for this episode.
               </p>
+            </div>
+          )}
+
+          {/* Proceed button when script exists but status is stuck */}
+          {scriptData && (episode.status === "SCRIPTING" || episode.status === "SCRIPT_READY") && (
+            <div className="p-4 border-t border-gray-800 flex justify-end">
+              <button
+                onClick={markScriptReady}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
+              >
+                Proceed to Audio →
+              </button>
             </div>
           )}
         </div>
