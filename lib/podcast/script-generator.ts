@@ -886,7 +886,7 @@ async function callDeepSeekRaw(
         { role: "user", content: userPrompt },
       ],
       temperature: 0.9,
-      max_tokens: 16384,
+      max_tokens: 8192,
     }),
   });
 
@@ -936,7 +936,7 @@ async function callDeepSeek(
         { role: "user", content: userPrompt },
       ],
       temperature: 0.9,
-      max_tokens: 16384,
+      max_tokens: 8192,
       response_format: { type: "json_object" },
     }),
   });
