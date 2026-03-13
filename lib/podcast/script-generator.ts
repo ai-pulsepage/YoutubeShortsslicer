@@ -253,7 +253,7 @@ async function generateWithDeepSeek(
 
 // ─── Segment Generators ─────────────────────────────────
 
-async function generateIntro(
+export async function generateIntro(
   characters: { id: string; name: string; role: string; prompt: string }[],
   episodeTitle: string,
   showName: string,
@@ -269,25 +269,32 @@ async function generateIntro(
     ? "Light profanity allowed but not excessive."
     : "No content restrictions. Raw, unfiltered language is fine.";
 
-  const systemPrompt = `You are writing a podcast script. Write ONLY the intro segment.
-The host ${host.name} opens the show, welcomes listeners, introduces today's guests, and previews the topics.
+  const systemPrompt = `You are writing a podcast intro. This is the OPENING of the show — it sets the ENTIRE tone.
+
+The host is ${host.name}. They MUST open in character — not generic "welcome to the show" energy.
 
 ${host.prompt}
 
 GUESTS ON THIS EPISODE:
-${guests.map((g) => `- ${g.name}`).join("\n")}
+${guests.map((g) => `- ${g.name}: ${g.prompt.split('\n')[0] || 'Guest'}`).join("\n")}
 
 TOPICS FOR THIS EPISODE:
 ${topicTitles.map((t) => `- ${t}`).join("\n")}
 
 CONTENT FILTER: ${filterNote}
 
+STRUCTURE YOUR INTRO LIKE THIS:
+1. HOOK — The host opens with something attention-grabbing. A provocative question, a sharp observation, a joke, or a bold statement that sets the tone. NOT "Welcome to the show." The host's archetype drives this.
+2. SELF-INTRO — The host introduces themselves briefly, in character. An Elder might say "I've been doing this longer than most of you have been alive." A Firebrand might say "You know who I am, and you know I don't hold back."
+3. GUEST INTROS — The host introduces each guest with a one-liner that references their personality or dynamic with the host. "Joining me is [name], who thinks everything I say is wrong — and I love him for it."
+4. TOPIC PREVIEW — Frame what's coming, with attitude. Not just listing topics — hook the audience into WHY these topics matter today.
+
 OUTPUT FORMAT — respond with ONLY a JSON array of dialogue lines:
 [
   { "speaker": "${host.name}", "characterId": "${host.id}", "text": "...", "emotion": "excited" }
 ]
 
-Keep it 3-6 lines. Natural, conversational. The host should be IN CHARACTER per their archetype.
+Write 4-8 lines. ALL lines from the HOST. Natural, conversational, IN CHARACTER.
 Emotions: "neutral", "excited", "amused", "serious", "angry", "sarcastic", "concerned"`;
 
   return callLLMForDialogue(systemPrompt, `Write the intro for "${showName}" episode "${episodeTitle}".`);
@@ -396,21 +403,38 @@ The host should deliver the ad IN CHARACTER — a Bulldozer host does a Bulldoze
   return callLLMForDialogue(systemPrompt, `Write the ${sponsor.adStyle} ad read for ${sponsor.brandName}.`);
 }
 
-async function generateOutro(
+export async function generateOutro(
   characters: { id: string; name: string; role: string; prompt: string }[],
   showName: string,
   contentFilter: string
 ): Promise<DialogueLine[]> {
   const host = characters.find((c) => c.role === "HOST") || characters[0];
+  const guests = characters.filter((c) => c.role === "GUEST");
+
+  const filterNote = contentFilter === "FAMILY_FRIENDLY"
+    ? "Keep language completely clean."
+    : contentFilter === "MODERATE"
+    ? "Light profanity allowed but not excessive."
+    : "No content restrictions. Raw, unfiltered language is fine.";
 
   const systemPrompt = `You are writing a podcast outro. The host ${host.name} wraps up the show.
 
 ${host.prompt}
 
-Write 2-4 lines where the host thanks the guests, teases next episode, and signs off.
-Stay in character. A Comedian host signs off with a joke. A Mediator reflects on what was learned.
+GUESTS: ${guests.map((g) => g.name).join(", ")}
 
-OUTPUT: JSON array of dialogue lines. Keep it brief and natural.`;
+CONTENT FILTER: ${filterNote}
+
+STRUCTURE:
+1. CLOSING THOUGHT — The host reflects on what was discussed. Not a summary — a personal take or observation that only THIS host would make. An Elder might say "I've seen this story before, and it never ends well." A Comedian might say "If we can't laugh at this, we're already dead."
+2. GUEST ACKNOWLEDGMENT — Brief, in-character. Thank the guests the way this host would.
+3. TEASE — Hint at next time or make a recurring sign-off.
+4. SIGN-OFF — The host's signature closing line. Make it memorable and consistent.
+
+ALL lines MUST have "speaker": "${host.name}" — never "Unknown".
+
+OUTPUT: JSON array of dialogue lines. 3-5 lines, brief, natural, IN CHARACTER.
+Emotions: "neutral", "excited", "amused", "serious", "sarcastic"`;
 
   return callLLMForDialogue(systemPrompt, `Write the outro for "${showName}".`);
 }

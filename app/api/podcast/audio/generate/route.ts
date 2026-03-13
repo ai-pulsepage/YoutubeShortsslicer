@@ -43,12 +43,17 @@ export async function POST(req: NextRequest) {
     ? JSON.parse(episode.scriptJson)
     : episode.scriptJson;
 
-  // Build character voiceId map
+  // Build character voiceId map — use host's voice as fallback for Unknown speakers
   const voiceMap: Record<string, string> = {};
-  const defaultVoice = "21m00Tcm4TlvDq8ikWAM"; // Rachel (ElevenLabs default)
+  const hostParticipant = episode.participants.find((p: any) => p.character.role === "HOST") || episode.participants[0];
+  const hostVoiceId = hostParticipant?.character?.voiceId || "";
   for (const p of episode.participants) {
     const name = p.character.name;
-    voiceMap[name] = p.character.voiceId || defaultVoice;
+    voiceMap[name] = p.character.voiceId || hostVoiceId;
+  }
+  // Map "Unknown" to the host
+  if (hostVoiceId) {
+    voiceMap["Unknown"] = hostVoiceId;
   }
 
   // Update status to RECORDING
@@ -67,7 +72,11 @@ export async function POST(req: NextRequest) {
       const lines = seg.lines || [];
       for (let li = 0; li < lines.length; li++) {
         const line = lines[li];
-        const speaker = line.speaker || line.characterName || "Unknown";
+        let speaker = line.speaker || line.characterName || "Unknown";
+        // Remap Unknown to host name
+        if (speaker === "Unknown" && hostParticipant) {
+          speaker = hostParticipant.character.name;
+        }
         const text = line.text || line.dialogue || "";
         if (text.trim()) {
           allLines.push({ speaker, text, segIdx: si, lineIdx: li });
@@ -86,7 +95,12 @@ export async function POST(req: NextRequest) {
 
     for (let i = 0; i < allLines.length; i++) {
       const line = allLines[i];
-      const voiceId = voiceMap[line.speaker] || defaultVoice;
+      const voiceId = voiceMap[line.speaker] || hostVoiceId;
+      if (!voiceId) {
+        console.warn(`[Podcast Audio]   Skipping line ${i} — no voice for "${line.speaker}"`);
+        audioClips.push({ speaker: line.speaker, text: line.text, url: "", durationEstimate: 0 });
+        continue;
+      }
 
       console.log(`[Podcast Audio]   ${i + 1}/${allLines.length}: ${line.speaker} (voice: ${voiceId.substring(0, 8)}...)`);
 
@@ -133,7 +147,7 @@ export async function POST(req: NextRequest) {
     await prisma.podcastEpisode.update({
       where: { id: episodeId },
       data: {
-        status: successCount === allLines.length ? "ASSEMBLING" : "RECORDING",
+        status: successCount > 0 ? "ASSEMBLING" : "RECORDING",
         scriptJson: {
           ...script,
           audioClips,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ChevronLeft,
@@ -72,7 +72,6 @@ type StepState = "done" | "active" | "pending" | "failed";
 const STATUS_TO_STEP: Record<string, StepId> = {
   DRAFT: "script",
   SCRIPTING: "script",
-  SCRIPT_READY: "script",
   RECORDING: "audio",
   ASSEMBLING: "mix",
   READY: "review",
@@ -104,6 +103,7 @@ export default function EpisodeDetailPage() {
   const [scriptData, setScriptData] = useState<any>(null);
   const [loadingScript, setLoadingScript] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const hasInitialized = useRef(false);
 
   // Provider toggle
   const [provider, setProvider] = useState<"mistral" | "deepseek">(() => {
@@ -121,9 +121,12 @@ export default function EpisodeDetailPage() {
       const ep = episodes.find((e: any) => e.id === episodeId);
       if (ep) {
         setEpisode(ep);
-        // Set active step based on status
-        const step = STATUS_TO_STEP[ep.status] || "script";
-        setActiveStep(step);
+        // Only auto-set step on initial load — let user navigate freely after
+        if (!hasInitialized.current) {
+          const step = STATUS_TO_STEP[ep.status] || "script";
+          setActiveStep(step);
+          hasInitialized.current = true;
+        }
       }
     } catch (err) {
       console.error("Failed to load episode", err);
@@ -631,13 +634,27 @@ function AudioStepPanel({
             </button>
           )}
           {hasAudio && (
-            <button
-              onClick={onRefresh}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-gray-800 text-gray-400 hover:text-white border border-gray-700 transition-colors"
-            >
-              <RefreshCw className="w-3 h-3" />
-              Refresh
-            </button>
+            <>
+              <button
+                onClick={() => {
+                  if (confirm("Regenerate all audio clips? This will use ElevenLabs credits.")) {
+                    generateAudio();
+                  }
+                }}
+                disabled={generatingAudio}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-colors"
+              >
+                <RotateCcw className="w-3 h-3" />
+                Regenerate
+              </button>
+              <button
+                onClick={onRefresh}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-gray-800 text-gray-400 hover:text-white border border-gray-700 transition-colors"
+              >
+                <RefreshCw className="w-3 h-3" />
+                Refresh
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -747,6 +764,25 @@ function AudioStepPanel({
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Proceed to next step */}
+        {hasAudio && !generatingAudio && (
+          <div className="mt-4 pt-4 border-t border-gray-800 flex justify-end">
+            <button
+              onClick={() => {
+                // Advance status and switch step
+                fetch(`/api/podcast/episodes?id=${episode.id}`, {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ status: "ASSEMBLING" }),
+                }).then(() => onRefresh());
+              }}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
+            >
+              Proceed to Mix →
+            </button>
           </div>
         )}
 
