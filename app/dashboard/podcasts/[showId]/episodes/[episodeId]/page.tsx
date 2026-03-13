@@ -169,13 +169,18 @@ export default function EpisodeDetailPage() {
         body: JSON.stringify({ episodeId: episode.id, provider }),
       });
       const data = await res.json();
-      if (data.dispatched) {
+      if (!res.ok) {
+        alert(`Script generation failed: ${data.error || "Unknown error"}`);
+      } else if (data.dispatched) {
         // RunPod job — poll for completion
         alert("✅ Script generation dispatched to RunPod. Refresh in a minute to see results.");
       } else if (data.script) {
+        // DeepSeek — script returned inline
         setScriptData(data.script);
       }
+      // Always refetch episode + script from DB (script is saved server-side)
       await fetchEpisode();
+      await fetchScript();
     } catch (err: any) {
       alert(`Script generation failed: ${err.message}`);
     }

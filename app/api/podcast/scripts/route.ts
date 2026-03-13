@@ -30,6 +30,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       dispatched: false,
+      script: result,
       lineCount: result.segments.reduce((s, seg) => s + seg.lines.length, 0),
       estimatedDuration: result.totalEstimatedDuration,
       segments: result.segments.map((s) => ({
