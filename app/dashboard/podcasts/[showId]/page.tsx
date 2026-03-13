@@ -597,14 +597,14 @@ function EpisodeCard({
                     )}
                     {scriptOpen ? "Hide Script" : "View Script"}
                   </button>
-                  <Link
-                    href={`/dashboard/podcasts/${showId}/episodes/${episode.id}`}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors cursor-pointer"
-                  >
-                    Open Episode →
-                  </Link>
                 </>
               )}
+              <Link
+                href={`/dashboard/podcasts/${showId}/episodes/${episode.id}`}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-violet-500/10 text-violet-400 border border-violet-500/20 hover:bg-violet-500/20 transition-colors cursor-pointer"
+              >
+                Open Episode →
+              </Link>
             </div>
           </div>
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
