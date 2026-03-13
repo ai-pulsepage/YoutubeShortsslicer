@@ -201,7 +201,7 @@ export default function EpisodeDetailPage() {
       const res = await fetch(`/api/podcast/episodes?id=${episodeId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "SCRIPT_READY" }),
+        body: JSON.stringify({ status: "RECORDING" }),
       });
       if (res.ok) {
         await fetchEpisode();
@@ -467,7 +467,7 @@ export default function EpisodeDetailPage() {
           )}
 
           {/* Proceed button when script exists but status is stuck */}
-          {scriptData && (episode.status === "SCRIPTING" || episode.status === "SCRIPT_READY") && (
+          {scriptData && episode.status === "SCRIPTING" && (
             <div className="p-4 border-t border-gray-800 flex justify-end">
               <button
                 onClick={markScriptReady}
