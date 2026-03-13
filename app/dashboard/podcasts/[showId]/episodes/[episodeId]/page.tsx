@@ -22,6 +22,8 @@ import {
   Save,
   Play,
   Headphones,
+  Brain,
+  Cpu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -105,13 +107,17 @@ export default function EpisodeDetailPage() {
   const [generating, setGenerating] = useState(false);
   const hasInitialized = useRef(false);
 
-  // Provider toggle
+  // Provider toggle — synced to localStorage
   const [provider, setProvider] = useState<"mistral" | "deepseek">(() => {
     if (typeof window !== "undefined") {
       return (localStorage.getItem("podcast_llm_provider") as any) || "mistral";
     }
     return "mistral";
   });
+
+  useEffect(() => {
+    localStorage.setItem("podcast_llm_provider", provider);
+  }, [provider]);
 
   const fetchEpisode = useCallback(async () => {
     try {
@@ -379,18 +385,47 @@ export default function EpisodeDetailPage() {
             </h2>
             <div className="flex gap-2">
               {episode.status === "DRAFT" && (
-                <button
-                  onClick={generateScript}
-                  disabled={generating}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 disabled:opacity-50 transition-colors"
-                >
-                  {generating ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : (
-                    <Sparkles className="w-3 h-3" />
-                  )}
-                  {generating ? "Generating..." : "Generate Script"}
-                </button>
+                <div className="flex items-center gap-2">
+                  {/* Inline provider toggle */}
+                  <div className="flex items-center bg-gray-800 rounded-lg p-0.5">
+                    <button
+                      onClick={() => setProvider("mistral")}
+                      className={cn(
+                        "flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-all",
+                        provider === "mistral"
+                          ? "bg-violet-600 text-white"
+                          : "text-gray-500 hover:text-white"
+                      )}
+                    >
+                      <Brain className="w-3 h-3" />
+                      Mistral
+                    </button>
+                    <button
+                      onClick={() => setProvider("deepseek")}
+                      className={cn(
+                        "flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-all",
+                        provider === "deepseek"
+                          ? "bg-emerald-600 text-white"
+                          : "text-gray-500 hover:text-white"
+                      )}
+                    >
+                      <Cpu className="w-3 h-3" />
+                      DeepSeek
+                    </button>
+                  </div>
+                  <button
+                    onClick={generateScript}
+                    disabled={generating}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 disabled:opacity-50 transition-colors"
+                  >
+                    {generating ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-3 h-3" />
+                    )}
+                    {generating ? "Generating..." : "Generate Script"}
+                  </button>
+                </div>
               )}
               {scriptData && episode.status !== "DRAFT" && (
                 <>
