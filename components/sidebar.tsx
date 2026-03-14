@@ -26,6 +26,7 @@ import {
     Video,
     Headphones,
     Sparkles,
+    Users,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -44,6 +45,7 @@ const topNavItems = [
 const aiStudioItems = [
     { label: "Documentary", href: "/dashboard/documentary", icon: Video },
     { label: "Podcasts", href: "/dashboard/podcasts", icon: Headphones },
+    { label: "Characters", href: "/dashboard/podcasts/characters", icon: Users },
 ];
 
 const bottomNavItems = [

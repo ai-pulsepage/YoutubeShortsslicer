@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { uploadBufferToR2, getR2PublicUrl } from "@/lib/storage";
+import { uploadBufferToR2, getR2PublicUrl, downloadFileFromR2 } from "@/lib/storage";
 import { execSync } from "child_process";
 import fs from "fs";
 import path from "path";
@@ -48,12 +48,28 @@ export async function POST(req: NextRequest) {
 
   console.log(`[Podcast Mix] Starting mix for "${episode.title}" — ${validClips.length} clips`);
 
+  // Extract R2 key from public URL
+  const r2PublicUrl = process.env.R2_PUBLIC_URL || "";
+  function urlToR2Key(url: string): string | null {
+    if (r2PublicUrl && url.startsWith(r2PublicUrl)) {
+      return url.slice(r2PublicUrl.length + 1); // +1 for the /
+    }
+    // Fallback: try to extract from URL path after bucket name
+    try {
+      const u = new URL(url);
+      // URL path like /bucketname/key or just /key
+      return u.pathname.replace(/^\/[^/]+\//, "").replace(/^\//, "");
+    } catch {
+      return null;
+    }
+  }
+
   // Create temp directory for processing
   const tmpDir = path.join(os.tmpdir(), `podcast-mix-${episodeId}-${Date.now()}`);
   fs.mkdirSync(tmpDir, { recursive: true });
 
   try {
-    // Download all clips
+    // Download all clips via S3 (direct R2 access, no public URL fetch)
     const clipFiles: string[] = [];
     let lastSpeaker = "";
 
@@ -63,18 +79,22 @@ export async function POST(req: NextRequest) {
       const filename = `clip-${String(i).padStart(4, "0")}.${ext}`;
       const filepath = path.join(tmpDir, filename);
 
-      console.log(`[Podcast Mix]   Downloading clip ${i + 1}/${validClips.length}: ${clip.speaker}`);
-
-      const res = await fetch(clip.url, { signal: AbortSignal.timeout(30000) });
-      if (!res.ok) {
-        console.warn(`[Podcast Mix]   ✗ Failed to download clip ${i}: ${res.status}`);
+      const r2Key = urlToR2Key(clip.url);
+      if (!r2Key) {
+        console.warn(`[Podcast Mix]   ✗ Could not extract R2 key from URL: ${clip.url}`);
         continue;
       }
 
-      const buffer = Buffer.from(await res.arrayBuffer());
-      fs.writeFileSync(filepath, buffer);
+      console.log(`[Podcast Mix]   Downloading clip ${i + 1}/${validClips.length}: ${clip.speaker} (${r2Key})`);
 
-      // Add a silence gap between different speakers (300ms) or same speaker (150ms)
+      try {
+        await downloadFileFromR2(r2Key, filepath);
+      } catch (err: any) {
+        console.warn(`[Podcast Mix]   ✗ Failed to download clip ${i}: ${err.message}`);
+        continue;
+      }
+
+      // Add a silence gap between different speakers (400ms) or same speaker (150ms)
       if (clipFiles.length > 0) {
         const gapMs = clip.speaker !== lastSpeaker ? 400 : 150;
         const silenceFile = path.join(tmpDir, `silence-${String(i).padStart(4, "0")}.wav`);

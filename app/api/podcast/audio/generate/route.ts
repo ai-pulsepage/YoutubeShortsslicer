@@ -75,6 +75,7 @@ export async function POST(req: NextRequest) {
   // Build character voice maps
   const voiceMap: Record<string, string> = {};       // ElevenLabs voiceId map
   const diaVoiceMap: Record<string, string> = {};    // Dia voice reference filename map
+  const speechRateMap: Record<string, number> = {};  // Per-character speech rate
   let transcriptMap: Record<string, string> = {};    // Pre-computed transcripts for clone voices
   const hostParticipant = episode.participants.find((p: any) => p.character.role === "HOST") || episode.participants[0];
   const hostVoiceId = hostParticipant?.character?.voiceId || "";
@@ -94,6 +95,8 @@ export async function POST(req: NextRequest) {
     } else {
       diaVoiceMap[name] = defaultDiaVoices[pi % defaultDiaVoices.length];
     }
+    // Store character speech rate
+    speechRateMap[name] = p.character.speechRate || 1.0;
   }
   if (hostVoiceId) {
     voiceMap["Unknown"] = hostVoiceId;
@@ -161,7 +164,7 @@ export async function POST(req: NextRequest) {
   console.log(`[Podcast Audio] Generating ${allLines.length} voice clips for "${episode.title}" via ${engine}`);
 
   // ─── Fire-and-forget: generate in background ────────────
-  generateAudioInBackground(episodeId, script, allLines, voiceMap, diaVoiceMap, hostVoiceId, engine, transcriptMap).catch(async (err) => {
+  generateAudioInBackground(episodeId, script, allLines, voiceMap, diaVoiceMap, hostVoiceId, engine, transcriptMap, speechRateMap).catch(async (err) => {
     console.error(`[Podcast Audio] Fatal background error: ${err.message}`);
     try {
       await prisma.podcastEpisode.update({
@@ -195,6 +198,7 @@ async function generateAudioInBackground(
   hostVoiceId: string,
   engine: TtsEngine,
   transcriptMap: Record<string, string> = {},
+  speechRateMap: Record<string, number> = {},
 ) {
   const audioFormat = engine === "dia" ? "wav" : "mp3";
   const mimeType = engine === "dia" ? "audio/wav" : "audio/mpeg";
@@ -270,10 +274,12 @@ async function generateAudioInBackground(
     console.log(`[Podcast Audio]   ${i + 1}/${allLines.length}: ${line.speaker} (${engine}: ${logVoice})`);
 
     try {
+      const charSpeed = speechRateMap[line.speaker] || 1.0;
       const audioBuffer = await generateVoiceover({
         text: line.text,
         engine,
         voiceId,
+        speed: charSpeed,
         narratorStyle: "conversational",
         diaVoiceRef: engine === "dia" ? currentVoiceRef : undefined,
         diaVoiceMode: engine === "dia" ? diaVoiceMode : undefined,
