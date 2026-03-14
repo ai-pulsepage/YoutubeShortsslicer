@@ -116,6 +116,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Dia TTS Server not available: ${health.message}` }, { status: 503 });
     }
     console.log(`[Podcast Audio] Dia TTS Server healthy — using Dia engine`);
+
+    // Auto-restore voice references from R2 to Dia server
+    // (Dia pods are ephemeral — reference_audio/ is wiped on restart)
+    const diaEndpoint = (process.env.DIA_TTS_URL || "").replace(/\/$/, "");
+    await syncVoiceRefsTodia(diaVoiceMap, diaEndpoint);
   }
 
   // Update status to RECORDING
@@ -320,4 +325,101 @@ async function generateAudioInBackground(
       },
     },
   });
+}
+
+// ─── Auto-sync voice refs from R2 to Dia server ───────────────
+
+/**
+ * Syncs voice reference files from R2 to the Dia TTS server.
+ * On each RunPod restart, the Dia server's ./reference_audio/ directory is empty.
+ * This function checks which clone voice refs are needed, and if they're missing
+ * from the Dia server, downloads them from R2 and re-uploads.
+ */
+async function syncVoiceRefsTodia(
+  diaVoiceMap: Record<string, string>,
+  diaEndpoint: string,
+) {
+  if (!diaEndpoint) return;
+
+  // Collect unique clone voice refs (not predefined .wav voices baked into the server)
+  const PREDEFINED_VOICES = new Set(DEFAULT_DIA_VOICES.map(v => v.toLowerCase()));
+  const neededRefs = new Set<string>();
+  for (const [, voiceRef] of Object.entries(diaVoiceMap)) {
+    if (voiceRef && !PREDEFINED_VOICES.has(voiceRef.toLowerCase())) {
+      neededRefs.add(voiceRef);
+    }
+  }
+
+  if (neededRefs.size === 0) {
+    console.log(`[Podcast Audio] All voices are predefined — no R2 sync needed`);
+    return;
+  }
+
+  // Fetch list of existing reference files on the Dia server
+  let existingFiles: string[] = [];
+  try {
+    const res = await fetch(`${diaEndpoint}/get_reference_files`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      existingFiles = Array.isArray(data) ? data : (data.files || []);
+    }
+  } catch (err: any) {
+    console.warn(`[Podcast Audio] Could not list Dia reference files: ${err.message}`);
+  }
+
+  const existingSet = new Set(existingFiles.map((f: string) => f.toLowerCase()));
+
+  // Check which refs are missing
+  const missing: string[] = [];
+  for (const ref of neededRefs) {
+    if (!existingSet.has(ref.toLowerCase())) {
+      missing.push(ref);
+    }
+  }
+
+  if (missing.length === 0) {
+    console.log(`[Podcast Audio] All ${neededRefs.size} clone voice refs already on Dia server`);
+    return;
+  }
+
+  console.log(`[Podcast Audio] Syncing ${missing.length} voice ref(s) from R2 to Dia: ${missing.join(", ")}`);
+
+  for (const filename of missing) {
+    try {
+      // Download from R2 backup
+      const r2Key = `dia-reference-audio/${filename}`;
+      const r2Url = getR2PublicUrl(r2Key);
+
+      console.log(`[Podcast Audio]   Downloading ${filename} from R2...`);
+      const r2Res = await fetch(r2Url, { signal: AbortSignal.timeout(15000) });
+      if (!r2Res.ok) {
+        console.warn(`[Podcast Audio]   R2 download failed for ${filename}: ${r2Res.status} — voice cloning will use fallback`);
+        continue;
+      }
+
+      const audioBuffer = await r2Res.arrayBuffer();
+
+      // Upload to Dia server
+      console.log(`[Podcast Audio]   Uploading ${filename} to Dia server (${(audioBuffer.byteLength / 1024).toFixed(0)}KB)...`);
+      const form = new FormData();
+      const mimeType = filename.endsWith(".mp3") ? "audio/mpeg" : "audio/wav";
+      form.append("files", new Blob([audioBuffer], { type: mimeType }), filename);
+
+      const uploadRes = await fetch(`${diaEndpoint}/upload_reference`, {
+        method: "POST",
+        body: form,
+      });
+
+      if (uploadRes.ok) {
+        console.log(`[Podcast Audio]   ✓ ${filename} synced to Dia server`);
+      } else {
+        const errText = await uploadRes.text();
+        console.warn(`[Podcast Audio]   ✗ Upload failed for ${filename}: ${uploadRes.status} — ${errText}`);
+      }
+    } catch (err: any) {
+      console.warn(`[Podcast Audio]   ✗ Sync failed for ${filename}: ${err.message}`);
+    }
+  }
 }
