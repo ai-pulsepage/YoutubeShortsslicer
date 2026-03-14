@@ -155,7 +155,7 @@ export async function PUT(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { title, durationMin, status, clearScript } = body;
+  const { title, durationMin, status, clearScript, scriptJson } = body;
 
   // Validate status against allowed values
   const VALID_STATUSES = new Set([
@@ -173,6 +173,7 @@ export async function PUT(req: NextRequest) {
       ...(durationMin !== undefined && { durationMin }),
       ...(status !== undefined && { status }),
       ...(clearScript && { scriptJson: null as any }),
+      ...(scriptJson !== undefined && !clearScript && { scriptJson }),
     },
     include: {
       segments: { orderBy: { order: "asc" } },
