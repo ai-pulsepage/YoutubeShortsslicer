@@ -121,9 +121,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    // Forward the upload to Dia server
+    // Forward the upload to Dia server (field name must be "files" per Dia API)
     const diaForm = new FormData();
-    diaForm.append("file", file);
+    diaForm.append("files", file);
 
     const uploadRes = await fetch(`${endpoint}/upload_reference`, {
       method: "POST",
