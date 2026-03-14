@@ -539,16 +539,18 @@ function CharacterModal({
   const [playingPreview, setPlayingPreview] = useState<string | null>(null);
   const [audioRef, setAudioRef] = useState<HTMLAudioElement | null>(null);
 
-  // Dia voice ref state
+  // Dia voice state
   const [voiceTab, setVoiceTab] = useState<"elevenlabs" | "dia">("elevenlabs");
   const [voiceRefPath, setVoiceRefPath] = useState(editCharacter?.voiceRefPath || "");
-  const [uploadingVoiceRef, setUploadingVoiceRef] = useState(false);
-  const [voiceRefFile, setVoiceRefFile] = useState<File | null>(null);
+  const [diaVoices, setDiaVoices] = useState<{ predefined: any[]; reference: any[] }>({ predefined: [], reference: [] });
+  const [loadingDia, setLoadingDia] = useState(false);
+  const [diaSubTab, setDiaSubTab] = useState<"predefined" | "reference">("reference");
+  const [uploadingToDia, setUploadingToDia] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [step, setStep] = useState(0); // 0: personality, 1: worldview, 2: voice
 
-  // Load voices
+  // Load voices (ElevenLabs when step=2, Dia when tab changes)
   useEffect(() => {
     if (step === 2) {
       setLoadingVoices(true);
@@ -558,6 +560,17 @@ function CharacterModal({
         .finally(() => setLoadingVoices(false));
     }
   }, [step]);
+
+  useEffect(() => {
+    if (step === 2 && voiceTab === "dia") {
+      setLoadingDia(true);
+      fetch("/api/podcast/dia/voices")
+        .then((r) => r.ok ? r.json() : { predefined: [], reference: [] })
+        .then((data) => setDiaVoices(data))
+        .catch(() => setDiaVoices({ predefined: [], reference: [] }))
+        .finally(() => setLoadingDia(false));
+    }
+  }, [step, voiceTab]);
 
   const playPreview = (id: string, previewUrl?: string) => {
     if (audioRef) { audioRef.pause(); audioRef.currentTime = 0; }
@@ -946,118 +959,141 @@ function CharacterModal({
               {/* Dia Voice Tab */}
               {voiceTab === "dia" && (
                 <div>
-                  <label className="text-xs text-gray-400 mb-2 block">Dia Voice Reference (5-10 second clip)</label>
+                  {/* Dia sub-tabs: Reference vs Predefined */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <button
+                      onClick={() => setDiaSubTab("reference")}
+                      className={cn(
+                        "px-3 py-1 rounded-full text-[11px] font-medium transition-colors",
+                        diaSubTab === "reference" ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "text-gray-500 hover:text-gray-400"
+                      )}
+                    >
+                      🎤 My Voice Clones
+                    </button>
+                    <button
+                      onClick={() => setDiaSubTab("predefined")}
+                      className={cn(
+                        "px-3 py-1 rounded-full text-[11px] font-medium transition-colors",
+                        diaSubTab === "predefined" ? "bg-violet-500/20 text-violet-400 border border-violet-500/30" : "text-gray-500 hover:text-gray-400"
+                      )}
+                    >
+                      🗣️ Predefined Voices
+                    </button>
+                  </div>
 
-                  {/* Current voice ref status */}
-                  {voiceRefPath ? (
-                    <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 mb-3">
-                      <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center">
-                        <Check className="w-4 h-4 text-emerald-400" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm text-emerald-400 font-medium">Voice reference uploaded</p>
-                        <p className="text-[10px] text-gray-500 truncate">{voiceRefPath}</p>
-                      </div>
-                      <button
-                        onClick={async () => {
-                          if (!isEdit || !editCharacter) return;
-                          await fetch(`/api/podcast/characters/voice-ref?characterId=${editCharacter.id}`, { method: "DELETE" });
-                          setVoiceRefPath("");
-                        }}
-                        className="text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded bg-red-500/10 hover:bg-red-500/20"
-                      >
-                        Remove
-                      </button>
+                  {loadingDia ? (
+                    <div className="flex items-center gap-2 py-8 justify-center text-gray-500">
+                      <Loader2 className="w-4 h-4 animate-spin" /> Loading Dia voices...
                     </div>
                   ) : (
-                    <div className="p-4 rounded-lg border-2 border-dashed border-gray-700 text-center mb-3">
-                      <p className="text-sm text-gray-500">No voice reference uploaded yet</p>
-                      <p className="text-[10px] text-gray-600 mt-1">If no reference is set, a predefined voice will be used</p>
-                    </div>
-                  )}
-
-                  {/* Upload area */}
-                  <div className="space-y-3">
-                    <div
-                      className={cn(
-                        "p-6 rounded-lg border-2 border-dashed transition-colors cursor-pointer text-center",
-                        voiceRefFile
-                          ? "border-emerald-500/40 bg-emerald-500/5"
-                          : "border-gray-700 hover:border-gray-600"
-                      )}
-                      onClick={() => document.getElementById("voice-ref-input")?.click()}
-                    >
-                      <input
-                        id="voice-ref-input"
-                        type="file"
-                        accept=".wav,.mp3,audio/wav,audio/mpeg"
-                        className="hidden"
-                        onChange={(e) => setVoiceRefFile(e.target.files?.[0] || null)}
-                      />
-                      {voiceRefFile ? (
-                        <div>
-                          <p className="text-sm text-emerald-400 font-medium">{voiceRefFile.name}</p>
-                          <p className="text-[10px] text-gray-500 mt-1">{(voiceRefFile.size / 1024).toFixed(0)} KB — Click to change</p>
-                        </div>
-                      ) : (
-                        <div>
-                          <Upload className="w-6 h-6 mx-auto text-gray-600 mb-2" />
-                          <p className="text-sm text-gray-400">Click to select a WAV or MP3 file</p>
-                          <p className="text-[10px] text-gray-600 mt-1">5-10 seconds of clean speech, max 10MB</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {voiceRefFile && isEdit && editCharacter && (
-                      <button
-                        onClick={async () => {
-                          setUploadingVoiceRef(true);
-                          try {
-                            const formData = new FormData();
-                            formData.append("characterId", editCharacter.id);
-                            formData.append("file", voiceRefFile);
-                            const res = await fetch("/api/podcast/characters/voice-ref", {
-                              method: "POST",
-                              body: formData,
-                            });
-                            const data = await res.json();
-                            if (res.ok) {
-                              setVoiceRefPath(data.r2Key);
-                              setVoiceRefFile(null);
-                            } else {
-                              alert(`Upload failed: ${data.error}`);
-                            }
-                          } catch (err: any) {
-                            alert(`Upload error: ${err.message}`);
-                          }
-                          setUploadingVoiceRef(false);
-                        }}
-                        disabled={uploadingVoiceRef}
-                        className="w-full px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-medium flex items-center justify-center gap-2"
-                      >
-                        {uploadingVoiceRef ? (
-                          <><Loader2 className="w-4 h-4 animate-spin" /> Uploading to R2...</>
-                        ) : (
-                          <><Upload className="w-4 h-4" /> Upload Voice Reference</>
+                    <>
+                      {/* Voice grid */}
+                      <div className="grid grid-cols-1 gap-1.5 max-h-[300px] overflow-y-auto mb-3">
+                        {(diaSubTab === "reference" ? diaVoices.reference : diaVoices.predefined).map((v: any) => {
+                          const fname = v.filename || v.name || v;
+                          const displayName = typeof fname === "string" ? fname.replace(/\.(wav|mp3)$/, "") : fname;
+                          return (
+                            <button
+                              key={fname}
+                              onClick={() => setVoiceRefPath(fname)}
+                              className={cn(
+                                "flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left transition-colors",
+                                voiceRefPath === fname
+                                  ? "bg-emerald-500/15 border-emerald-500/30"
+                                  : "bg-gray-800/50 border-gray-800 hover:border-gray-700"
+                              )}
+                            >
+                              <div className={cn(
+                                "w-7 h-7 rounded-full flex items-center justify-center text-xs",
+                                diaSubTab === "reference" ? "bg-emerald-500/20 text-emerald-400" : "bg-violet-500/20 text-violet-400"
+                              )}>
+                                {diaSubTab === "reference" ? "🎤" : "🗣️"}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-white truncate">{displayName}</p>
+                                <p className="text-[10px] text-gray-500">
+                                  {diaSubTab === "reference" ? "Voice clone" : "Predefined voice"}
+                                </p>
+                              </div>
+                              {voiceRefPath === fname && (
+                                <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                              )}
+                            </button>
+                          );
+                        })}
+                        {(diaSubTab === "reference" ? diaVoices.reference : diaVoices.predefined).length === 0 && (
+                          <p className="text-sm text-gray-500 text-center py-6">
+                            {diaSubTab === "reference"
+                              ? "No voice references on the Dia server. Upload one below or via the Dia web UI."
+                              : "No predefined voices found. Is the Dia server running?"}
+                          </p>
                         )}
-                      </button>
-                    )}
+                      </div>
 
-                    {voiceRefFile && !isEdit && (
-                      <p className="text-xs text-amber-400 bg-amber-500/10 rounded-lg p-2 text-center">
-                        💡 Save the character first, then edit to upload voice reference
-                      </p>
-                    )}
-                  </div>
+                      {/* Upload new reference */}
+                      {diaSubTab === "reference" && (
+                        <div className="space-y-2">
+                          <div
+                            className="p-4 rounded-lg border-2 border-dashed border-gray-700 hover:border-gray-600 transition-colors cursor-pointer text-center"
+                            onClick={() => document.getElementById("voice-ref-input")?.click()}
+                          >
+                            <input
+                              id="voice-ref-input"
+                              type="file"
+                              accept=".wav,.mp3,audio/wav,audio/mpeg"
+                              className="hidden"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                setUploadingToDia(true);
+                                try {
+                                  const formData = new FormData();
+                                  formData.append("file", file);
+                                  const res = await fetch("/api/podcast/dia/voices", {
+                                    method: "POST",
+                                    body: formData,
+                                  });
+                                  const data = await res.json();
+                                  if (res.ok) {
+                                    // Refresh voice list
+                                    const listRes = await fetch("/api/podcast/dia/voices");
+                                    const listData = await listRes.json();
+                                    setDiaVoices(listData);
+                                    setVoiceRefPath(data.filename || file.name);
+                                  } else {
+                                    alert(`Upload failed: ${data.error}`);
+                                  }
+                                } catch (err: any) {
+                                  alert(`Upload error: ${err.message}`);
+                                }
+                                setUploadingToDia(false);
+                              }}
+                            />
+                            {uploadingToDia ? (
+                              <div className="flex items-center gap-2 justify-center text-gray-400">
+                                <Loader2 className="w-4 h-4 animate-spin" /> Uploading to Dia server...
+                              </div>
+                            ) : (
+                              <div>
+                                <Upload className="w-5 h-5 mx-auto text-gray-600 mb-1" />
+                                <p className="text-xs text-gray-400">Upload WAV/MP3 to Dia server</p>
+                                <p className="text-[10px] text-gray-600">5-10 sec clean speech clip</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
-                  {/* Info */}
-                  <div className="mt-4 p-3 rounded-lg bg-gray-800/50 border border-gray-800">
-                    <p className="text-[10px] text-gray-500 leading-relaxed">
-                      <strong className="text-gray-400">Dia Voice Cloning:</strong> Upload a 5-10 second clip of clear speech.
-                      The voice reference is stored permanently in R2 and auto-syncs to the Dia server when generating.
-                      No need to re-upload when restarting RunPod.
-                    </p>
-                  </div>
+                      {/* Current selection info */}
+                      {voiceRefPath && (
+                        <div className="mt-3 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                          <p className="text-[11px] text-emerald-400">
+                            <strong>Selected:</strong> {voiceRefPath.replace(/\.(wav|mp3)$/, "")}
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               )}
             </>

@@ -3,7 +3,6 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generateVoiceover, diaHealthCheck } from "@/lib/tts";
 import type { TtsEngine } from "@/lib/tts";
-import { syncVoiceRefFromR2 } from "@/lib/tts/dia";
 import { uploadBufferToR2 as uploadBuffer, getR2PublicUrl } from "@/lib/storage";
 
 // Dia predefined voices — actual names from the Dia-TTS-Server voice library
@@ -71,12 +70,11 @@ export async function POST(req: NextRequest) {
     const name = p.character.name;
     voiceMap[name] = p.character.voiceId || hostVoiceId;
 
-    // Dia voice: use voiceRefPath from R2 if available, otherwise predefined
+    // Dia voice: voiceRefPath now stores the Dia server filename directly
+    // (e.g., "Adrian.wav" for predefined or "voice_preview_hank.mp3" for clone reference)
     if (p.character.voiceRefPath) {
-      // R2-stored voice ref — extract filename from path (e.g., "podcast-voices/abc123/reference.wav" → "ref-abc123.wav")
-      const refFilename = `ref-${p.character.id}.wav`;
-      diaVoiceMap[name] = refFilename;
-      voiceRefR2Map[name] = p.character.voiceRefPath;
+      diaVoiceMap[name] = p.character.voiceRefPath;
+      voiceRefR2Map[name] = p.character.voiceRefPath; // Track that this character has a voice ref
     } else {
       diaVoiceMap[name] = defaultDiaVoices[pi % defaultDiaVoices.length];
     }
@@ -179,32 +177,22 @@ async function generateAudioInBackground(
   const audioFormat = engine === "dia" ? "wav" : "mp3";
   const mimeType = engine === "dia" ? "audio/wav" : "audio/mpeg";
 
-  // Sync R2 voice refs to Dia server before generating
-  const syncFailedSet = new Set<string>(); // Track which characters failed sync
-  if (engine === "dia" && Object.keys(voiceRefR2Map).length > 0) {
-    console.log(`[Podcast Audio] Syncing ${Object.keys(voiceRefR2Map).length} voice refs from R2 to Dia server...`);
-    for (const [charName, r2Key] of Object.entries(voiceRefR2Map)) {
-      try {
-        const filename = diaVoiceMap[charName];
-        await syncVoiceRefFromR2(r2Key, filename);
-        console.log(`[Podcast Audio]   ✓ Synced voice for ${charName}: ${filename}`);
-      } catch (err: any) {
-        console.warn(`[Podcast Audio]   ✗ Failed to sync voice for ${charName}: ${err.message} — will use predefined fallback`);
-        syncFailedSet.add(charName);
-      }
-    }
-  }
+  // No R2→Dia sync needed — voiceRefPath now stores the Dia server filename directly
+  // (files are already on the Dia server, either as predefined voices or uploaded references)
+
+  // Predefined voice filenames (from ./voices/ dir on Dia server)
+  const PREDEFINED_VOICE_NAMES = new Set(DEFAULT_DIA_VOICES.map(v => v.toLowerCase()));
 
   for (let i = 0; i < allLines.length; i++) {
     const line = allLines[i];
     const voiceId = voiceMap[line.speaker] || hostVoiceId;
-    // If sync failed for this speaker, fall back to predefined voice
-    const usePredefined = syncFailedSet.has(line.speaker) || !voiceRefR2Map[line.speaker];
-    const diaVoiceRef = usePredefined
-      ? (DEFAULT_DIA_VOICES[Object.keys(voiceMap).indexOf(line.speaker) % DEFAULT_DIA_VOICES.length] || "Adrian.wav")
-      : (diaVoiceMap[line.speaker] || "Adrian.wav");
+    const diaVoiceRef = diaVoiceMap[line.speaker] || DEFAULT_DIA_VOICES[0];
 
-    const logVoice = engine === "dia" ? diaVoiceRef : `${voiceId.substring(0, 8)}...`;
+    // Determine mode: if filename matches a predefined voice, use predefined; otherwise clone
+    const isPredefined = PREDEFINED_VOICE_NAMES.has(diaVoiceRef.toLowerCase());
+    const diaVoiceMode = isPredefined ? "predefined" : "clone";
+
+    const logVoice = engine === "dia" ? `${diaVoiceRef} (${diaVoiceMode})` : `${voiceId.substring(0, 8)}...`;
     console.log(`[Podcast Audio]   ${i + 1}/${allLines.length}: ${line.speaker} (${engine}: ${logVoice})`);
 
     try {
@@ -214,7 +202,7 @@ async function generateAudioInBackground(
         voiceId,
         narratorStyle: "conversational",
         diaVoiceRef: engine === "dia" ? diaVoiceRef : undefined,
-        diaVoiceMode: engine === "dia" ? (usePredefined ? "predefined" : "clone") : undefined,
+        diaVoiceMode: engine === "dia" ? diaVoiceMode : undefined,
       });
 
       // Upload to R2
