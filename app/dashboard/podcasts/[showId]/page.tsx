@@ -485,6 +485,7 @@ function EpisodeCard({
     PUBLISHED: "bg-green-600/20 text-green-300",
     REJECTED: "bg-red-500/20 text-red-400",
     FAILED_PODCAST: "bg-red-500/20 text-red-400",
+    FAILED_AUDIO: "bg-red-500/20 text-red-400",
   };
 
   const topicSegments = episode.segments.filter((s) => s.type === "TOPIC");

@@ -80,6 +80,7 @@ const STATUS_TO_STEP: Record<string, StepId> = {
   APPROVED: "review",
   PUBLISHED: "review",
   FAILED_PODCAST: "script",
+  FAILED_AUDIO: "audio",
 };
 
 const STEP_ORDER: StepId[] = ["script", "audio", "mix", "review"];
@@ -303,6 +304,11 @@ export default function EpisodeDetailPage() {
 
   const getStepState = (stepId: StepId): StepState => {
     if (episode.status === "FAILED_PODCAST") return stepId === "script" ? "failed" : "pending";
+    if (episode.status === "FAILED_AUDIO") {
+      if (stepId === "script") return "done";
+      if (stepId === "audio") return "failed";
+      return "pending";
+    }
     const stepIdx = STEP_ORDER.indexOf(stepId);
     if (stepIdx < currentStepIdx) return "done";
     if (stepIdx === currentStepIdx) return "active";
@@ -339,7 +345,7 @@ export default function EpisodeDetailPage() {
                 "px-2 py-0.5 rounded-full text-[10px] font-medium",
                 episode.status === "DRAFT"
                   ? "bg-gray-500/20 text-gray-400"
-                  : episode.status === "FAILED_PODCAST"
+                  : episode.status === "FAILED_PODCAST" || episode.status === "FAILED_AUDIO"
                   ? "bg-red-500/20 text-red-400"
                   : "bg-violet-500/20 text-violet-400"
               )}

@@ -141,7 +141,7 @@ export async function POST(req: NextRequest) {
     try {
       await prisma.podcastEpisode.update({
         where: { id: episodeId },
-        data: { status: "FAILED_PODCAST" },
+        data: { status: "FAILED_AUDIO" },
       });
     } catch (dbErr) {
       console.error(`[Podcast Audio] Failed to mark episode as failed`, dbErr);
@@ -272,7 +272,7 @@ async function generateAudioInBackground(
   await prisma.podcastEpisode.update({
     where: { id: episodeId },
     data: {
-      status: successCount > 0 ? "ASSEMBLING" : "FAILED_PODCAST",
+      status: successCount > 0 ? "ASSEMBLING" : "FAILED_AUDIO",
       scriptJson: {
         ...script,
         audioClips,

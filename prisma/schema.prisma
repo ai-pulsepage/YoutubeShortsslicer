@@ -621,6 +621,7 @@ enum PodcastEpisodeStatus {
   PUBLISHED
   REJECTED
   FAILED_PODCAST
+  FAILED_AUDIO
 }
 
 enum SegmentType {
