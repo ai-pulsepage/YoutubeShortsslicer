@@ -75,6 +75,7 @@ export async function POST(req: NextRequest) {
   // Build character voice maps
   const voiceMap: Record<string, string> = {};       // ElevenLabs voiceId map
   const diaVoiceMap: Record<string, string> = {};    // Dia voice reference filename map
+  let transcriptMap: Record<string, string> = {};    // Pre-computed transcripts for clone voices
   const hostParticipant = episode.participants.find((p: any) => p.character.role === "HOST") || episode.participants[0];
   const hostVoiceId = hostParticipant?.character?.voiceId || "";
 
@@ -121,6 +122,10 @@ export async function POST(req: NextRequest) {
     // (Dia pods are ephemeral — reference_audio/ is wiped on restart)
     const diaEndpoint = (process.env.DIA_TTS_URL || "").replace(/\/$/, "");
     await syncVoiceRefsTodia(diaVoiceMap, diaEndpoint);
+
+    // Load pre-computed transcripts from R2 for clone voices
+    // This allows Dia to skip Whisper transcription on each clip (~5-10s saved per clip)
+    transcriptMap = await loadVoiceTranscripts(diaVoiceMap);
   }
 
   // Update status to RECORDING
@@ -156,7 +161,7 @@ export async function POST(req: NextRequest) {
   console.log(`[Podcast Audio] Generating ${allLines.length} voice clips for "${episode.title}" via ${engine}`);
 
   // ─── Fire-and-forget: generate in background ────────────
-  generateAudioInBackground(episodeId, script, allLines, voiceMap, diaVoiceMap, hostVoiceId, engine).catch(async (err) => {
+  generateAudioInBackground(episodeId, script, allLines, voiceMap, diaVoiceMap, hostVoiceId, engine, transcriptMap).catch(async (err) => {
     console.error(`[Podcast Audio] Fatal background error: ${err.message}`);
     try {
       await prisma.podcastEpisode.update({
@@ -189,6 +194,7 @@ async function generateAudioInBackground(
   diaVoiceMap: Record<string, string>,
   hostVoiceId: string,
   engine: TtsEngine,
+  transcriptMap: Record<string, string> = {},
 ) {
   const audioFormat = engine === "dia" ? "wav" : "mp3";
   const mimeType = engine === "dia" ? "audio/wav" : "audio/mpeg";
@@ -271,6 +277,7 @@ async function generateAudioInBackground(
         narratorStyle: "conversational",
         diaVoiceRef: engine === "dia" ? currentVoiceRef : undefined,
         diaVoiceMode: engine === "dia" ? diaVoiceMode : undefined,
+        diaTranscript: engine === "dia" && diaVoiceMode === "clone" ? transcriptMap[currentVoiceRef] : undefined,
       });
 
       // Upload to R2
@@ -492,4 +499,94 @@ async function syncVoiceRefsTodia(
       console.warn(`[Podcast Audio]   ✗ Sync failed for ${filename}: ${err.message}`);
     }
   }
+}
+
+// ─── Load pre-computed transcripts from R2 ─────────────────
+
+/**
+ * Loads pre-computed Whisper transcripts from R2 for clone voice references.
+ * For each clone voice (e.g., "voice_preview_hank.mp3"), looks for a matching
+ * .txt file at "dia-reference-audio/voice_preview_hank.mp3.txt" in R2.
+ * Returns a map of voice filename → transcript text.
+ */
+async function loadVoiceTranscripts(
+  diaVoiceMap: Record<string, string>,
+): Promise<Record<string, string>> {
+  const PREDEFINED_VOICES = new Set(DEFAULT_DIA_VOICES.map(v => v.toLowerCase()));
+  const transcripts: Record<string, string> = {};
+  const seen = new Set<string>();
+
+  for (const [, voiceRef] of Object.entries(diaVoiceMap)) {
+    if (!voiceRef || PREDEFINED_VOICES.has(voiceRef.toLowerCase()) || seen.has(voiceRef)) continue;
+    seen.add(voiceRef);
+
+    try {
+      const txtKey = `dia-reference-audio/${voiceRef}.txt`;
+      const txtUrl = getR2PublicUrl(txtKey);
+      const res = await fetch(txtUrl, { signal: AbortSignal.timeout(5000) });
+      if (res.ok) {
+        const text = await res.text();
+        if (text.trim()) {
+          transcripts[voiceRef] = text.trim();
+          console.log(`[Podcast Audio] Loaded transcript for ${voiceRef} (${text.trim().length} chars)`);
+          continue;
+        }
+      }
+    } catch {
+      // Fall through to backfill
+    }
+
+    // ─── Backfill: no transcript cached yet — transcribe now via OpenAI Whisper ────
+    const openaiKey = process.env.OPENAI_API_KEY;
+    if (!openaiKey) continue;
+
+    try {
+      // Download the audio from R2
+      const audioUrl = getR2PublicUrl(`dia-reference-audio/${voiceRef}`);
+      const audioRes = await fetch(audioUrl, { signal: AbortSignal.timeout(15000) });
+      if (!audioRes.ok) continue;
+
+      const audioBuffer = await audioRes.arrayBuffer();
+      console.log(`[Podcast Audio] Backfilling transcript for ${voiceRef} via OpenAI Whisper...`);
+
+      // Transcribe with OpenAI Whisper
+      const whisperForm = new FormData();
+      const mimeType = voiceRef.endsWith(".mp3") ? "audio/mpeg" : "audio/wav";
+      whisperForm.append("file", new Blob([audioBuffer], { type: mimeType }), voiceRef);
+      whisperForm.append("model", "whisper-1");
+
+      const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${openaiKey}` },
+        body: whisperForm,
+      });
+
+      if (whisperRes.ok) {
+        const whisperData = await whisperRes.json();
+        const transcript = whisperData.text?.trim();
+        if (transcript) {
+          transcripts[voiceRef] = transcript;
+
+          // Save to R2 for future use
+          const { uploadBufferToR2 } = await import("@/lib/storage");
+          const txtKey = `dia-reference-audio/${voiceRef}.txt`;
+          await uploadBufferToR2(Buffer.from(transcript, "utf-8"), txtKey, "text/plain");
+          console.log(`[Podcast Audio] ✓ Backfilled transcript for ${voiceRef}: "${transcript.substring(0, 60)}..."`);
+        }
+      } else {
+        console.warn(`[Podcast Audio] Whisper API returned ${whisperRes.status} for ${voiceRef}`);
+      }
+    } catch (err: any) {
+      console.warn(`[Podcast Audio] Backfill transcription failed for ${voiceRef}: ${err.message}`);
+    }
+  }
+
+  const count = Object.keys(transcripts).length;
+  if (count > 0) {
+    console.log(`[Podcast Audio] ${count} voice transcript(s) loaded — Whisper will be skipped for these`);
+  } else {
+    console.log(`[Podcast Audio] No cached transcripts found — Dia will use Whisper (slower)`);
+  }
+
+  return transcripts;
 }

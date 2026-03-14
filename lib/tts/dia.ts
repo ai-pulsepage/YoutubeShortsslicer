@@ -15,6 +15,7 @@ interface DiaGenerateOptions {
     text: string;
     voiceRef?: string;      // Predefined voice filename (e.g., "Adrian.wav") or uploaded reference audio filename
     voiceMode?: "single_s1" | "single_s2" | "dialogue" | "clone" | "predefined";
+    transcript?: string;    // Pre-computed transcript of reference audio (skips Whisper)
     seed?: number;          // Fixed seed for consistency (-1 for random)
     speed?: number;         // 0.5-2.0
     outputFormat?: "wav" | "opus";
@@ -50,6 +51,7 @@ export async function generateSpeech(options: DiaGenerateOptions): Promise<Buffe
         text,
         voiceRef,
         voiceMode = voiceRef ? "predefined" : "single_s1",
+        transcript,
         seed = -1,
         speed = 1.0,
         outputFormat = "wav",
@@ -96,6 +98,11 @@ export async function generateSpeech(options: DiaGenerateOptions): Promise<Buffe
         body.clone_reference_filename = voiceRef;
     } else if (voiceMode === "clone" && voiceRef) {
         body.clone_reference_filename = voiceRef;
+        // Pass pre-computed transcript to skip Whisper entirely
+        if (transcript) {
+            body.transcript = transcript;
+            console.log(`[Dia TTS] Using cached transcript (${transcript.length} chars) — skipping Whisper`);
+        }
     }
 
     // Retry logic for Cloudflare 524 timeouts (transient — the Dia server is just slow, not broken)

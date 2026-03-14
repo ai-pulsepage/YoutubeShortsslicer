@@ -159,6 +159,42 @@ export async function POST(req: NextRequest) {
       const r2Key = `dia-reference-audio/${file.name}`;
       await uploadBufferToR2(buffer, r2Key, file.type || "audio/wav");
       console.log(`[Dia Voices] Backed up ${file.name} to R2: ${r2Key}`);
+
+      // Transcribe the voice reference with OpenAI Whisper and cache the transcript
+      // This allows Dia to skip its internal Whisper on every TTS call (~5-10s saved per clip)
+      try {
+        const openaiKey = process.env.OPENAI_API_KEY;
+        if (openaiKey) {
+          const whisperForm = new FormData();
+          const blob = new Blob([buffer], { type: file.type || "audio/mpeg" });
+          whisperForm.append("file", blob, file.name);
+          whisperForm.append("model", "whisper-1");
+
+          console.log(`[Dia Voices] Transcribing ${file.name} with OpenAI Whisper...`);
+          const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${openaiKey}` },
+            body: whisperForm,
+          });
+
+          if (whisperRes.ok) {
+            const whisperData = await whisperRes.json();
+            const transcript = whisperData.text?.trim();
+            if (transcript) {
+              // Save transcript to R2 alongside the audio
+              const txtKey = `dia-reference-audio/${file.name}.txt`;
+              await uploadBufferToR2(Buffer.from(transcript, "utf-8"), txtKey, "text/plain");
+              console.log(`[Dia Voices] ✓ Transcript cached: "${transcript.substring(0, 80)}..." → ${txtKey}`);
+            }
+          } else {
+            console.warn(`[Dia Voices] Whisper transcription failed: ${whisperRes.status}`);
+          }
+        } else {
+          console.warn(`[Dia Voices] OPENAI_API_KEY not set — skipping transcript caching`);
+        }
+      } catch (transcribeErr: any) {
+        console.warn(`[Dia Voices] Transcription failed (non-critical): ${transcribeErr.message}`);
+      }
     } catch (err: any) {
       console.warn(`[Dia Voices] R2 backup failed (non-critical): ${err.message}`);
     }

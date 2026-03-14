@@ -40,6 +40,7 @@ export interface VoiceoverOptions {
     speakerWav?: string; // XTTS voice clone sample (R2 URL)
     diaVoiceRef?: string; // Dia predefined voice filename or clone reference
     diaVoiceMode?: "single_s1" | "single_s2" | "dialogue" | "clone" | "predefined";
+    diaTranscript?: string; // Pre-computed transcript of reference audio (skips Whisper)
     diaSeed?: number; // Fixed seed for Dia voice consistency
 }
 
@@ -67,6 +68,7 @@ export async function generateVoiceover(options: VoiceoverOptions): Promise<Buff
         speakerWav,
         diaVoiceRef,
         diaVoiceMode,
+        diaTranscript,
         diaSeed,
     } = options;
 
@@ -115,6 +117,7 @@ export async function generateVoiceover(options: VoiceoverOptions): Promise<Buff
                 text,
                 voiceRef: diaVoiceRef || voiceId, // Use diaVoiceRef if set, fall back to voiceId
                 voiceMode: diaVoiceMode || (diaVoiceRef ? "predefined" : "single_s1"),
+                transcript: diaTranscript,
                 speed: effectiveSpeed,
                 seed: diaSeed,
             });
