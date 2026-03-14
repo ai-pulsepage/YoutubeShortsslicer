@@ -126,6 +126,10 @@ export async function generateSpeech(options: DiaGenerateOptions): Promise<Buffe
 
     console.log(`[Dia TTS] Generating: "${diaText.substring(0, 60)}..." | voice: ${voiceRef || "random"} | mode: ${voiceMode}`);
 
+    // Clone mode is ~3-5x slower — use smaller chunks to stay under Cloudflare's 100s timeout
+    const isClone = voiceMode === "clone";
+    const chunkSize = isClone ? 80 : 120;
+
     // Use the full-control /tts endpoint for maximum flexibility
     const body: Record<string, any> = {
         text: diaText,
@@ -134,7 +138,7 @@ export async function generateSpeech(options: DiaGenerateOptions): Promise<Buffe
         speed_factor: speed,
         seed,
         split_text: true,
-        chunk_size: 120,
+        chunk_size: chunkSize,
         // Generation quality params
         cfg_scale: 3.0,
         temperature: 1.3,
@@ -149,19 +153,56 @@ export async function generateSpeech(options: DiaGenerateOptions): Promise<Buffe
         body.clone_reference_filename = voiceRef;
     }
 
-    const response = await fetch(`${endpoint}/tts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-    });
+    // Retry logic for Cloudflare 524 timeouts (transient — the Dia server is just slow, not broken)
+    const MAX_RETRIES = 3;
+    const RETRY_DELAYS = [5000, 15000]; // 5s, then 15s between retries
+    const FETCH_TIMEOUT = 95000; // 95s — just under Cloudflare's ~100s limit
 
-    if (!response.ok) {
-        const err = await response.text().catch(() => "");
-        throw new Error(`Dia TTS error: ${response.status} — ${err}`);
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+
+            const response = await fetch(`${endpoint}/tts`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+                signal: controller.signal,
+            });
+
+            clearTimeout(timeout);
+
+            if (!response.ok) {
+                const errText = await response.text().catch(() => "");
+
+                // Retry on 524 (Cloudflare timeout) or 502/503 (server overload)
+                if ((response.status === 524 || response.status === 502 || response.status === 503) && attempt < MAX_RETRIES) {
+                    const delay = RETRY_DELAYS[attempt - 1] || 15000;
+                    console.warn(`[Dia TTS] Attempt ${attempt}/${MAX_RETRIES} got ${response.status} — retrying in ${delay / 1000}s...`);
+                    await new Promise(r => setTimeout(r, delay));
+                    continue;
+                }
+
+                throw new Error(`Dia TTS error: ${response.status} — ${errText.substring(0, 200)}`);
+            }
+
+            const arrayBuffer = await response.arrayBuffer();
+            if (attempt > 1) {
+                console.log(`[Dia TTS] Succeeded on attempt ${attempt}`);
+            }
+            return Buffer.from(arrayBuffer);
+        } catch (err: any) {
+            if (err.name === "AbortError" && attempt < MAX_RETRIES) {
+                const delay = RETRY_DELAYS[attempt - 1] || 15000;
+                console.warn(`[Dia TTS] Attempt ${attempt}/${MAX_RETRIES} timed out — retrying in ${delay / 1000}s...`);
+                await new Promise(r => setTimeout(r, delay));
+                continue;
+            }
+            throw err;
+        }
     }
 
-    const arrayBuffer = await response.arrayBuffer();
-    return Buffer.from(arrayBuffer);
+    throw new Error("Dia TTS: max retries exceeded");
 }
 
 /**
