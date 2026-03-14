@@ -761,12 +761,83 @@ function AudioStepPanel({
     }
     return "elevenlabs";
   });
+  const [selectedClips, setSelectedClips] = useState<Set<number>>(new Set());
+  const [regeneratingSelected, setRegeneratingSelected] = useState(false);
 
   // Check if audio clips already exist in scriptData
   const existingClips = scriptData?.audioClips || [];
   const hasAudio = existingClips.filter((c: any) => c.url).length > 0;
   const audioProgress = scriptData?.audioProgress || null;
   const audioStats = scriptData?.audioStats || null;
+  const failedClipCount = existingClips.filter((c: any) => !c.url).length;
+
+  // Clear selection when clips change
+  useEffect(() => {
+    setSelectedClips(new Set());
+  }, [existingClips.length]);
+
+  const toggleClipSelection = (idx: number) => {
+    setSelectedClips(prev => {
+      const next = new Set(prev);
+      next.has(idx) ? next.delete(idx) : next.add(idx);
+      return next;
+    });
+  };
+
+  const selectAllFailed = () => {
+    const failed = new Set<number>();
+    existingClips.forEach((c: any, i: number) => {
+      if (!c.url) failed.add(i);
+    });
+    setSelectedClips(failed);
+  };
+
+  const regenerateSelected = async () => {
+    if (selectedClips.size === 0) return;
+    if (!confirm(`Regenerate ${selectedClips.size} selected clip(s)? Their audio will be re-recorded.`)) return;
+
+    setRegeneratingSelected(true);
+    try {
+      // Clear URLs for selected clips in the scriptJson
+      const updatedClips = [...existingClips];
+      for (const idx of selectedClips) {
+        if (updatedClips[idx]) {
+          updatedClips[idx] = { ...updatedClips[idx], url: "", durationEstimate: 0 };
+        }
+      }
+
+      // Save the updated scriptJson with cleared clips
+      await fetch(`/api/podcast/episodes?id=${episode.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "READY",
+          scriptJson: { ...scriptData, audioClips: updatedClips, audioProgress: null },
+        }),
+      });
+
+      // Now trigger audio generation — smart retry will only regenerate cleared clips
+      setSelectedClips(new Set());
+      setGeneratingAudio(true);
+      const res = await fetch("/api/podcast/audio/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ episodeId: episode.id, engine: audioEngine }),
+      });
+      const data = await res.json();
+      if (res.ok && data.dispatched) {
+        onRefresh();
+      } else if (!res.ok) {
+        alert(`Regeneration failed: ${data.error}`);
+        setGeneratingAudio(false);
+      }
+    } catch (err: any) {
+      alert(`Regeneration error: ${err.message}`);
+      setGeneratingAudio(false);
+    } finally {
+      setRegeneratingSelected(false);
+    }
+  };
 
   // Poll while RECORDING status — audio generating in background
   useEffect(() => {
@@ -987,6 +1058,45 @@ function AudioStepPanel({
           </div>
         )}
 
+        {/* Selection toolbar */}
+        {hasAudio && !generatingAudio && selectedClips.size > 0 && (
+          <div className="flex items-center gap-2 mb-3 p-3 bg-violet-500/10 border border-violet-500/20 rounded-xl">
+            <span className="text-xs text-violet-400 font-medium">
+              {selectedClips.size} clip{selectedClips.size > 1 ? "s" : ""} selected
+            </span>
+            <div className="flex-1" />
+            <button
+              onClick={() => setSelectedClips(new Set())}
+              className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors"
+            >
+              Deselect All
+            </button>
+            <button
+              onClick={regenerateSelected}
+              disabled={regeneratingSelected}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-50 transition-colors"
+            >
+              <RotateCcw className="w-3 h-3" />
+              Regenerate Selected
+            </button>
+          </div>
+        )}
+
+        {/* Select failed clips shortcut */}
+        {hasAudio && !generatingAudio && failedClipCount > 0 && selectedClips.size === 0 && (
+          <div className="flex items-center gap-2 mb-3 p-2 bg-red-500/5 border border-red-500/10 rounded-lg">
+            <span className="text-[10px] text-red-400">
+              {failedClipCount} clip{failedClipCount > 1 ? "s" : ""} failed
+            </span>
+            <button
+              onClick={selectAllFailed}
+              className="text-[10px] text-red-400 hover:text-red-300 underline transition-colors"
+            >
+              Select all failed
+            </button>
+          </div>
+        )}
+
         {/* Audio clips list */}
         {hasAudio && (
           <div className="space-y-1">
@@ -998,10 +1108,27 @@ function AudioStepPanel({
                 <div
                   key={i}
                   className={cn(
-                    "flex items-center gap-3 py-2 px-3 rounded-lg transition-colors",
-                    playingIdx === i ? "bg-violet-500/10" : "hover:bg-gray-800/30"
+                    "flex items-center gap-2 py-2 px-3 rounded-lg transition-colors cursor-pointer",
+                    selectedClips.has(i)
+                      ? "bg-violet-500/15 border border-violet-500/30"
+                      : playingIdx === i
+                        ? "bg-violet-500/10"
+                        : "hover:bg-gray-800/30"
                   )}
+                  onClick={(e) => {
+                    // Don't toggle selection when clicking play button
+                    if ((e.target as HTMLElement).closest('button')) return;
+                    toggleClipSelection(i);
+                  }}
                 >
+                  {/* Checkbox */}
+                  <input
+                    type="checkbox"
+                    checked={selectedClips.has(i)}
+                    onChange={() => toggleClipSelection(i)}
+                    className="w-3.5 h-3.5 rounded border-gray-600 bg-gray-800 text-violet-500 focus:ring-violet-500 focus:ring-offset-0 flex-shrink-0 cursor-pointer"
+                  />
+                  {/* Play button */}
                   <button
                     onClick={() => clip.url && playClip(clip.url, i)}
                     disabled={!clip.url}
@@ -1022,7 +1149,10 @@ function AudioStepPanel({
                       <XCircle className="w-3 h-3" />
                     )}
                   </button>
-                  <span className="text-xs font-semibold text-violet-400 whitespace-nowrap min-w-[100px]">
+                  <span className="text-[10px] text-gray-600 flex-shrink-0 w-8 text-right">
+                    #{i + 1}
+                  </span>
+                  <span className="text-xs font-semibold text-violet-400 whitespace-nowrap min-w-[80px]">
                     {clip.speaker}:
                   </span>
                   <span className="text-xs text-gray-400 truncate flex-1">
