@@ -128,7 +128,7 @@ export async function generateSpeech(options: DiaGenerateOptions): Promise<Buffe
 
     // Clone mode is ~3-5x slower — use smaller chunks to stay under Cloudflare's 100s timeout
     const isClone = voiceMode === "clone";
-    const chunkSize = isClone ? 80 : 120;
+    const chunkSize = isClone ? 100 : 120;
 
     // Use the full-control /tts endpoint for maximum flexibility
     const body: Record<string, any> = {
