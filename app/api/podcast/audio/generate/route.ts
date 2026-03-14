@@ -190,11 +190,15 @@ async function generateAudioInBackground(
   hostVoiceId: string,
   engine: TtsEngine,
 ) {
+  const audioFormat = engine === "dia" ? "wav" : "mp3";
+  const mimeType = engine === "dia" ? "audio/wav" : "audio/mpeg";
+
+  // ─── Smart retry: load existing clips from previous run ────
+  const existingClips: { speaker: string; text: string; url: string; durationEstimate: number }[] = script.audioClips || [];
   const audioClips: { speaker: string; text: string; url: string; durationEstimate: number }[] = [];
   let successCount = 0;
   let failCount = 0;
-  const audioFormat = engine === "dia" ? "wav" : "mp3";
-  const mimeType = engine === "dia" ? "audio/wav" : "audio/mpeg";
+  let skippedCount = 0;
 
   // Helper: check if user cancelled (reset to DRAFT/READY) during generation
   const wasAborted = async (): Promise<boolean> => {
@@ -220,11 +224,25 @@ async function generateAudioInBackground(
     const voiceId = voiceMap[line.speaker] || hostVoiceId;
     const diaVoiceRef = diaVoiceMap[line.speaker] || DEFAULT_DIA_VOICES[0];
 
+    // ─── Smart retry: skip clips that already have URLs ────
+    const existingClip = existingClips[i];
+    if (existingClip && existingClip.url) {
+      // Already generated successfully in a previous run — keep it
+      audioClips.push(existingClip);
+      successCount++;
+      skippedCount++;
+      if (skippedCount <= 3 || skippedCount % 20 === 0) {
+        console.log(`[Podcast Audio]   ${i + 1}/${allLines.length}: SKIP (already has audio)`);
+      }
+      continue;
+    }
+
     // Determine mode: if filename matches a predefined voice, use predefined; otherwise clone
     const isPredefined = PREDEFINED_VOICE_NAMES.has(diaVoiceRef.toLowerCase());
-    const diaVoiceMode = isPredefined ? "predefined" : "clone";
+    let diaVoiceMode = isPredefined ? "predefined" : "clone";
+    let currentVoiceRef = diaVoiceRef;
 
-    const logVoice = engine === "dia" ? `${diaVoiceRef} (${diaVoiceMode})` : `${voiceId.substring(0, 8)}...`;
+    const logVoice = engine === "dia" ? `${currentVoiceRef} (${diaVoiceMode})` : `${voiceId.substring(0, 8)}...`;
     console.log(`[Podcast Audio]   ${i + 1}/${allLines.length}: ${line.speaker} (${engine}: ${logVoice})`);
 
     try {
@@ -233,7 +251,7 @@ async function generateAudioInBackground(
         engine,
         voiceId,
         narratorStyle: "conversational",
-        diaVoiceRef: engine === "dia" ? diaVoiceRef : undefined,
+        diaVoiceRef: engine === "dia" ? currentVoiceRef : undefined,
         diaVoiceMode: engine === "dia" ? diaVoiceMode : undefined,
       });
 
@@ -257,6 +275,40 @@ async function generateAudioInBackground(
 
       successCount++;
     } catch (err: any) {
+      // ─── Fallback: on clone/whisper failure, retry with predefined voice ────
+      if (engine === "dia" && diaVoiceMode === "clone" && err.message?.includes("400")) {
+        const fallbackVoice = DEFAULT_DIA_VOICES[i % DEFAULT_DIA_VOICES.length];
+        console.warn(`[Podcast Audio]   Clone failed for line ${i} — retrying with predefined voice: ${fallbackVoice}`);
+        try {
+          const audioBuffer = await generateVoiceover({
+            text: line.text,
+            engine,
+            voiceId,
+            narratorStyle: "conversational",
+            diaVoiceRef: fallbackVoice,
+            diaVoiceMode: "predefined",
+          });
+
+          const key = `podcast-audio/${episodeId}/line-${String(i).padStart(4, "0")}.${audioFormat}`;
+          await uploadBuffer(audioBuffer, key, mimeType);
+          const publicUrl = getR2PublicUrl(key);
+          const wordCount = line.text.split(/\s+/).length;
+          const durationEstimate = (wordCount / 150) * 60;
+
+          audioClips.push({
+            speaker: line.speaker,
+            text: line.text,
+            url: publicUrl,
+            durationEstimate,
+          });
+          successCount++;
+          console.log(`[Podcast Audio]   FALLBACK succeeded for line ${i} with ${fallbackVoice}`);
+          continue;
+        } catch (fallbackErr: any) {
+          console.error(`[Podcast Audio]   FALLBACK also failed for line ${i}: ${fallbackErr.message}`);
+        }
+      }
+
       console.error(`[Podcast Audio]   FAILED line ${i}: ${err.message}`);
       failCount++;
       // Push empty clip so indexing stays correct

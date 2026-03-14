@@ -101,7 +101,7 @@ export async function generateSpeech(options: DiaGenerateOptions): Promise<Buffe
     // Retry logic for Cloudflare 524 timeouts (transient — the Dia server is just slow, not broken)
     const MAX_RETRIES = 3;
     const RETRY_DELAYS = [5000, 15000]; // 5s, then 15s between retries
-    const FETCH_TIMEOUT = 95000; // 95s — just under Cloudflare's ~100s limit
+    const FETCH_TIMEOUT = 120000; // 120s — clone mode needs more time than Cloudflare's ~100s limit
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
