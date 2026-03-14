@@ -268,6 +268,16 @@ async function generateWithDeepSeek(
     segments: scriptSegments,
   };
 
+  // ─── Abort check: if user reset during generation, don't overwrite ───
+  const currentEp = await prisma.podcastEpisode.findUnique({
+    where: { id: episodeId },
+    select: { status: true },
+  });
+  if (currentEp && currentEp.status !== "SCRIPTING") {
+    log(`Status changed to ${currentEp.status} during generation — aborting final write`);
+    return script; // Return but don't save — user cancelled
+  }
+
   // Save script to DB and mark READY
   await prisma.podcastEpisode.update({
     where: { id: episodeId },

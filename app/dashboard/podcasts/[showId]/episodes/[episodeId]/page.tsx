@@ -222,6 +222,41 @@ export default function EpisodeDetailPage() {
     return () => clearInterval(interval);
   }, [episode?.status, showId, episodeId, fetchScript]);
 
+  // ─── Poll while RECORDING (audio generation) ────────────
+  const [audioProgress, setAudioProgress] = useState<string | null>(null);
+  useEffect(() => {
+    if (!episode || episode.status !== "RECORDING") {
+      setAudioProgress(null);
+      return;
+    }
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/podcast/episodes?showId=${showId}`);
+        if (!res.ok) return;
+        const episodes = await res.json();
+        const ep = episodes.find((e: any) => e.id === episodeId);
+        if (ep) {
+          setEpisode(ep);
+          // Extract audio progress from scriptJson
+          const progress = ep.scriptJson?.audioProgress;
+          if (progress) setAudioProgress(progress);
+
+          if (ep.status !== "RECORDING") {
+            // Audio generation finished (ASSEMBLING, FAILED_AUDIO, etc.)
+            setAudioProgress(null);
+            clearInterval(interval);
+            fetchScript(); // Reload script with audio clips
+          }
+        }
+      } catch (err) {
+        console.error("Audio polling error", err);
+      }
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [episode?.status, showId, episodeId, fetchScript]);
+
   const generateScript = async () => {
     if (!episode) return;
     setGenerating(true);
@@ -251,21 +286,61 @@ export default function EpisodeDetailPage() {
     }
   };
 
-  const resetToDraft = async () => {
-    setGenerating(false); // Always clear generating state on reset
+  // ─── Step-back actions ─────────────────────────────────
+
+  // Go back to script — preserves script, just changes status so user can review/re-edit
+  const goBackToScript = async () => {
+    setGenerating(false);
     try {
       const res = await fetch(`/api/podcast/episodes?id=${episodeId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "DRAFT", clearScript: true }),
+        body: JSON.stringify({ status: "READY" }),
       });
       if (res.ok) {
-        setScriptData(null);
-        hasInitialized.current = false; // Allow step to reset to script
+        hasInitialized.current = false;
         await fetchEpisode();
+        setActiveStep("script");
       }
     } catch (err) {
-      console.error("Failed to reset", err);
+      console.error("Failed to go back to script", err);
+    }
+  };
+
+  // Retry audio — keeps script, sets to READY so Generate Audio button appears
+  const retryAudio = async () => {
+    try {
+      const res = await fetch(`/api/podcast/episodes?id=${episodeId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "READY" }),
+      });
+      if (res.ok) {
+        await fetchEpisode();
+        setActiveStep("audio");
+      }
+    } catch (err) {
+      console.error("Failed to retry audio", err);
+    }
+  };
+
+  // Regenerate script — sets DRAFT (preserves script in DB), then triggers new generation
+  const regenerateScript = async () => {
+    if (!confirm("This will regenerate the entire script. Audio will need to be redone too. Continue?")) return;
+    setGenerating(false);
+    try {
+      const res = await fetch(`/api/podcast/episodes?id=${episodeId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "DRAFT" }),
+      });
+      if (res.ok) {
+        hasInitialized.current = false;
+        await fetchEpisode();
+        setActiveStep("script");
+      }
+    } catch (err) {
+      console.error("Failed to regenerate script", err);
     }
   };
 
@@ -363,16 +438,41 @@ export default function EpisodeDetailPage() {
           </div>
         </div>
 
-        {/* Reset button — always enabled when not in DRAFT */}
-        {episode.status !== "DRAFT" && (
-          <button
-            onClick={resetToDraft}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-red-500/10 text-red-400 hover:text-red-300 hover:bg-red-500/20 border border-red-500/20 transition-colors"
-          >
-            <RotateCcw className="w-3 h-3" />
-            Reset to Draft
-          </button>
-        )}
+        {/* Contextual step-back buttons */}
+        <div className="flex items-center gap-2">
+          {/* Retry Audio — when audio failed */}
+          {(episode.status === "FAILED_AUDIO" || (episode.status === "FAILED_PODCAST" && episode.scriptJson)) && (
+            <button
+              onClick={retryAudio}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-amber-500/10 text-amber-400 hover:text-amber-300 hover:bg-amber-500/20 border border-amber-500/20 transition-colors"
+            >
+              <RotateCcw className="w-3 h-3" />
+              Retry Audio
+            </button>
+          )}
+
+          {/* Back to Script — from audio/mix/review steps */}
+          {["RECORDING", "ASSEMBLING", "FAILED_AUDIO"].includes(episode.status) && (
+            <button
+              onClick={goBackToScript}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-blue-500/10 text-blue-400 hover:text-blue-300 hover:bg-blue-500/20 border border-blue-500/20 transition-colors"
+            >
+              <ChevronLeft className="w-3 h-3" />
+              Back to Script
+            </button>
+          )}
+
+          {/* Regenerate Script — nuclear option for script */}
+          {episode.status !== "DRAFT" && episode.status !== "SCRIPTING" && (
+            <button
+              onClick={regenerateScript}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-red-500/10 text-red-400 hover:text-red-300 hover:bg-red-500/20 border border-red-500/20 transition-colors"
+            >
+              <RotateCcw className="w-3 h-3" />
+              Regenerate Script
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ─── Pipeline Stepper ─────────────────────────── */}
@@ -400,7 +500,8 @@ export default function EpisodeDetailPage() {
                       activeStep === step.id && "ring-2 ring-violet-500/50"
                     )}
                   >
-                    {state === "active" && episode.status === "SCRIPTING" && step.id === "script" ? (
+                    {((state === "active" && episode.status === "SCRIPTING" && step.id === "script") ||
+                      (state === "active" && episode.status === "RECORDING" && step.id === "audio")) ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : state === "done" ? (
                       <CheckCircle2 className="w-4 h-4" />
@@ -788,7 +889,9 @@ function AudioStepPanel({
               ) : (
                 <Volume2 className="w-3 h-3" />
               )}
-              {generatingAudio ? "Generating..." : "Generate Audio"}
+              {generatingAudio ? (audioProgress && audioProgress !== "complete"
+                ? `Generating ${audioProgress}...`
+                : "Generating...") : "Generate Audio"}
             </button>
           )}
           {hasAudio && (

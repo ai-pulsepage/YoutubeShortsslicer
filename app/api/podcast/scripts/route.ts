@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { generateEpisodeScript } from "@/lib/podcast/script-generator";
+import { prisma } from "@/lib/prisma";
+
+// Statuses that allow script generation
+const ALLOWED_SCRIPT_STATUSES = new Set([
+  "DRAFT",         // Fresh episode
+  "READY",         // User wants to regenerate script
+  "FAILED_PODCAST", // Previous script attempt failed
+  "FAILED_AUDIO",  // Audio failed — user might want to redo from script
+]);
 
 // POST /api/podcast/scripts — Generate script for an episode
 export async function POST(req: NextRequest) {
@@ -14,6 +23,26 @@ export async function POST(req: NextRequest) {
     console.log(`[PODCAST SCRIPT] Received request: episodeId=${episodeId}, provider=${provider}`);
     if (!episodeId) {
       return NextResponse.json({ error: "episodeId required" }, { status: 400 });
+    }
+
+    // ─── Status Gate ─────────────────────────────────────
+    const episode = await prisma.podcastEpisode.findUnique({
+      where: { id: episodeId },
+      select: { status: true, show: { select: { userId: true } } },
+    });
+
+    if (!episode || episode.show.userId !== session.user.id) {
+      return NextResponse.json({ error: "Episode not found" }, { status: 404 });
+    }
+
+    if (!ALLOWED_SCRIPT_STATUSES.has(episode.status)) {
+      return NextResponse.json({
+        error: `Cannot generate script while episode is ${episode.status}. ${
+          episode.status === "SCRIPTING" ? "Script generation is already in progress." :
+          episode.status === "RECORDING" ? "Audio generation is in progress — wait for it to finish or go back to script first." :
+          "Go back to an earlier step first."
+        }`,
+      }, { status: 409 });
     }
 
     const result = await generateEpisodeScript(episodeId, session.user.id, provider);

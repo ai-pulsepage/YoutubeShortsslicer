@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
         where: { id: episodeId },
         data: {
           scriptJson: enrichedScript as any,
-          status: "SCRIPTING",
+          status: "READY",
         },
       });
       console.log(`[PODCAST WEBHOOK] Script saved for episode ${episodeId}`);

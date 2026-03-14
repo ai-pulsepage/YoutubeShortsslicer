@@ -157,6 +157,15 @@ export async function PUT(req: NextRequest) {
   const body = await req.json();
   const { title, durationMin, status, clearScript } = body;
 
+  // Validate status against allowed values
+  const VALID_STATUSES = new Set([
+    "DRAFT", "SCRIPTING", "READY", "RECORDING", "ASSEMBLING",
+    "PUBLISHED", "FAILED_PODCAST", "FAILED_AUDIO",
+  ]);
+  if (status !== undefined && !VALID_STATUSES.has(status)) {
+    return NextResponse.json({ error: `Invalid status: ${status}` }, { status: 400 });
+  }
+
   const updated = await prisma.podcastEpisode.update({
     where: { id },
     data: {

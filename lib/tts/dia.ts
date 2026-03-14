@@ -13,7 +13,7 @@
 
 interface DiaGenerateOptions {
     text: string;
-    voiceRef?: string;      // Predefined voice filename (e.g., "voice_01.wav") or reference audio filename
+    voiceRef?: string;      // Predefined voice filename (e.g., "Adrian.wav") or uploaded reference audio filename
     voiceMode?: "single_s1" | "single_s2" | "dialogue" | "clone" | "predefined";
     seed?: number;          // Fixed seed for consistency (-1 for random)
     speed?: number;         // 0.5-2.0
@@ -35,62 +35,6 @@ function getDiaEndpoint(): string {
         );
     }
     return url.replace(/\/$/, ""); // Remove trailing slash
-}
-
-// Track which voice refs have already been synced to avoid re-uploading every line
-const syncedVoiceRefs = new Set<string>();
-
-/**
- * Sync a voice reference from R2 to the Dia TTS Server.
- * Downloads from R2 → uploads to Dia server's /reference_audio/ directory.
- * Cached per session so we only upload once per pod lifecycle.
- */
-export async function syncVoiceRefFromR2(r2Key: string, filename: string): Promise<string> {
-    // Skip if already synced this session
-    if (syncedVoiceRefs.has(r2Key)) {
-        return filename;
-    }
-
-    const endpoint = getDiaEndpoint();
-
-    // Download from R2 via public URL
-    const { getR2PublicUrl } = await import("@/lib/storage");
-    const r2Url = getR2PublicUrl(r2Key);
-
-    console.log(`[Dia TTS] Syncing voice ref from R2: ${r2Key} → ${filename}`);
-
-    const r2Response = await fetch(r2Url);
-    if (!r2Response.ok) {
-        throw new Error(`Failed to download voice ref from R2: ${r2Response.status}`);
-    }
-    const audioBuffer = await r2Response.arrayBuffer();
-
-    // Upload to Dia server's reference_audio directory via multipart form
-    const formData = new FormData();
-    const blob = new Blob([audioBuffer], { type: "audio/wav" });
-    formData.append("file", blob, filename);
-
-    const uploadResponse = await fetch(`${endpoint}/upload_reference`, {
-        method: "POST",
-        body: formData,
-    });
-
-    if (!uploadResponse.ok) {
-        // Fallback: try uploading via /import_reference endpoint (varies by Dia-TTS-Server version)
-        const fallbackResponse = await fetch(`${endpoint}/import_reference`, {
-            method: "POST",
-            body: formData,
-        });
-        if (!fallbackResponse.ok) {
-            console.warn(`[Dia TTS] Could not auto-upload voice ref to server — using predefined fallback`);
-            return filename;
-        }
-    }
-
-    syncedVoiceRefs.add(r2Key);
-    console.log(`[Dia TTS] Voice ref synced: ${filename} (${(audioBuffer.byteLength / 1024).toFixed(0)}KB)`);
-
-    return filename;
 }
 
 /**

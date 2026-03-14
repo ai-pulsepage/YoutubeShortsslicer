@@ -47,6 +47,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Episode not found" }, { status: 404 });
   }
 
+  // ─── Status Gate ─────────────────────────────────────
+  const ALLOWED_AUDIO_STATUSES = new Set(["READY", "FAILED_AUDIO"]);
+  // Also allow FAILED_PODCAST if a script exists (was actually an audio failure from before FAILED_AUDIO existed)
+  const canGenerate = ALLOWED_AUDIO_STATUSES.has(episode.status) ||
+    (episode.status === "FAILED_PODCAST" && episode.scriptJson);
+
+  if (!canGenerate) {
+    return NextResponse.json({
+      error: `Cannot generate audio while episode is ${episode.status}. ${
+        episode.status === "SCRIPTING" ? "Script is still generating — wait for it to finish." :
+        episode.status === "RECORDING" ? "Audio generation is already in progress." :
+        episode.status === "DRAFT" ? "Generate a script first." :
+        "Go back to the audio step first."
+      }`,
+    }, { status: 409 });
+  }
+
   if (!episode.scriptJson) {
     return NextResponse.json({ error: "No script — generate a script first" }, { status: 400 });
   }
@@ -58,7 +75,6 @@ export async function POST(req: NextRequest) {
   // Build character voice maps
   const voiceMap: Record<string, string> = {};       // ElevenLabs voiceId map
   const diaVoiceMap: Record<string, string> = {};    // Dia voice reference filename map
-  const voiceRefR2Map: Record<string, string> = {};  // Character name → R2 voiceRefPath (for R2→Dia sync)
   const hostParticipant = episode.participants.find((p: any) => p.character.role === "HOST") || episode.participants[0];
   const hostVoiceId = hostParticipant?.character?.voiceId || "";
 
@@ -74,7 +90,6 @@ export async function POST(req: NextRequest) {
     // (e.g., "Adrian.wav" for predefined or "voice_preview_hank.mp3" for clone reference)
     if (p.character.voiceRefPath) {
       diaVoiceMap[name] = p.character.voiceRefPath;
-      voiceRefR2Map[name] = p.character.voiceRefPath; // Track that this character has a voice ref
     } else {
       diaVoiceMap[name] = defaultDiaVoices[pi % defaultDiaVoices.length];
     }
@@ -136,7 +151,7 @@ export async function POST(req: NextRequest) {
   console.log(`[Podcast Audio] Generating ${allLines.length} voice clips for "${episode.title}" via ${engine}`);
 
   // ─── Fire-and-forget: generate in background ────────────
-  generateAudioInBackground(episodeId, script, allLines, voiceMap, diaVoiceMap, voiceRefR2Map, hostVoiceId, engine).catch(async (err) => {
+  generateAudioInBackground(episodeId, script, allLines, voiceMap, diaVoiceMap, hostVoiceId, engine).catch(async (err) => {
     console.error(`[Podcast Audio] Fatal background error: ${err.message}`);
     try {
       await prisma.podcastEpisode.update({
@@ -167,7 +182,6 @@ async function generateAudioInBackground(
   allLines: { speaker: string; text: string; segIdx: number; lineIdx: number }[],
   voiceMap: Record<string, string>,
   diaVoiceMap: Record<string, string>,
-  voiceRefR2Map: Record<string, string>,
   hostVoiceId: string,
   engine: TtsEngine,
 ) {
@@ -177,8 +191,21 @@ async function generateAudioInBackground(
   const audioFormat = engine === "dia" ? "wav" : "mp3";
   const mimeType = engine === "dia" ? "audio/wav" : "audio/mpeg";
 
-  // No R2→Dia sync needed — voiceRefPath now stores the Dia server filename directly
-  // (files are already on the Dia server, either as predefined voices or uploaded references)
+  // Helper: check if user cancelled (reset to DRAFT/READY) during generation
+  const wasAborted = async (): Promise<boolean> => {
+    try {
+      const current = await prisma.podcastEpisode.findUnique({
+        where: { id: episodeId },
+        select: { status: true },
+      });
+      // If status changed away from RECORDING, user cancelled
+      if (current && current.status !== "RECORDING") {
+        console.log(`[Podcast Audio] Detected status change to ${current.status} — aborting background write`);
+        return true;
+      }
+    } catch { /* ignore check errors */ }
+    return false;
+  };
 
   // Predefined voice filenames (from ./voices/ dir on Dia server)
   const PREDEFINED_VOICE_NAMES = new Set(DEFAULT_DIA_VOICES.map(v => v.toLowerCase()));
@@ -267,6 +294,12 @@ async function generateAudioInBackground(
 
   const totalDuration = audioClips.reduce((sum, c) => sum + c.durationEstimate, 0);
   console.log(`[Podcast Audio] Done! ${successCount}/${allLines.length} clips generated, ~${Math.round(totalDuration)}s total`);
+
+  // ─── Abort check: if user reset during generation, don't overwrite ───
+  if (await wasAborted()) {
+    console.log(`[Podcast Audio] Skipping final write — episode was reset during generation`);
+    return;
+  }
 
   // Final save with completed status
   await prisma.podcastEpisode.update({
