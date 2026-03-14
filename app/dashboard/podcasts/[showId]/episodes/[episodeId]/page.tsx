@@ -24,6 +24,7 @@ import {
   Headphones,
   Brain,
   Cpu,
+  Download,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -111,6 +112,8 @@ export default function EpisodeDetailPage() {
   const [editText, setEditText] = useState("");
   const [savingScript, setSavingScript] = useState(false);
   const [scriptDirty, setScriptDirty] = useState(false);
+  const [mixing, setMixing] = useState(false);
+  const [mixError, setMixError] = useState("");
 
   // Provider toggle — synced to localStorage
   const [provider, setProvider] = useState<"mistral" | "deepseek">(() => {
@@ -811,15 +814,120 @@ export default function EpisodeDetailPage() {
       )}
 
       {/* Step 3: Mix */}
-      {activeStep === "mix" && (
-        <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-8 text-center">
-          <Music className="w-12 h-12 text-gray-700 mx-auto mb-3" />
-          <h2 className="text-lg font-semibold text-white mb-2">Audio Mixing</h2>
-          <p className="text-sm text-gray-400 max-w-md mx-auto">
-            Add background music, intro/outro jingles, and create the final mixed podcast audio file.
-          </p>
+      {activeStep === "mix" && (() => {
+        const mixedUrl = scriptData?.mixedAudioUrl;
+        const mixedAt = scriptData?.mixedAt;
+        const mixedDuration = scriptData?.mixedDurationSeconds || 0;
+        const mixedSize = scriptData?.mixedFileSizeMB || 0;
+        const clipCount = (scriptData?.audioClips || []).filter((c: any) => c.url).length;
+
+        const startMix = async () => {
+          setMixing(true);
+          setMixError("");
+          try {
+            const res = await fetch("/api/podcast/mix", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ episodeId: episode.id }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Mix failed");
+            // Refresh to get the updated scriptJson with mixedAudioUrl
+            fetchEpisode();
+            fetchScript();
+          } catch (err: any) {
+            setMixError(err.message);
+          }
+          setMixing(false);
+        };
+
+        return (
+        <div className="bg-gray-900/50 border border-gray-800 rounded-2xl overflow-hidden">
+          <div className="p-5 border-b border-gray-800 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+              <Music className="w-4 h-4 text-violet-400" />
+              Audio Mixing
+            </h2>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { fetchEpisode(); fetchScript(); }}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-gray-800 text-gray-400 hover:text-white border border-gray-700 transition-colors"
+              >
+                <RefreshCw className="w-3 h-3" />
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          <div className="p-5">
+            {/* Mix status info */}
+            <div className="mb-4 text-xs text-gray-500">
+              {clipCount} audio clips ready to mix • Original clips are preserved
+            </div>
+
+            {/* Error display */}
+            {mixError && (
+              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-sm text-red-400">
+                ✗ {mixError}
+              </div>
+            )}
+
+            {/* Mixing in progress */}
+            {mixing && (
+              <div className="mb-4 p-6 bg-violet-500/5 border border-violet-500/20 rounded-xl text-center">
+                <Loader2 className="w-8 h-8 animate-spin text-violet-400 mx-auto mb-3" />
+                <p className="text-sm font-medium text-white">Mixing podcast audio...</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Downloading {clipCount} clips, adding speaker gaps, encoding to MP3
+                </p>
+              </div>
+            )}
+
+            {/* Result: mixed audio player */}
+            {mixedUrl && !mixing && (
+              <div className="mb-4 bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span className="text-sm font-medium text-emerald-400">Podcast Mixed Successfully</span>
+                </div>
+                <audio controls className="w-full mb-3" src={mixedUrl} preload="metadata" />
+                <div className="flex items-center justify-between">
+                  <div className="text-xs text-gray-500">
+                    {Math.round(mixedDuration / 60)} min • {mixedSize} MB
+                    {mixedAt && ` • Mixed ${new Date(mixedAt).toLocaleString()}`}
+                  </div>
+                  <a
+                    href={mixedUrl}
+                    download={`${episode.title || "podcast"}.mp3`}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-violet-600 hover:bg-violet-500 text-white transition-colors"
+                  >
+                    <Download className="w-3 h-3" />
+                    Download MP3
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {/* Mix / Re-mix button */}
+            {!mixing && (
+              <button
+                onClick={startMix}
+                disabled={clipCount === 0}
+                className={cn(
+                  "w-full flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-sm font-medium transition-colors",
+                  mixedUrl
+                    ? "bg-gray-800 text-gray-300 hover:bg-gray-700 border border-gray-700"
+                    : "bg-emerald-600 hover:bg-emerald-500 text-white"
+                )}
+              >
+                <Music className="w-4 h-4" />
+                {mixedUrl ? "Re-Mix (overwrites previous)" : `Mix ${clipCount} Clips into Podcast`}
+              </button>
+            )}
+          </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Step 4: Review */}
       {activeStep === "review" && (
