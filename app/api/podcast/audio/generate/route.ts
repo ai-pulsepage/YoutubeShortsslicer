@@ -234,6 +234,24 @@ async function generateAudioInBackground(
       if (skippedCount <= 3 || skippedCount % 20 === 0) {
         console.log(`[Podcast Audio]   ${i + 1}/${allLines.length}: SKIP (already has audio)`);
       }
+
+      // Still save progress at checkpoints so UI polling stays current
+      if ((i + 1) % 10 === 0) {
+        try {
+          await prisma.podcastEpisode.update({
+            where: { id: episodeId },
+            data: {
+              scriptJson: {
+                ...script,
+                audioClips,
+                audioGeneratedAt: new Date().toISOString(),
+                audioProgress: `${i + 1}/${allLines.length}`,
+              },
+            },
+          });
+        } catch { /* ignore save errors during skip */ }
+      }
+
       continue;
     }
 
@@ -278,15 +296,15 @@ async function generateAudioInBackground(
       // ─── Fallback: on clone/whisper failure, retry with predefined voice ────
       if (engine === "dia" && diaVoiceMode === "clone" && err.message?.includes("400")) {
         const fallbackVoice = DEFAULT_DIA_VOICES[i % DEFAULT_DIA_VOICES.length];
-        console.warn(`[Podcast Audio]   Clone failed for line ${i} — retrying with predefined voice: ${fallbackVoice}`);
+        console.warn(`[Podcast Audio]   Clone failed for line ${i} — retrying with built-in voice (single_s1)`);
         try {
           const audioBuffer = await generateVoiceover({
             text: line.text,
             engine,
             voiceId,
             narratorStyle: "conversational",
-            diaVoiceRef: fallbackVoice,
-            diaVoiceMode: "predefined",
+            diaVoiceRef: undefined,
+            diaVoiceMode: "single_s1",
           });
 
           const key = `podcast-audio/${episodeId}/line-${String(i).padStart(4, "0")}.${audioFormat}`;
