@@ -20,7 +20,9 @@ export async function GET(req: NextRequest) {
 
   const diaUrl = process.env.DIA_TTS_URL;
   if (!diaUrl) {
-    return NextResponse.json({ error: "DIA_TTS_URL not configured" }, { status: 500 });
+    // Return empty results with warning instead of 500 — UI should still load
+    console.warn("[Dia Voices] DIA_TTS_URL not configured");
+    return NextResponse.json({ predefined: [], reference: [], warning: "DIA_TTS_URL not configured" });
   }
 
   const endpoint = diaUrl.replace(/\/$/, "");
@@ -109,7 +111,7 @@ export async function POST(req: NextRequest) {
 
   const diaUrl = process.env.DIA_TTS_URL;
   if (!diaUrl) {
-    return NextResponse.json({ error: "DIA_TTS_URL not configured" }, { status: 500 });
+    return NextResponse.json({ error: "DIA_TTS_URL not configured — set it in your environment variables" }, { status: 500 });
   }
 
   const endpoint = diaUrl.replace(/\/$/, "");
@@ -125,16 +127,26 @@ export async function POST(req: NextRequest) {
     const diaForm = new FormData();
     diaForm.append("files", file);
 
-    const uploadRes = await fetch(`${endpoint}/upload_reference`, {
-      method: "POST",
-      body: diaForm,
-    });
+    let uploadRes: Response;
+    try {
+      uploadRes = await fetch(`${endpoint}/upload_reference`, {
+        method: "POST",
+        body: diaForm,
+        signal: AbortSignal.timeout(30000),
+      });
+    } catch (fetchErr: any) {
+      console.error(`[Dia Voices Upload] Cannot reach Dia server at ${endpoint}: ${fetchErr.message}`);
+      return NextResponse.json({
+        error: `Cannot reach Dia TTS Server at ${endpoint}. Is the RunPod pod running? Error: ${fetchErr.message}`,
+      }, { status: 503 });
+    }
 
     if (!uploadRes.ok) {
       const errText = await uploadRes.text();
+      console.error(`[Dia Voices Upload] Server returned ${uploadRes.status}: ${errText}`);
       return NextResponse.json({
         error: `Dia server upload failed: ${uploadRes.status} — ${errText}`,
-      }, { status: 500 });
+      }, { status: uploadRes.status >= 500 ? 502 : uploadRes.status });
     }
 
     const uploadData = await uploadRes.json().catch(() => ({}));
