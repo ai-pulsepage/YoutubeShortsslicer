@@ -239,7 +239,7 @@ async function generateAudioInBackground(
 
     // Determine mode: if filename matches a predefined voice, use predefined; otherwise clone
     const isPredefined = PREDEFINED_VOICE_NAMES.has(diaVoiceRef.toLowerCase());
-    let diaVoiceMode = isPredefined ? "predefined" : "clone";
+    let diaVoiceMode: "dialogue" | "single_s1" | "single_s2" | "clone" | "predefined" = isPredefined ? "predefined" : "clone";
     let currentVoiceRef = diaVoiceRef;
 
     const logVoice = engine === "dia" ? `${currentVoiceRef} (${diaVoiceMode})` : `${voiceId.substring(0, 8)}...`;
