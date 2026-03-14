@@ -145,7 +145,11 @@ export default function EpisodeDetailPage() {
         setEpisode(ep);
         // Only auto-set step on initial load — let user navigate freely after
         if (!hasInitialized.current) {
-          const step = STATUS_TO_STEP[ep.status] || "script";
+          // If the episode failed but has a script, jump to audio step (it was an audio failure)
+          let step = STATUS_TO_STEP[ep.status] || "script";
+          if ((ep.status === "FAILED_PODCAST" || ep.status === "FAILED_AUDIO") && ep.scriptJson) {
+            step = "audio";
+          }
           setActiveStep(step);
           hasInitialized.current = true;
         }
@@ -303,12 +307,16 @@ export default function EpisodeDetailPage() {
   const currentStepIdx = STEP_ORDER.indexOf(STATUS_TO_STEP[episode.status] || "script");
 
   const getStepState = (stepId: StepId): StepState => {
-    if (episode.status === "FAILED_PODCAST") return stepId === "script" ? "failed" : "pending";
-    if (episode.status === "FAILED_AUDIO") {
+    // If script already exists but status is FAILED_PODCAST, it was actually an audio failure
+    const isAudioFailure = episode.status === "FAILED_AUDIO" ||
+      (episode.status === "FAILED_PODCAST" && episode.scriptJson);
+
+    if (isAudioFailure) {
       if (stepId === "script") return "done";
       if (stepId === "audio") return "failed";
       return "pending";
     }
+    if (episode.status === "FAILED_PODCAST") return stepId === "script" ? "failed" : "pending";
     const stepIdx = STEP_ORDER.indexOf(stepId);
     if (stepIdx < currentStepIdx) return "done";
     if (stepIdx === currentStepIdx) return "active";
