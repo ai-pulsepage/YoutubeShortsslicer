@@ -113,16 +113,17 @@ export async function generateSpeech(options: DiaGenerateOptions): Promise<Buffe
 
     // Format text with [S1] tag for Dia — required for single-speaker mode
     // Strip any existing [S1]/[S2] tags to avoid doubling
-    let diaText = text.replace(/\[S[12]\]\s*/g, "").trim();
+    let cleanText = text.replace(/\[S[12]\]\s*/g, "").trim();
 
-    // Add [S1] prefix for single-speaker generation
-    diaText = `[S1] ${diaText}`;
-
-    // Ensure minimum text length (Dia needs >5s worth of text)
-    // ~86 tokens per second, ~15 chars per second
-    if (diaText.length < 20) {
-        diaText = `[S1] ${diaText}. `;
+    // Very short interjections (< 15 chars like "Exactly—" or "But that's just—")
+    // need padding so Dia can generate meaningful audio
+    if (cleanText.length < 15) {
+        // Pad with a natural trailing pause to give Dia enough material
+        cleanText = `${cleanText}... ... ...`;
     }
+
+    // Add [S1] prefix for single-speaker generation (only once)
+    const diaText = `[S1] ${cleanText}`;
 
     console.log(`[Dia TTS] Generating: "${diaText.substring(0, 60)}..." | voice: ${voiceRef || "random"} | mode: ${voiceMode}`);
 
