@@ -335,7 +335,7 @@ export async function generateIntro(
     ? `OTHER PARTICIPANTS ON THIS EPISODE:\n${otherParticipants.map((p) => `- ${p.name} (${p.role}): ${p.prompt.split('\n')[0] || p.role}`).join("\n")}`
     : "";
 
-  const systemPrompt = `You are writing a podcast intro. This is the OPENING of the show — it must hook the listener and set the scene.
+  const systemPrompt = `You are writing a podcast intro. This is the OPENING of the show — it must hook the listener and set the scene for what's coming.
 
 PRIMARY HOST: ${primaryHost.name}
 ${primaryHost.prompt}
@@ -347,17 +347,21 @@ ${topicOverview}
 
 CONTENT FILTER: ${filterNote}
 
-STRUCTURE YOUR INTRO LIKE AN INVESTIGATIVE JOURNALIST SETTING THE SCENE:
+READ THE CHARACTERS AND TOPIC CAREFULLY. The intro style should match WHO these people are and WHAT they're discussing:
+- A conspiracy/investigation show → Set the scene like a true-crime opening: time, place, what was happening, what nobody noticed
+- A science/education show → Open with wonder, a mind-bending question, or a fascinating moment in history
+- A religious/spiritual show → Open with a reflection, a parable, or a moment of shared faith
+- A comedy/entertainment show → Open with energy, a joke, or a wild story
+- The CHARACTER ARCHETYPES should drive the vibe — a Storyteller opens differently than a Provocateur
 
-1. HOOK — ${primaryHost.name} opens with something attention-grabbing that pulls the listener into the STORY. Not "Welcome to the show." Set the scene: reference the time period, what was happening in the world, what nobody was paying attention to. Example: "It's 2006. The housing market is booming, everyone's watching American Idol... and in a quiet courthouse in Palm Beach, a detective named Joe Recarey is filing a report that should have changed everything."
+STRUCTURE:
+1. HOOK — ${primaryHost.name} opens with something attention-grabbing that pulls the listener into the WORLD of this topic. NOT "Welcome to the show." Set the scene — give the listener a vivid moment, a question, or a story that makes them lean in.
 
 2. SELF-INTRO — ${primaryHost.name} introduces themselves briefly, in character.
 
 3. CO-HOST/GUEST INTROS — ${primaryHost.name} introduces ${otherParticipants.map(p => p.name).join(" and ")} with warmth and personality. Reference their dynamic: "With me as always is [name], who..." or "Joining me tonight is [name]..." EVERY participant MUST be introduced by name.
 
-4. TOPIC SETUP — Set the premise of what they're about to explore. Frame it like investigative journalism: What happened? Who was involved? Why does it matter? Give the audience enough context to understand what they're about to hear. Make them feel like they're about to learn something they didn't know.
-
-TONE: Think of the best true-crime or investigative journalism podcasts — the intro draws you into a STORY, not a debate. It should feel like two knowledgeable friends are about to take you behind the curtain.
+4. TOPIC SETUP — Set the premise. What are they about to explore? Why does it matter? Give the audience enough context to understand the journey they're about to go on. Make them feel like they NEED to keep listening.
 
 SPEAKER RULES:
 - ${primaryHost.name} does most of the intro
@@ -1061,9 +1065,9 @@ Emotions: "neutral", "excited", "amused", "serious", "sarcastic"`;
 
   // Fallback outro if LLM returns empty or fails
   return [
-    { speaker: host.name, characterId: host.id, text: `That's all the time we have for today, folks. ${guests.map((g) => g.name).join(" and ")}, appreciate you being here.`, emotion: "serious", duration: 6 },
-    { speaker: host.name, characterId: host.id, text: `We'll be back next time with more to unpack. Until then — stay sharp.`, emotion: "neutral", duration: 4 },
-    { speaker: host.name, characterId: host.id, text: `This has been ${showName}. I'm ${host.name}. Take care.`, emotion: "neutral", duration: 3 },
+    { speaker: primaryHost.name, characterId: primaryHost.id, text: `That's all the time we have for today, folks. ${allParticipants.map((p) => p.name).join(" and ")}, appreciate you being here.`, emotion: "serious", duration: 6 },
+    { speaker: primaryHost.name, characterId: primaryHost.id, text: `We'll be back next time with more to unpack. Until then — stay sharp.`, emotion: "neutral", duration: 4 },
+    { speaker: primaryHost.name, characterId: primaryHost.id, text: `This has been ${showName}. I'm ${primaryHost.name}. Take care.`, emotion: "neutral", duration: 3 },
   ];
 }
 
