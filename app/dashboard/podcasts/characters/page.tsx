@@ -81,6 +81,7 @@ export default function CharactersPage() {
   const [loadingVoices, setLoadingVoices] = useState(true);
   const [previewing, setPreviewing] = useState(false);
   const [previewAudio, setPreviewAudio] = useState<HTMLAudioElement | null>(null);
+  const [voiceTab, setVoiceTab] = useState<"predefined" | "reference">("predefined");
 
   const fetchCharacters = useCallback(async () => {
     try {
@@ -391,40 +392,70 @@ export default function CharactersPage() {
                   <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
                     <Mic className="w-3 h-3" /> Voice Settings
                   </h3>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="col-span-2">
-                      <label className="text-[10px] text-gray-500 mb-1 block">Dia Voice</label>
+                  <div className="space-y-3">
+                    {/* ── Dia Voice Selection ── */}
+                    <div>
+                      <label className="text-[10px] text-gray-500 mb-1.5 block">Dia Voice</label>
                       {loadingVoices ? (
                         <div className="flex items-center gap-2 text-xs text-gray-500 py-2">
                           <Loader2 className="w-3 h-3 animate-spin" /> Loading voices...
                         </div>
                       ) : (
-                        <select
-                          value={form.voiceRefPath}
-                          onChange={(e) => setForm({ ...form, voiceRefPath: e.target.value })}
-                          className="w-full bg-gray-800 text-sm text-white rounded-lg border border-gray-700 px-3 py-2 focus:outline-none focus:border-violet-500"
-                        >
-                          <option value="">— No voice selected —</option>
-                          {diaVoices.predefined.length > 0 && (
-                            <optgroup label="Predefined Voices">
-                              {diaVoices.predefined.map((v: any) => (
-                                <option key={v.filename} value={v.filename}>
-                                  {v.name}
-                                </option>
+                        <>
+                          {/* Tab buttons */}
+                          <div className="flex gap-1 mb-2">
+                            <button
+                              onClick={() => setVoiceTab("predefined")}
+                              className={cn(
+                                "px-2.5 py-1 rounded-md text-[10px] font-medium transition-all",
+                                voiceTab === "predefined"
+                                  ? "bg-violet-600/20 text-violet-400 border border-violet-500/30"
+                                  : "text-gray-500 hover:text-gray-400 border border-transparent"
+                              )}
+                            >
+                              🗣️ Predefined ({diaVoices.predefined.length})
+                            </button>
+                            <button
+                              onClick={() => setVoiceTab("reference")}
+                              className={cn(
+                                "px-2.5 py-1 rounded-md text-[10px] font-medium transition-all",
+                                voiceTab === "reference"
+                                  ? "bg-emerald-600/20 text-emerald-400 border border-emerald-500/30"
+                                  : "text-gray-500 hover:text-gray-400 border border-transparent"
+                              )}
+                            >
+                              🎤 Clones ({diaVoices.reference.length})
+                            </button>
+                          </div>
+
+                          {/* Voice grid */}
+                          <div className="max-h-40 overflow-y-auto rounded-lg border border-gray-800 bg-gray-900/50 p-1.5">
+                            <div className="grid grid-cols-3 gap-1">
+                              {(voiceTab === "predefined" ? diaVoices.predefined : diaVoices.reference).map((v: any) => (
+                                <button
+                                  key={v.filename}
+                                  onClick={() => setForm({ ...form, voiceRefPath: v.filename })}
+                                  className={cn(
+                                    "px-2 py-1.5 rounded-md text-[10px] font-medium transition-all text-left truncate",
+                                    form.voiceRefPath === v.filename
+                                      ? "bg-violet-600/30 text-violet-300 border border-violet-500/40"
+                                      : "text-gray-400 hover:bg-gray-800 hover:text-white border border-transparent"
+                                  )}
+                                >
+                                  🗣️ {v.name}
+                                </button>
                               ))}
-                            </optgroup>
-                          )}
-                          {diaVoices.reference.length > 0 && (
-                            <optgroup label="Clone References (Uploaded)">
-                              {diaVoices.reference.map((v: any) => (
-                                <option key={v.filename} value={v.filename}>
-                                  {v.name}
-                                </option>
-                              ))}
-                            </optgroup>
-                          )}
-                        </select>
+                            </div>
+                            {(voiceTab === "predefined" ? diaVoices.predefined : diaVoices.reference).length === 0 && (
+                              <p className="text-[10px] text-gray-600 text-center py-3">
+                                {voiceTab === "predefined" ? "No predefined voices found" : "No cloned voices uploaded"}
+                              </p>
+                            )}
+                          </div>
+                        </>
                       )}
+
+                      {/* Selected voice + preview */}
                       {form.voiceRefPath && (
                         <div className="flex items-center gap-2 mt-1.5">
                           <p className="text-[9px] text-gray-600">
@@ -436,7 +467,6 @@ export default function CharactersPage() {
                           <button
                             onClick={async () => {
                               if (previewing) return;
-                              // Stop any existing preview
                               if (previewAudio) {
                                 previewAudio.pause();
                                 previewAudio.remove();
@@ -481,33 +511,37 @@ export default function CharactersPage() {
                         </div>
                       )}
                     </div>
-                    <div>
-                      <label className="text-[10px] text-gray-500 mb-1 block">ElevenLabs Voice ID</label>
-                      <input
-                        value={form.voiceId}
-                        onChange={(e) => setForm({ ...form, voiceId: e.target.value })}
-                        placeholder="Optional — for ElevenLabs engine"
-                        className="w-full bg-gray-800 text-sm text-white rounded-lg border border-gray-700 px-3 py-2 focus:outline-none focus:border-violet-500"
-                      />
-                    </div>
-                    <div className="flex items-end">
-                      <div className="w-full">
-                        <label className="text-[10px] text-gray-500 mb-1 block">
-                          Speech Rate: <span className="text-violet-400 font-medium">{form.speechRate.toFixed(1)}x</span>
-                        </label>
+
+                    {/* ── ElevenLabs + Speech Rate ── */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[10px] text-gray-500 mb-1 block">ElevenLabs Voice ID</label>
                         <input
-                          type="range"
-                          min="0.5"
-                          max="2.0"
-                          step="0.1"
-                          value={form.speechRate}
-                          onChange={(e) => setForm({ ...form, speechRate: parseFloat(e.target.value) })}
-                          className="w-full accent-violet-500"
+                          value={form.voiceId}
+                          onChange={(e) => setForm({ ...form, voiceId: e.target.value })}
+                          placeholder="Optional — for ElevenLabs engine"
+                          className="w-full bg-gray-800 text-sm text-white rounded-lg border border-gray-700 px-3 py-2 focus:outline-none focus:border-violet-500"
                         />
-                        <div className="flex justify-between text-[9px] text-gray-600 mt-0.5">
-                          <span>0.5x Slow</span>
-                          <span>1.0x Normal</span>
-                          <span>2.0x Fast</span>
+                      </div>
+                      <div className="flex items-end">
+                        <div className="w-full">
+                          <label className="text-[10px] text-gray-500 mb-1 block">
+                            Speech Rate: <span className="text-violet-400 font-medium">{form.speechRate.toFixed(1)}x</span>
+                          </label>
+                          <input
+                            type="range"
+                            min="0.5"
+                            max="2.0"
+                            step="0.1"
+                            value={form.speechRate}
+                            onChange={(e) => setForm({ ...form, speechRate: parseFloat(e.target.value) })}
+                            className="w-full accent-violet-500"
+                          />
+                          <div className="flex justify-between text-[9px] text-gray-600 mt-0.5">
+                            <span>0.5x Slow</span>
+                            <span>1.0x Normal</span>
+                            <span>2.0x Fast</span>
+                          </div>
                         </div>
                       </div>
                     </div>
