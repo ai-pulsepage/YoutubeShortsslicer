@@ -59,6 +59,27 @@ export async function GET(req: NextRequest) {
       } catch (err: any) {
         console.warn(`[Dia Voices] Failed to fetch predefined voices: ${err.message}`);
       }
+
+      // Fallback: if server is unreachable, provide known predefined voices
+      if (result.predefined.length === 0) {
+        const KNOWN_PREDEFINED = [
+          "Adrian", "Alexander", "Allison", "Amara", "Anika",
+          "Benjamin", "Caleb", "Carmen", "Charlotte", "Connor",
+          "Daniel", "Elena", "Eli", "Emma", "Ethan",
+          "Gabriel", "Grace", "Hannah", "Henry", "Isabella",
+          "Jacob", "James", "Julian", "Katherine", "Liam",
+          "Lucas", "Luna", "Maria", "Michael", "Natalie",
+          "Noah", "Olivia", "Patrick", "Rachel", "Samuel",
+          "Sarah", "Sebastian", "Sofia", "Thomas", "Victoria",
+          "William", "Zara", "Zoe",
+        ];
+        result.predefined = KNOWN_PREDEFINED.map((name) => ({
+          filename: `${name}.wav`,
+          name,
+          type: "predefined",
+        }));
+        console.log(`[Dia Voices] Using ${KNOWN_PREDEFINED.length} hardcoded fallback voices`);
+      }
     }
 
     // Fetch reference audio files

@@ -76,6 +76,8 @@ export default function CharactersPage() {
   const [deleting, setDeleting] = useState(false);
   const [newBelief, setNewBelief] = useState("");
   const [newHotButton, setNewHotButton] = useState("");
+  const [diaVoices, setDiaVoices] = useState<{ predefined: any[]; reference: any[] }>({ predefined: [], reference: [] });
+  const [loadingVoices, setLoadingVoices] = useState(true);
 
   const fetchCharacters = useCallback(async () => {
     try {
@@ -92,6 +94,14 @@ export default function CharactersPage() {
 
   useEffect(() => {
     fetchCharacters();
+    // Fetch Dia voices
+    fetch("/api/podcast/dia/voices")
+      .then((r) => r.json())
+      .then((data) => {
+        setDiaVoices({ predefined: data.predefined || [], reference: data.reference || [] });
+        setLoadingVoices(false);
+      })
+      .catch(() => setLoadingVoices(false));
   }, [fetchCharacters]);
 
   const selectCharacter = (char: Character) => {
@@ -379,6 +389,48 @@ export default function CharactersPage() {
                     <Mic className="w-3 h-3" /> Voice Settings
                   </h3>
                   <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2">
+                      <label className="text-[10px] text-gray-500 mb-1 block">Dia Voice</label>
+                      {loadingVoices ? (
+                        <div className="flex items-center gap-2 text-xs text-gray-500 py-2">
+                          <Loader2 className="w-3 h-3 animate-spin" /> Loading voices...
+                        </div>
+                      ) : (
+                        <select
+                          value={form.voiceRefPath}
+                          onChange={(e) => setForm({ ...form, voiceRefPath: e.target.value })}
+                          className="w-full bg-gray-800 text-sm text-white rounded-lg border border-gray-700 px-3 py-2 focus:outline-none focus:border-violet-500"
+                        >
+                          <option value="">— No voice selected —</option>
+                          {diaVoices.predefined.length > 0 && (
+                            <optgroup label="Predefined Voices">
+                              {diaVoices.predefined.map((v: any) => (
+                                <option key={v.filename} value={v.filename}>
+                                  {v.name}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                          {diaVoices.reference.length > 0 && (
+                            <optgroup label="Clone References (Uploaded)">
+                              {diaVoices.reference.map((v: any) => (
+                                <option key={v.filename} value={v.filename}>
+                                  {v.name}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                        </select>
+                      )}
+                      {form.voiceRefPath && (
+                        <p className="text-[9px] text-gray-600 mt-1">
+                          Selected: <span className="text-violet-400">{form.voiceRefPath}</span>
+                          {diaVoices.predefined.some((v: any) => v.filename === form.voiceRefPath)
+                            ? " (predefined)"
+                            : " (clone reference)"}
+                        </p>
+                      )}
+                    </div>
                     <div>
                       <label className="text-[10px] text-gray-500 mb-1 block">ElevenLabs Voice ID</label>
                       <input
@@ -388,33 +440,25 @@ export default function CharactersPage() {
                         className="w-full bg-gray-800 text-sm text-white rounded-lg border border-gray-700 px-3 py-2 focus:outline-none focus:border-violet-500"
                       />
                     </div>
-                    <div>
-                      <label className="text-[10px] text-gray-500 mb-1 block">Dia Voice Reference</label>
-                      <input
-                        value={form.voiceRefPath}
-                        onChange={(e) => setForm({ ...form, voiceRefPath: e.target.value })}
-                        placeholder="e.g., voice_preview_hank.mp3"
-                        className="w-full bg-gray-800 text-sm text-white rounded-lg border border-gray-700 px-3 py-2 focus:outline-none focus:border-violet-500"
-                      />
-                      <p className="text-[9px] text-gray-600 mt-1">Filename from Dia Voice Uploads</p>
-                    </div>
-                    <div className="col-span-2">
-                      <label className="text-[10px] text-gray-500 mb-1 block">
-                        Speech Rate: <span className="text-violet-400 font-medium">{form.speechRate.toFixed(1)}x</span>
-                      </label>
-                      <input
-                        type="range"
-                        min="0.5"
-                        max="2.0"
-                        step="0.1"
-                        value={form.speechRate}
-                        onChange={(e) => setForm({ ...form, speechRate: parseFloat(e.target.value) })}
-                        className="w-full accent-violet-500"
-                      />
-                      <div className="flex justify-between text-[9px] text-gray-600 mt-0.5">
-                        <span>0.5x Slow</span>
-                        <span>1.0x Normal</span>
-                        <span>2.0x Fast</span>
+                    <div className="flex items-end">
+                      <div className="w-full">
+                        <label className="text-[10px] text-gray-500 mb-1 block">
+                          Speech Rate: <span className="text-violet-400 font-medium">{form.speechRate.toFixed(1)}x</span>
+                        </label>
+                        <input
+                          type="range"
+                          min="0.5"
+                          max="2.0"
+                          step="0.1"
+                          value={form.speechRate}
+                          onChange={(e) => setForm({ ...form, speechRate: parseFloat(e.target.value) })}
+                          className="w-full accent-violet-500"
+                        />
+                        <div className="flex justify-between text-[9px] text-gray-600 mt-0.5">
+                          <span>0.5x Slow</span>
+                          <span>1.0x Normal</span>
+                          <span>2.0x Fast</span>
+                        </div>
                       </div>
                     </div>
                   </div>
