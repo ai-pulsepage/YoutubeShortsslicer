@@ -1007,26 +1007,43 @@ async function callDeepSeekRaw(
   systemPrompt: string,
   userPrompt: string
 ): Promise<string> {
-  const apiKey = process.env.DEEPSEEK_API_KEY;
-  const apiBase = process.env.DEEPSEEK_API_BASE || "https://api.deepseek.com";
+  const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
+  const apiBase = (process.env.DEEPSEEK_API_BASE || "https://api.deepseek.com").trim();
   if (!apiKey) throw new Error("DEEPSEEK_API_KEY not configured");
 
-  const res = await fetch(`${apiBase}/v1/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "deepseek-chat",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.9,
-      max_tokens: 8192,
-    }),
-  });
+  const url = `${apiBase}/v1/chat/completions`;
+  console.log(`[PODCAST] DeepSeek request to: ${url} (key: ${apiKey.slice(0, 6)}...${apiKey.slice(-4)})`);
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      signal: AbortSignal.timeout(120000), // 2 min timeout
+      body: JSON.stringify({
+        model: "deepseek-chat",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        temperature: 0.9,
+        max_tokens: 8192,
+      }),
+    });
+  } catch (fetchErr: any) {
+    // Log the full error chain for debugging
+    console.error(`[PODCAST] DeepSeek fetch error:`, {
+      message: fetchErr.message,
+      cause: fetchErr.cause?.message || fetchErr.cause || "no cause",
+      code: fetchErr.cause?.code || fetchErr.code || "no code",
+      errno: fetchErr.cause?.errno || "none",
+      url,
+    });
+    throw new Error(`DeepSeek fetch failed: ${fetchErr.message} | cause: ${fetchErr.cause?.message || fetchErr.cause?.code || "unknown"}`);
+  }
 
   if (!res.ok) {
     const err = await res.text();
@@ -1057,27 +1074,42 @@ async function callDeepSeek(
   systemPrompt: string,
   userPrompt: string
 ): Promise<DialogueLine[]> {
-  const apiKey = process.env.DEEPSEEK_API_KEY;
-  const apiBase = process.env.DEEPSEEK_API_BASE || "https://api.deepseek.com";
+  const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
+  const apiBase = (process.env.DEEPSEEK_API_BASE || "https://api.deepseek.com").trim();
   if (!apiKey) throw new Error("DEEPSEEK_API_KEY not configured");
 
-  const res = await fetch(`${apiBase}/v1/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "deepseek-chat",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.9,
-      max_tokens: 8192,
-      response_format: { type: "json_object" },
-    }),
-  });
+  const url = `${apiBase}/v1/chat/completions`;
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      signal: AbortSignal.timeout(120000),
+      body: JSON.stringify({
+        model: "deepseek-chat",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        temperature: 0.9,
+        max_tokens: 8192,
+        response_format: { type: "json_object" },
+      }),
+    });
+  } catch (fetchErr: any) {
+    console.error(`[PODCAST] DeepSeek JSON fetch error:`, {
+      message: fetchErr.message,
+      cause: fetchErr.cause?.message || fetchErr.cause || "no cause",
+      code: fetchErr.cause?.code || fetchErr.code || "no code",
+      errno: fetchErr.cause?.errno || "none",
+      url,
+    });
+    throw new Error(`DeepSeek fetch failed: ${fetchErr.message} | cause: ${fetchErr.cause?.message || fetchErr.cause?.code || "unknown"}`);
+  }
 
   if (!res.ok) {
     const err = await res.text();
