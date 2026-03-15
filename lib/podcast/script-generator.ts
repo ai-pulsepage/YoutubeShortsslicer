@@ -584,9 +584,16 @@ Generate closing arguments that reflect evolution from the debate.
 - At least one perspective should end with a forward-looking question that lingers`,
   };
 
+  // With only 2 characters, BOTH should debate — no pure moderator
+  const isTwoPersonDebate = perspectives.length <= 2;
+
   const perspectiveBlock = perspectives
-    .map((p, i) => `PERSPECTIVE_${String.fromCharCode(65 + i)} (${p.angle}): Argue from a ${p.angle} viewpoint`)
+    .map((p, i) => `${p.name} (${p.angle}): Argue from a ${p.angle} viewpoint`)
     .join("\n");
+
+  const moderatorNote = isTwoPersonDebate
+    ? `\nIMPORTANT: There are only ${perspectives.length} participants. BOTH must argue their own position. The first character (${perspectives[0]?.name}) also guides the conversation — asking questions, framing topics — but they MUST ALSO argue their own viewpoint, not just moderate. There is NO separate moderator.`
+    : `\nMODERATOR: Guides discussion, asks probing follow-up questions, challenges all sides`;
 
   const topicTransitionNote = topicIndex > 0 && previousTopicSummary
     ? `\nIMPORTANT — TOPIC TRANSITION:\nThis is topic #${topicIndex + 1} in the SAME episode. The panelists have been talking already.
@@ -612,8 +619,7 @@ ${previousTopicSummary}\n`
 
 Your job is to generate the RAW ARGUMENTS, FACTS, AND EVIDENCE for a debate — NOT the final dialogue. Another system will convert this into character voices later.
 
-${perspectiveBlock}
-MODERATOR: Guides discussion, asks probing follow-up questions, challenges all sides
+${perspectiveBlock}${moderatorNote}
 
 TOPIC: ${topicTitle}
 ${topicContent ? `PRIMARY TALKING POINTS (these are the USER'S key angles — you MUST address each one specifically):\n${topicContent}` : ""}
@@ -631,11 +637,9 @@ SUBSTANCE REQUIREMENTS:
 
 TARGET: ~${targetWords} words total across all perspectives.
 
-OUTPUT FORMAT: Write as labeled paragraphs:
-MODERATOR: [their framing/question]
-PERSPECTIVE_A: [their argument with evidence]
-PERSPECTIVE_B: [their counter-argument with evidence]
-PERSPECTIVE_A: [response]
+OUTPUT FORMAT: Write as labeled paragraphs using CHARACTER NAMES:
+${perspectives.map(p => `${p.name}: [their argument with evidence]`).join("\n")}
+${isTwoPersonDebate ? "" : "MODERATOR: [their framing/question]\n"}${perspectives[0]?.name}: [response]
 etc.
 
 Write substantive prose — not bullet points. Each perspective entry should be 2-5 sentences.`;
@@ -713,9 +717,13 @@ You are applying the Sacks-Schegloff-Jefferson turn-taking model and conversatio
 CHARACTERS:
 ${characterList}
 
-Map the perspectives from the content to these characters:
-- MODERATOR → the HOST character
-- PERSPECTIVE_A, B, C → the GUEST characters (assign based on ideological alignment)
+Map the content to these characters:
+${characters.length <= 2
+  ? `- ${characters[0]?.name} guides discussion AND argues their own position (they are NOT a pure moderator)
+- Each character argues their own perspective based on ideological alignment
+- Both characters should have roughly equal speaking time`
+  : `- MODERATOR → the HOST character
+- PERSPECTIVE_A, B, C → the GUEST characters (assign based on ideological alignment)`}
 
 TURN-TAKING RULES:
 1. CURRENT SPEAKER SELECTS NEXT: The host can direct a question to a specific guest by name
