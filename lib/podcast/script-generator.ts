@@ -125,10 +125,13 @@ export async function generateEpisodeScript(
   // DeepSeek — only if explicitly selected via the toggle
   log("Using DeepSeek API...");
 
-  // Mark as SCRIPTING immediately so frontend can poll
+  // Mark as SCRIPTING immediately so frontend can poll — also clear old script
   await prisma.podcastEpisode.update({
     where: { id: episodeId },
-    data: { status: "SCRIPTING" },
+    data: {
+      status: "SCRIPTING",
+      scriptJson: null as any,  // Clear old script so stale data doesn't persist
+    },
   });
 
   // Fire-and-forget — generate in background, don't await
@@ -268,13 +271,13 @@ async function generateWithDeepSeek(
     segments: scriptSegments,
   };
 
-  // ─── Abort check: if user reset during generation, don't overwrite ───
+  // ─── Abort check: only abort if user explicitly cancelled (reset to DRAFT) ───
   const currentEp = await prisma.podcastEpisode.findUnique({
     where: { id: episodeId },
     select: { status: true },
   });
-  if (currentEp && currentEp.status !== "SCRIPTING") {
-    log(`Status changed to ${currentEp.status} during generation — aborting final write`);
+  if (currentEp && currentEp.status === "DRAFT") {
+    log(`Status changed to DRAFT during generation — user cancelled, aborting save`);
     return script; // Return but don't save — user cancelled
   }
 
