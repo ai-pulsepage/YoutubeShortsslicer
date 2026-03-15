@@ -179,16 +179,83 @@ export async function generateSpeech(options: DiaGenerateOptions): Promise<Buffe
     // Very short interjections (< 15 chars like "Exactly—" or "But that's just—")
     // need padding so Dia can generate meaningful audio
     if (cleanText.length < 15) {
-        // Pad with a natural trailing pause to give Dia enough material
         cleanText = `${cleanText}... ... ...`;
     }
 
-    // Add [S1] prefix for single-speaker generation (only once)
+    // PRE-SPLIT: For long text (>250 chars / ~3+ sentences), split into sentence segments
+    // and generate each separately to avoid timeouts. Then concatenate WAV buffers.
+    if (cleanText.length > 250) {
+        const segments = splitIntoSegments(cleanText, 250);
+        if (segments.length > 1) {
+            console.log(`[Dia TTS] Long text (${cleanText.length} chars) — splitting into ${segments.length} segments`);
+            const buffers: Buffer[] = [];
+            for (let si = 0; si < segments.length; si++) {
+                const segText = segments[si];
+                console.log(`[Dia TTS]   Segment ${si + 1}/${segments.length}: "${segText.substring(0, 50)}..." (${segText.length} chars)`);
+                const segBuffer = await generateSingleChunk(endpoint, segText, {
+                    voiceRef, voiceMode, transcript, seed: seed === -1 ? -1 : seed + si,
+                    speed, outputFormat,
+                });
+                buffers.push(segBuffer);
+            }
+            return concatWavBuffers(buffers);
+        }
+    }
+
+    return generateSingleChunk(endpoint, cleanText, {
+        voiceRef, voiceMode, transcript, seed, speed, outputFormat,
+    });
+}
+
+/** Split text into segments at sentence boundaries, keeping each under maxChars */
+function splitIntoSegments(text: string, maxChars: number): string[] {
+    // Split at sentence-ending punctuation followed by space
+    const sentences = text.split(/(?<=[.!?])\s+/);
+    const segments: string[] = [];
+    let current = "";
+
+    for (const sentence of sentences) {
+        if (current && (current.length + sentence.length + 1) > maxChars) {
+            segments.push(current.trim());
+            current = sentence;
+        } else {
+            current = current ? `${current} ${sentence}` : sentence;
+        }
+    }
+    if (current.trim()) segments.push(current.trim());
+    return segments;
+}
+
+/** Concatenate multiple WAV buffers into one (assumes same format/sample rate) */
+function concatWavBuffers(buffers: Buffer[]): Buffer {
+    if (buffers.length === 1) return buffers[0];
+    // WAV format: 44-byte header + raw PCM data
+    // Take header from first buffer, concatenate all PCM data
+    const headerSize = 44;
+    const pcmChunks = buffers.map(b => b.subarray(headerSize));
+    const totalPcmLength = pcmChunks.reduce((sum, c) => sum + c.length, 0);
+
+    // Clone header from first buffer and update data size fields
+    const header = Buffer.from(buffers[0].subarray(0, headerSize));
+    // Bytes 4-7: ChunkSize = 36 + totalPcmLength
+    header.writeUInt32LE(36 + totalPcmLength, 4);
+    // Bytes 40-43: Subchunk2Size = totalPcmLength
+    header.writeUInt32LE(totalPcmLength, 40);
+
+    return Buffer.concat([header, ...pcmChunks]);
+}
+
+async function generateSingleChunk(
+    endpoint: string,
+    cleanText: string,
+    opts: { voiceRef?: string; voiceMode: string; transcript?: string; seed: number; speed: number; outputFormat: string },
+): Promise<Buffer> {
+    const { voiceRef, voiceMode, transcript, seed, speed, outputFormat } = opts;
+
     const diaText = `[S1] ${cleanText}`;
 
-    console.log(`[Dia TTS] Generating: "${diaText.substring(0, 60)}..." | voice: ${voiceRef || "random"} | mode: ${voiceMode}`);
+    console.log(`[Dia TTS] Generating: "${diaText.substring(0, 60)}..." (${cleanText.length} chars) | voice: ${voiceRef || "random"} | mode: ${voiceMode}`);
 
-    // Clone mode is ~3-5x slower — use smaller chunks to stay under Cloudflare's 100s timeout
     const isClone = voiceMode === "clone";
     const chunkSize = isClone ? 100 : 120;
 
@@ -225,9 +292,9 @@ export async function generateSpeech(options: DiaGenerateOptions): Promise<Buffe
     }
 
     // Retry logic for Cloudflare 524 timeouts (transient — the Dia server is just slow, not broken)
-    const MAX_RETRIES = 3;
-    const RETRY_DELAYS = [5000, 15000]; // 5s, then 15s between retries
-    const FETCH_TIMEOUT = 120000; // 120s — clone mode needs more time than Cloudflare's ~100s limit
+    const MAX_RETRIES = 2;
+    const RETRY_DELAYS = [5000]; // 5s between retries — fail fast since we pre-split long text now
+    const FETCH_TIMEOUT = isClone ? 180000 : 300000; // clone: 180s, predefined: 300s — long enough for any single segment
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
