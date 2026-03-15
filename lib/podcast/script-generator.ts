@@ -628,9 +628,10 @@ Both characters should contribute to telling the story — one sets up a point, 
 - The energy should feel like people who CARE deeply about this topic`,
 
     landing: `PHASE: LANDING & FINAL WORDS
-- Characters reflect on the conversation's journey
-- Each should leave the listener with something that sticks — a final story, a haunting question, or a powerful insight
-- End with a forward-looking hook or an unresolved question
+- This is the WRAP-UP — you ARE allowed to reference key facts and moments from earlier in the conversation
+- But do NOT just summarize everything — REFLECT on it. Each character leaves the listener with their personal takeaway, a haunting question, or a powerful insight
+- Frame the key revelations through each character's worldview: what does this MEAN to them?
+- End with a forward-looking hook or an unresolved question that makes the listener want the next episode
 - The closing should feel natural, not formulaic`,
   };
 
@@ -643,7 +644,7 @@ ${previousTopicSummary}\n`
     : "";
 
   const previousContext = conversationSoFar
-    ? `\nPREVIOUS CONVERSATION CONTENT — CRITICAL: Do NOT repeat ANY facts, names, dates, or stories from below. Every beat must introduce ENTIRELY NEW information. If a fact appeared in a previous beat, it is SPENT — never mention it again:\n${conversationSoFar}\n`
+    ? `\nPREVIOUS CONVERSATION CONTENT — CRITICAL: Do NOT repeat ANY facts, names, dates, or stories from below. Every beat must introduce ENTIRELY NEW information. If a fact appeared in a previous beat, it is SPENT — never mention it again. (EXCEPTION: The "Landing & Final Words" phase may briefly reference key moments for reflection and synthesis, but should NOT rehash them in detail.):\n${conversationSoFar}\n`
     : "";
 
   const sourceBlock = sourceUrls.length > 0
