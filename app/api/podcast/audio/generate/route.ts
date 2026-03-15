@@ -7,8 +7,17 @@ import { uploadBufferToR2 as uploadBuffer, getR2PublicUrl } from "@/lib/storage"
 
 // Dia predefined voices — actual names from the Dia-TTS-Server voice library
 const DEFAULT_DIA_VOICES = [
-  "Adrian.wav", "Eli.wav", "Michael.wav", "Alexander.wav",
-  "Connor.wav", "Gabriel.wav", "Henry.wav", "Julian.wav",
+  "Abigail.wav", "Abigail_Taylor.wav", "Adrian.wav", "Adrian_Jade.wav",
+  "Alexander.wav", "Alexander_Emily.wav", "Alice.wav", "Austin.wav",
+  "Austin_Jeremiah.wav", "Axel.wav", "Axel_Miles.wav", "Connor.wav",
+  "Connor_Ryan.wav", "Cora.wav", "Cora_Gianna.wav", "Elena.wav",
+  "Elena_Emily.wav", "Eli.wav", "Emily.wav", "Everett.wav",
+  "Everett_Jordan.wav", "Gabriel.wav", "Gabriel_Ian.wav", "Gianna.wav",
+  "Henry.wav", "Ian.wav", "Jade.wav", "Jade_Layla.wav",
+  "Jeremiah.wav", "Jordan.wav", "Julian.wav", "Julian_Thomas.wav",
+  "Layla.wav", "Leonardo.wav", "Leonardo_Olivia.wav", "Michael.wav",
+  "Michael_Emily.wav", "Miles.wav", "Oliver_Luna.wav", "Olivia.wav",
+  "Ryan.wav", "Taylor.wav", "Thomas.wav",
 ];
 
 /**

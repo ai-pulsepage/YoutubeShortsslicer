@@ -62,16 +62,19 @@ export async function GET(req: NextRequest) {
 
       // Fallback: if server is unreachable, provide known predefined voices
       if (result.predefined.length === 0) {
+        console.log(`[Dia Voices] Server fetch returned 0 predefined voices — using hardcoded fallback`);
         const KNOWN_PREDEFINED = [
-          "Adrian", "Alexander", "Allison", "Amara", "Anika",
-          "Benjamin", "Caleb", "Carmen", "Charlotte", "Connor",
-          "Daniel", "Elena", "Eli", "Emma", "Ethan",
-          "Gabriel", "Grace", "Hannah", "Henry", "Isabella",
-          "Jacob", "James", "Julian", "Katherine", "Liam",
-          "Lucas", "Luna", "Maria", "Michael", "Natalie",
-          "Noah", "Olivia", "Patrick", "Rachel", "Samuel",
-          "Sarah", "Sebastian", "Sofia", "Thomas", "Victoria",
-          "William", "Zara", "Zoe",
+          "Abigail", "Abigail_Taylor", "Adrian", "Adrian_Jade",
+          "Alexander", "Alexander_Emily", "Alice", "Austin",
+          "Austin_Jeremiah", "Axel", "Axel_Miles", "Connor",
+          "Connor_Ryan", "Cora", "Cora_Gianna", "Elena",
+          "Elena_Emily", "Eli", "Emily", "Everett",
+          "Everett_Jordan", "Gabriel", "Gabriel_Ian", "Gianna",
+          "Henry", "Ian", "Jade", "Jade_Layla",
+          "Jeremiah", "Jordan", "Julian", "Julian_Thomas",
+          "Layla", "Leonardo", "Leonardo_Olivia", "Michael",
+          "Michael_Emily", "Miles", "Oliver_Luna", "Olivia",
+          "Ryan", "Taylor", "Thomas",
         ];
         result.predefined = KNOWN_PREDEFINED.map((name) => ({
           filename: `${name}.wav`,
@@ -79,6 +82,8 @@ export async function GET(req: NextRequest) {
           type: "predefined",
         }));
         console.log(`[Dia Voices] Using ${KNOWN_PREDEFINED.length} hardcoded fallback voices`);
+      } else {
+        console.log(`[Dia Voices] Got ${result.predefined.length} predefined voices from server`);
       }
     }
 
