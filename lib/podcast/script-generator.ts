@@ -204,15 +204,23 @@ async function generateWithDeepSeek(
     let lines: DialogueLine[];
 
     switch (seg.type) {
-      case "INTRO":
+      case "INTRO": {
+        // Gather topic info for scene-setting in the intro
+        const topicSegments = episode.segments.filter((s: any) => s.type === "TOPIC");
+        const topicDetails = topicSegments.map((s: any) => ({
+          title: s.topicTitle || "",
+          content: s.topicContent || "",
+          sourceUrls: (s.sourceUrls as string[]) || [],
+        }));
         lines = await generateIntro(
           characterProfiles,
           episode.title || `Episode ${episode.episodeNumber}`,
           episode.show.name,
-          episode.segments.filter((s: any) => s.type === "TOPIC").map((s: any) => s.topicTitle || ""),
+          topicDetails,
           contentFilter
         );
         break;
+      }
 
       case "TOPIC":
         lines = await generateTopicDialogue(
@@ -301,11 +309,14 @@ export async function generateIntro(
   characters: { id: string; name: string; role: string; prompt: string }[],
   episodeTitle: string,
   showName: string,
-  topicTitles: string[],
+  topicDetails: { title: string; content: string; sourceUrls: string[] }[],
   contentFilter: string
 ): Promise<DialogueLine[]> {
-  const host = characters.find((c) => c.role === "HOST") || characters[0];
+  const hosts = characters.filter((c) => c.role === "HOST");
+  const primaryHost = hosts[0] || characters[0];
+  const coHosts = hosts.slice(1);
   const guests = characters.filter((c) => c.role === "GUEST");
+  const otherParticipants = [...coHosts, ...guests];
 
   const filterNote = contentFilter === "FAMILY_FRIENDLY"
     ? "Keep language completely clean."
@@ -313,32 +324,53 @@ export async function generateIntro(
     ? "Light profanity allowed but not excessive."
     : "No content restrictions. Raw, unfiltered language is fine.";
 
-  const systemPrompt = `You are writing a podcast intro. This is the OPENING of the show — it sets the ENTIRE tone.
+  // Build topic overview for scene-setting
+  const topicOverview = topicDetails.map((t) => {
+    let overview = `- ${t.title}`;
+    if (t.content) overview += `\n  Key points: ${t.content.slice(0, 500)}`;
+    return overview;
+  }).join("\n");
 
-The host is ${host.name}. They MUST open in character — not generic "welcome to the show" energy.
+  const participantBlock = otherParticipants.length > 0
+    ? `OTHER PARTICIPANTS ON THIS EPISODE:\n${otherParticipants.map((p) => `- ${p.name} (${p.role}): ${p.prompt.split('\n')[0] || p.role}`).join("\n")}`
+    : "";
 
-${host.prompt}
+  const systemPrompt = `You are writing a podcast intro. This is the OPENING of the show — it must hook the listener and set the scene.
 
-GUESTS ON THIS EPISODE:
-${guests.map((g) => `- ${g.name}: ${g.prompt.split('\n')[0] || 'Guest'}`).join("\n")}
+PRIMARY HOST: ${primaryHost.name}
+${primaryHost.prompt}
+
+${participantBlock}
 
 TOPICS FOR THIS EPISODE:
-${topicTitles.map((t) => `- ${t}`).join("\n")}
+${topicOverview}
 
 CONTENT FILTER: ${filterNote}
 
-STRUCTURE YOUR INTRO LIKE THIS:
-1. HOOK — The host opens with something attention-grabbing. A provocative question, a sharp observation, a joke, or a bold statement that sets the tone. NOT "Welcome to the show." The host's archetype drives this.
-2. SELF-INTRO — The host introduces themselves briefly, in character. An Elder might say "I've been doing this longer than most of you have been alive." A Firebrand might say "You know who I am, and you know I don't hold back."
-3. GUEST INTROS — The host introduces each guest with a one-liner that references their personality or dynamic with the host. "Joining me is [name], who thinks everything I say is wrong — and I love him for it."
-4. TOPIC PREVIEW — Frame what's coming, with attitude. Not just listing topics — hook the audience into WHY these topics matter today.
+STRUCTURE YOUR INTRO LIKE AN INVESTIGATIVE JOURNALIST SETTING THE SCENE:
+
+1. HOOK — ${primaryHost.name} opens with something attention-grabbing that pulls the listener into the STORY. Not "Welcome to the show." Set the scene: reference the time period, what was happening in the world, what nobody was paying attention to. Example: "It's 2006. The housing market is booming, everyone's watching American Idol... and in a quiet courthouse in Palm Beach, a detective named Joe Recarey is filing a report that should have changed everything."
+
+2. SELF-INTRO — ${primaryHost.name} introduces themselves briefly, in character.
+
+3. CO-HOST/GUEST INTROS — ${primaryHost.name} introduces ${otherParticipants.map(p => p.name).join(" and ")} with warmth and personality. Reference their dynamic: "With me as always is [name], who..." or "Joining me tonight is [name]..." EVERY participant MUST be introduced by name.
+
+4. TOPIC SETUP — Set the premise of what they're about to explore. Frame it like investigative journalism: What happened? Who was involved? Why does it matter? Give the audience enough context to understand what they're about to hear. Make them feel like they're about to learn something they didn't know.
+
+TONE: Think of the best true-crime or investigative journalism podcasts — the intro draws you into a STORY, not a debate. It should feel like two knowledgeable friends are about to take you behind the curtain.
+
+SPEAKER RULES:
+- ${primaryHost.name} does most of the intro
+- ${otherParticipants.length > 0 ? `${otherParticipants[0].name} can chime in with 1-2 lines after being introduced — a reaction, a teaser, or a quick comment that shows their personality` : ""}
+- ALL participants must be introduced BY NAME
 
 OUTPUT FORMAT — respond with ONLY a JSON array of dialogue lines:
 [
-  { "speaker": "${host.name}", "characterId": "${host.id}", "text": "...", "emotion": "excited" }
+  { "speaker": "${primaryHost.name}", "characterId": "${primaryHost.id}", "text": "...", "emotion": "excited" }
+${otherParticipants.length > 0 ? `  { "speaker": "${otherParticipants[0].name}", "characterId": "${otherParticipants[0].id}", "text": "...", "emotion": "excited" }` : ""}
 ]
 
-Write 4-8 lines. ALL lines from the HOST. Natural, conversational, IN CHARACTER.
+Write 6-12 lines. Natural, conversational, IN CHARACTER. Make the listener feel like they NEED to keep listening.
 Emotions: "neutral", "excited", "amused", "serious", "angry", "sarcastic", "concerned"`;
 
   return callLLMForDialogue(systemPrompt, `Write the intro for "${showName}" episode "${episodeTitle}".`);
@@ -981,8 +1013,11 @@ export async function generateOutro(
   showName: string,
   contentFilter: string
 ): Promise<DialogueLine[]> {
-  const host = characters.find((c) => c.role === "HOST") || characters[0];
+  const hosts = characters.filter((c) => c.role === "HOST");
+  const primaryHost = hosts[0] || characters[0];
+  const coHosts = hosts.slice(1);
   const guests = characters.filter((c) => c.role === "GUEST");
+  const allParticipants = [...coHosts, ...guests];
 
   const filterNote = contentFilter === "FAMILY_FRIENDLY"
     ? "Keep language completely clean."
@@ -990,21 +1025,26 @@ export async function generateOutro(
     ? "Light profanity allowed but not excessive."
     : "No content restrictions. Raw, unfiltered language is fine.";
 
-  const systemPrompt = `You are writing a podcast outro. The host ${host.name} wraps up the show.
+  const participantNames = allParticipants.map(p => p.name).join(" and ");
 
-${host.prompt}
+  const systemPrompt = `You are writing a podcast outro. ${primaryHost.name} wraps up the show.
 
-GUESTS: ${guests.map((g) => g.name).join(", ")}
+${primaryHost.prompt}
+
+ALL PARTICIPANTS: ${[primaryHost.name, ...allParticipants.map(p => p.name)].join(", ")}
 
 CONTENT FILTER: ${filterNote}
 
 STRUCTURE:
-1. CLOSING THOUGHT — The host reflects on what was discussed. Not a summary — a personal take or observation that only THIS host would make. An Elder might say "I've seen this story before, and it never ends well." A Comedian might say "If we can't laugh at this, we're already dead."
-2. GUEST ACKNOWLEDGMENT — Brief, in-character. Thank the guests the way this host would.
-3. TEASE — Hint at next time or make a recurring sign-off.
-4. SIGN-OFF — The host's signature closing line. Make it memorable and consistent.
+1. CLOSING THOUGHT — ${primaryHost.name} reflects on what was discussed. Not a generic summary — a personal take that only THIS character would make.
+2. ACKNOWLEDGE EVERYONE — Thank ${participantNames || "the audience"} by NAME. "${participantNames ? `${participantNames}, ` : ""}appreciate you being here."
+3. TEASE — Hint at next time or what's coming.
+4. SIGN-OFF — The host's signature closing line. Show name and host name. "This has been ${showName}. I'm ${primaryHost.name}. Take care."
 
-ALL lines MUST have "speaker": "${host.name}" and "characterId": "${host.id}" — never "Unknown".
+${allParticipants.length > 0 ? `${allParticipants[0].name} can optionally have 1 short closing line before the final sign-off.` : ""}
+
+ALL lines MUST have valid "speaker" and "characterId" — never "Unknown".
+Valid speakers: ${characters.map(c => `"${c.name}" (id: "${c.id}")`).join(", ")}
 
 OUTPUT: JSON array of dialogue lines. 3-5 lines, brief, natural, IN CHARACTER.
 Emotions: "neutral", "excited", "amused", "serious", "sarcastic"`;
