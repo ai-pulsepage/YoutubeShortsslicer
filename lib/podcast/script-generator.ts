@@ -492,7 +492,7 @@ async function generateTopicDialogue(
 
   // ─── Define beats ──────────────────────────────────────────
   const beats = [
-    { name: "Opening Takes", fraction: 0.2, phase: "opening" },
+    { name: "Setting the Premise", fraction: 0.2, phase: "opening" },
     { name: "Deeper Exploration", fraction: 0.25, phase: "challenge" },
     { name: "Deep Dive & Evidence", fraction: 0.25, phase: "evidence" },
     { name: "Emotional Peak", fraction: 0.15, phase: "escalation" },
@@ -593,11 +593,18 @@ function buildContentPrompt(
 ): { system: string; user: string } {
 
   const phaseInstructions: Record<string, string> = {
-    opening: `PHASE: OPENING TAKES
-- Each character leads with what they find most fascinating or important about this topic
-- Include at least one SPECIFIC fact per character (a name, date, statistic, event)
-- One character should share something that genuinely surprises or excites the other
-- Plant 2-3 stories or factual threads that will be explored deeper in later rounds`,
+    opening: `PHASE: SETTING THE PREMISE
+This is the MOST IMPORTANT phase — you are telling the audience WHAT this topic actually is before any discussion begins.
+
+Structure it like a documentary opening:
+1. THE HOOK — Connect the topic to something the audience already knows, then reveal there's a deeper, older, or unknown version: "If I told you there was a secret ring of elites... you'd say Epstein. But before Epstein, there was another operation..."
+2. THE BACKSTORY — Walk through the story CHRONOLOGICALLY: When did it begin? Who first discovered it? What did they find? Who was involved? What was the purpose? What happened when people found out?
+3. THE SHOCKING DETAILS — Include the specific facts that make this story compelling: names, dates, amounts, organizations, documents. At least 3-4 specific, lesser-known facts.
+4. THE HOOK FORWARD — End with a provocative question or bridge that transitions into deeper exploration: "Is history repeating itself? Let's pull the thread..." or "And that's just what we KNOW. What we don't know is even worse."
+
+CRITICAL: Do NOT jump straight into analysis or opinions. FIRST tell the audience the STORY. Set the scene. Make them understand WHAT happened and WHO was involved before anyone starts interpreting it.
+
+Both characters should contribute to telling the story — one sets up a point, the other adds a shocking detail or reaction, then they build together.`,
 
     challenge: `PHASE: GO DEEPER
 - Characters build on what was said — referencing and expanding on each other's points
@@ -712,13 +719,12 @@ function buildDirectorPrompt(
     .join("\n");
 
   const phaseFlow: Record<string, string> = {
-    opening: `FLOW PATTERN FOR OPENING:
-- One character opens by framing the topic with energy — setting the stage for the conversation
-- The other character jumps in with their own angle: "Oh man, and get this..." or "See, here's the thing..."
-- If they AGREE: They build excitement together — one shares a fact, the other reacts with genuine surprise or outrage, then adds their own
-- If they DISAGREE: The second character pushes back — creating tension from the start
-- Allow 2-3 natural exchanges before the first transition
-- End with a setup that naturally leads to deeper exploration`,
+    opening: `FLOW PATTERN FOR SETTING THE PREMISE:
+- One character opens by connecting the topic to something familiar, then revealing the deeper/unknown story behind it
+- The other character jumps in with a specific, shocking detail: "And get this..." or "What most people don't know is..."
+- They take turns building the chronological backstory — one lays out a fact, the other adds context or reacts with genuine surprise
+- The flow should feel like two knowledgeable people telling you a story TOGETHER — each adding layers the other sets up
+- End with a provocative question or hook that transitions naturally into deeper exploration: "And that's just the part we know about..."`,
 
     challenge: `FLOW PATTERN FOR DEEPER EXPLORATION:
 - One character references what was said and goes deeper: "And you know what makes that even crazier?"
