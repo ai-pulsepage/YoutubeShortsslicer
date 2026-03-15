@@ -45,6 +45,119 @@ function getDiaEndpoint(): string {
  * For podcast use: each character line is generated individually with
  * their voice reference, using [S1] tag for single-speaker mode.
  */
+
+// ─── Supported Dia Vocal Effects ────────────────────────
+// These must appear in parentheses exactly as listed
+const DIA_SUPPORTED_EFFECTS = new Set([
+    "(laughs)", "(sighs)", "(clears throat)", "(singing)",
+    "(screams)", "(chuckle)", "(inhales)", "(exhales)",
+    "(gasps)", "(coughs)", "(sneezes)", "(sniffs)",
+    "(groans)", "(burps)", "(sings)", "(humming)",
+    "(whistles)", "(mumbles)", "(beep)", "(claps)", "(applause)",
+]);
+
+// Map common non-standard parenthetical actions to supported Dia effects
+const EFFECT_ALIASES: Record<string, string> = {
+    "(audible scoff)": "(sighs)",
+    "(scoffs)": "(sighs)",
+    "(scoff)": "(sighs)",
+    "(muttering)": "(mumbles)",
+    "(mutters)": "(mumbles)",
+    "(chuckles)": "(chuckle)",
+    "(chuckling)": "(chuckle)",
+    "(laughing)": "(laughs)",
+    "(laughter)": "(laughs)",
+    "(sighing)": "(sighs)",
+    "(sigh)": "(sighs)",
+    "(gasp)": "(gasps)",
+    "(gasping)": "(gasps)",
+    "(cough)": "(coughs)",
+    "(coughing)": "(coughs)",
+    "(sneeze)": "(sneezes)",
+    "(sneezing)": "(sneezes)",
+    "(sniff)": "(sniffs)",
+    "(sniffing)": "(sniffs)",
+    "(groan)": "(groans)",
+    "(groaning)": "(groans)",
+    "(screaming)": "(screams)",
+    "(scream)": "(screams)",
+    "(clap)": "(claps)",
+    "(clapping)": "(claps)",
+    "(burp)": "(burps)",
+    "(burping)": "(burps)",
+    "(hums)": "(humming)",
+    "(hum)": "(humming)",
+    "(whistle)": "(whistles)",
+    "(whistling)": "(whistles)",
+    "(mumble)": "(mumbles)",
+    "(mumbling)": "(mumbles)",
+    "(singing softly)": "(singing)",
+    "(sings softly)": "(sings)",
+    "(exhale)": "(exhales)",
+    "(inhale)": "(inhales)",
+};
+
+/**
+ * Sanitize text for Dia TTS to prevent generation failures.
+ *
+ * Handles:
+ * - Em/en dashes → commas or periods
+ * - Smart/curly quotes → straight quotes
+ * - Asterisk emphasis (*text*) → plain text
+ * - Unsupported parentheticals → mapped to Dia effects or removed
+ * - Stage directions like (Nods, allows...) → removed
+ * - Excessive ellipses → single pause
+ * - Unicode symbols and control characters → removed
+ */
+function sanitizeForDia(text: string): string {
+    let t = text;
+
+    // 1. Replace smart/curly quotes with straight equivalents
+    t = t.replace(/[\u2018\u2019\u201A\u201B]/g, "'");   // Single quotes
+    t = t.replace(/[\u201C\u201D\u201E\u201F]/g, '"');    // Double quotes
+
+    // 2. Replace em dashes (—) and en dashes (–) with commas or periods
+    t = t.replace(/\s*[—–]\s*/g, ", ");  // em/en dash → comma
+
+    // 3. Strip asterisk emphasis: *text* → text
+    t = t.replace(/\*([^*]+)\*/g, "$1");
+
+    // 4. Handle parenthetical actions
+    // First, map known aliases to supported effects
+    for (const [alias, effect] of Object.entries(EFFECT_ALIASES)) {
+        t = t.replace(new RegExp(alias.replace(/[()]/g, "\\$&"), "gi"), effect);
+    }
+
+    // Remove unsupported parentheticals (stage directions, descriptions)
+    // Keep only supported Dia effects
+    t = t.replace(/\(([^)]+)\)/g, (match, content) => {
+        const lower = `(${content.toLowerCase().trim()})`;
+        if (DIA_SUPPORTED_EFFECTS.has(lower)) {
+            return lower; // Normalize to lowercase
+        }
+        // Not a supported effect — remove entirely
+        return "";
+    });
+
+    // 5. Collapse excessive dots/ellipses (... ... ...) → single ellipsis
+    t = t.replace(/\.{2,}/g, "...");
+    t = t.replace(/(\.\.\.[\s]*){2,}/g, "... ");
+
+    // 6. Remove other problematic Unicode characters
+    t = t.replace(/[\u2026]/g, "...");        // Horizontal ellipsis → ...
+    t = t.replace(/[\u00A0]/g, " ");           // Non-breaking space → space
+    t = t.replace(/[\u200B-\u200F\uFEFF]/g, ""); // Zero-width chars
+    t = t.replace(/[\u2022\u2023\u25E6\u2043\u2219]/g, ""); // Bullet chars
+
+    // 7. Clean up double spaces and leading/trailing whitespace
+    t = t.replace(/\s{2,}/g, " ").trim();
+
+    // 8. Remove trailing comma if the sentence ends with one
+    t = t.replace(/,\s*$/, ".");
+
+    return t;
+}
+
 export async function generateSpeech(options: DiaGenerateOptions): Promise<Buffer> {
     const endpoint = getDiaEndpoint();
     const {
@@ -57,9 +170,11 @@ export async function generateSpeech(options: DiaGenerateOptions): Promise<Buffe
         outputFormat = "wav",
     } = options;
 
-    // Format text with [S1] tag for Dia — required for single-speaker mode
+    // Sanitize text for Dia compatibility
+    let cleanText = sanitizeForDia(text);
+
     // Strip any existing [S1]/[S2] tags to avoid doubling
-    let cleanText = text.replace(/\[S[12]\]\s*/g, "").trim();
+    cleanText = cleanText.replace(/\[S[12]\]\s*/g, "").trim();
 
     // Very short interjections (< 15 chars like "Exactly—" or "But that's just—")
     // need padding so Dia can generate meaningful audio

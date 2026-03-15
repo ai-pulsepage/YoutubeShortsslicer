@@ -14,6 +14,7 @@ import {
   Brain,
   MessageSquare,
   Zap,
+  Volume2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -78,6 +79,8 @@ export default function CharactersPage() {
   const [newHotButton, setNewHotButton] = useState("");
   const [diaVoices, setDiaVoices] = useState<{ predefined: any[]; reference: any[] }>({ predefined: [], reference: [] });
   const [loadingVoices, setLoadingVoices] = useState(true);
+  const [previewing, setPreviewing] = useState(false);
+  const [previewAudio, setPreviewAudio] = useState<HTMLAudioElement | null>(null);
 
   const fetchCharacters = useCallback(async () => {
     try {
@@ -423,12 +426,59 @@ export default function CharactersPage() {
                         </select>
                       )}
                       {form.voiceRefPath && (
-                        <p className="text-[9px] text-gray-600 mt-1">
-                          Selected: <span className="text-violet-400">{form.voiceRefPath}</span>
-                          {diaVoices.predefined.some((v: any) => v.filename === form.voiceRefPath)
-                            ? " (predefined)"
-                            : " (clone reference)"}
-                        </p>
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <p className="text-[9px] text-gray-600">
+                            Selected: <span className="text-violet-400">{form.voiceRefPath}</span>
+                            {diaVoices.predefined.some((v: any) => v.filename === form.voiceRefPath)
+                              ? " (predefined)"
+                              : " (clone reference)"}
+                          </p>
+                          <button
+                            onClick={async () => {
+                              if (previewing) return;
+                              // Stop any existing preview
+                              if (previewAudio) {
+                                previewAudio.pause();
+                                previewAudio.remove();
+                              }
+                              setPreviewing(true);
+                              try {
+                                const res = await fetch("/api/podcast/dia/preview", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ voiceRef: form.voiceRefPath }),
+                                });
+                                if (!res.ok) {
+                                  const err = await res.json();
+                                  alert(`Preview failed: ${err.error || res.statusText}`);
+                                  return;
+                                }
+                                const blob = await res.blob();
+                                const url = URL.createObjectURL(blob);
+                                const audio = new Audio(url);
+                                audio.onended = () => {
+                                  URL.revokeObjectURL(url);
+                                  setPreviewAudio(null);
+                                };
+                                setPreviewAudio(audio);
+                                audio.play();
+                              } catch (err: any) {
+                                alert(`Preview error: ${err.message}`);
+                              } finally {
+                                setPreviewing(false);
+                              }
+                            }}
+                            disabled={previewing}
+                            className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-medium bg-emerald-600/20 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-600/30 disabled:opacity-50 transition-colors"
+                          >
+                            {previewing ? (
+                              <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                            ) : (
+                              <Volume2 className="w-2.5 h-2.5" />
+                            )}
+                            {previewing ? "Generating..." : "Preview Voice"}
+                          </button>
+                        </div>
                       )}
                     </div>
                     <div>

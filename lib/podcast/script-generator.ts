@@ -880,6 +880,19 @@ CRITICAL ANTI-REPETITION RULES:
 - No character should make the same argument in different words
 - Vary sentence length: mix punchy 5-word reactions with detailed 40-word explanations
 
+TTS FORMATTING RULES (CRITICAL — violations cause audio failures):
+- Do NOT use em dashes (—) or en dashes (–). Use commas, periods, or ellipses instead.
+- Do NOT use asterisks for emphasis (*text*). Just write the text normally.
+- Do NOT use smart/curly quotes. Use straight quotes only: ' and "
+- Do NOT write stage directions in parentheses like (nods), (pauses), (audible scoff), (muttering)
+- The ONLY parenthetical effects allowed are these exact Dia TTS effects:
+  (laughs) (sighs) (clears throat) (singing) (screams) (chuckle) (inhales) (exhales)
+  (gasps) (coughs) (sneezes) (sniffs) (groans) (burps) (sings) (humming)
+  (whistles) (mumbles) (beep) (claps) (applause)
+- Place effects WITHIN the text naturally: "Oh come on, (laughs) you can't be serious"
+- Use ellipses (...) for pauses instead of dashes
+- Keep interjections as plain text: "Exactly!" not "(exclaims) Exactly!"
+
 OUTPUT: JSON array ONLY — every element must have ALL of these fields:
 [
   { "speaker": "CharacterName", "characterId": "charId", "text": "...", "emotion": "angry" }
