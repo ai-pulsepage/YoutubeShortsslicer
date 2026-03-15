@@ -335,7 +335,9 @@ export async function generateIntro(
     ? `OTHER PARTICIPANTS ON THIS EPISODE:\n${otherParticipants.map((p) => `- ${p.name} (${p.role}): ${p.prompt.split('\n')[0] || p.role}`).join("\n")}`
     : "";
 
-  const systemPrompt = `You are writing a podcast intro. This is the OPENING of the show — it must hook the listener and set the scene for what's coming.
+  const systemPrompt = `You are writing a podcast intro. This is the VERY FIRST thing a listener hears. The show is JUST starting.
+
+CRITICAL: Do NOT start as if continuing a previous conversation. No "That reminds me," no "You know, I was just thinking," no "So anyway." This is the COLD OPEN — the first words out of the host's mouth when the mic turns on.
 
 PRIMARY HOST: ${primaryHost.name}
 ${primaryHost.prompt}
@@ -355,7 +357,7 @@ READ THE CHARACTERS AND TOPIC CAREFULLY. The intro style should match WHO these 
 - The CHARACTER ARCHETYPES should drive the vibe — a Storyteller opens differently than a Provocateur
 
 STRUCTURE:
-1. HOOK — ${primaryHost.name} opens with something attention-grabbing that pulls the listener into the WORLD of this topic. NOT "Welcome to the show." Set the scene — give the listener a vivid moment, a question, or a story that makes them lean in.
+1. HOOK — ${primaryHost.name} opens with something attention-grabbing that pulls the listener into the WORLD of this topic. NOT "Welcome to the show." NOT "That reminds me." This is a COLD OPEN. Set the scene — a vivid moment, a provocative question, or a bold statement that makes the listener lean in.
 
 2. SELF-INTRO — ${primaryHost.name} introduces themselves briefly, in character.
 
@@ -641,7 +643,7 @@ ${previousTopicSummary}\n`
     : "";
 
   const previousContext = conversationSoFar
-    ? `\nPREVIOUS CONVERSATION CONTENT (reference and build on this — do NOT repeat the same points):\n${conversationSoFar}\n`
+    ? `\nPREVIOUS CONVERSATION CONTENT — CRITICAL: Do NOT repeat ANY facts, names, dates, or stories from below. Every beat must introduce ENTIRELY NEW information. If a fact appeared in a previous beat, it is SPENT — never mention it again:\n${conversationSoFar}\n`
     : "";
 
   const sourceBlock = sourceUrls.length > 0
@@ -728,16 +730,24 @@ function buildDirectorPrompt(
 
     challenge: `FLOW PATTERN FOR DEEPER EXPLORATION:
 - One character references what was said and goes deeper: "And you know what makes that even crazier?"
-- If they AGREE: They ADD to each other's case — each one brings new evidence, the other reacts: "No way" / "Exactly!" / "That's what I'm saying!" — they're building momentum together
+- If they AGREE: They ADD to each other's case — each one brings NEW evidence the other hasn't mentioned
 - If they DISAGREE: One directly challenges with counter-evidence while the other defends
-- Allow one character to hold the floor for an extended point (4+ sentences) while the other adds short reactions: "Right" / "Wow" / "See?"
+- CRITICAL — NO EMPTY REACTIONS: When a character responds, they must ADD INFORMATION, not just echo. Instead of "Right." or "Exactly." they should say something like:
+  BAD: "A direct order." / "The logistics man." / "Two-way mirrors."
+  GOOD: "And that connects to what we saw in the Profumo case — same exact playbook, different decade."
+  GOOD: "Which is exactly what Colby warned about before his canoe accident."
+  GOOD: "That's the part that gets me — because the FBI HAD the evidence. They had 53 pages of it."
+- Every reaction must either ADD a new fact, CONNECT to another part of the story, or EXPAND with a personal insight
 - Include natural conversation momentum — one revelation leads to the next`,
 
     evidence: `FLOW PATTERN FOR DEEP DIVE:
 - One character digs deep into a specific angle: "OK let me break this down for you..."
-- They provide a detailed, multi-sentence explanation with specifics — this is a MONOLOGUE moment (4-6 sentences)
-- During the monologue, include 1-2 SHORT reactions from the other: "Exactly" / "That's insane" / "People don't know about this"
-- If they AGREE: The other character responds with their own deep dive on a RELATED angle: "And that connects to something else..." — they're building a web of evidence together
+- They provide a detailed, multi-sentence explanation with specifics
+- CRITICAL — NO PARROT REACTIONS: The other character's responses must be SUBSTANTIVE, not echoes. Instead of repeating what was just said in 2 words, they should:
+  BAD: "A data center." / "The normalization." / "A simmer."
+  GOOD: "And THAT is what the Nebraska Senate investigation found — the same exact infrastructure, just analog instead of digital."
+  GOOD: "Which raises the question nobody wants to ask — where did those tapes GO after he died?"
+- If they AGREE: The other character responds with their own deep dive on a DIFFERENT angle — building a web of evidence
 - If they DISAGREE: The other responds with counter-evidence — also detailed
 - Include a SEGUE moment where the conversation naturally drifts to a related sub-topic`,
 
@@ -801,11 +811,11 @@ TARGET: ~${targetWords} words across ~${Math.max(6, Math.round(targetWords / 30)
 OUTPUT FORMAT — Write a structured conversation plan:
 
 TURN 1 | [CharacterName] | [SELECTED_BY: host question / SELF_SELECT / CONTINUES] | [their content from the raw material — 2-5 sentences of substance, facts, and arguments] | [Flow note: "sets up challenge" / "builds on previous" / "segue to sub-topic"]
-TURN 2 | [CharacterName] | [INTERJECTION during turn 1] | [1-3 words: "Right" / "Exactly" / "But—"] | [backchannel]
-TURN 3 | [CharacterName] | [RESPONDS to turn 1] | [their response content] | [Flow note]
+TURN 2 | [CharacterName] | [RESPONDS / BUILDS ON turn 1] | [SUBSTANTIVE response — must add NEW information, connect to another fact, or expand with insight. NOT just "Right" or "Exactly"] | [Flow note]
+TURN 3 | [CharacterName] | [CONTINUES or RESPONDS] | [their response content] | [Flow note]
 etc.
 
-Include INTERJECTION lines — these are short backchannel responses ("mm-hmm", "right", "but wait—") that happen DURING someone else's extended turn. Mark these as INTERJECTION type.`;
+IMPORTANT: Minimize empty interjections. When a character reacts to what another said, they should ADD something — a connected fact, a related story, context that deepens the point. Only use brief interjections ("Right" / "Wow") very sparingly (max 1-2 per beat), and NEVER as a character's only contribution to a multi-turn exchange.`;
 
   return {
     system,
