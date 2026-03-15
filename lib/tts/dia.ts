@@ -192,10 +192,14 @@ export async function generateSpeech(options: DiaGenerateOptions): Promise<Buffe
     const isClone = voiceMode === "clone";
     const chunkSize = isClone ? 100 : 120;
 
+    // Map 'predefined' to 'single_s1' — Dia API only accepts: dialogue, single_s1, single_s2, clone
+    // Predefined voices use single_s1 mode with clone_reference_filename pointing to the voice file
+    const apiVoiceMode = voiceMode === "predefined" ? "single_s1" : voiceMode;
+
     // Use the full-control /tts endpoint for maximum flexibility
     const body: Record<string, any> = {
         text: diaText,
-        voice_mode: voiceMode,
+        voice_mode: apiVoiceMode,
         output_format: outputFormat,
         speed_factor: speed,
         seed,
