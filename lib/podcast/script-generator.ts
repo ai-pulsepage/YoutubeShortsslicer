@@ -425,26 +425,38 @@ async function generateTopicDialogue(
 
   const totalTargetWords = durationMin * 150;
 
-  // ─── Extract character perspective summaries for Content AI ──────
-  // Pass 1 doesn't get full personality — just ideological angles
+  // ─── Extract character belief profiles for Content AI ──────
+  // Pass full beliefs so the AI can naturally determine conversation dynamics
   const perspectives = characters.map((c) => {
     const lines = c.prompt.split("\n");
+    // Extract key belief sections from the character prompt
     const political = lines.find((l) => l.startsWith("POLITICAL WORLDVIEW:"))?.replace("POLITICAL WORLDVIEW:", "").trim() || "";
-    const beliefs = lines.filter((l) => l.startsWith("- ")).map((l) => l.replace("- ", "")).join("; ");
+    const religious = lines.find((l) => l.startsWith("RELIGIOUS/SPIRITUAL VIEW:"))?.replace("RELIGIOUS/SPIRITUAL VIEW:", "").trim() || "";
+    const beliefsStart = lines.findIndex((l) => l.includes("CORE BELIEFS"));
+    const beliefs = beliefsStart >= 0
+      ? lines.slice(beliefsStart + 1).filter((l) => l.startsWith("- ")).map((l) => l.replace("- ", "").trim())
+      : [];
+    const hotStart = lines.findIndex((l) => l.includes("HOT-BUTTON"));
+    const hotButtons = hotStart >= 0
+      ? lines.slice(hotStart + 1).filter((l) => l.startsWith("- ")).map((l) => l.replace("- ", "").trim())
+      : [];
     return {
       id: c.id,
       name: c.name,
       role: c.role,
-      angle: political || beliefs || c.role,
+      political,
+      religious,
+      beliefs,
+      hotButtons,
     };
   });
 
   // ─── Define beats ──────────────────────────────────────────
   const beats = [
     { name: "Opening Takes", fraction: 0.2, phase: "opening" },
-    { name: "Challenge & Push Back", fraction: 0.25, phase: "challenge" },
+    { name: "Deeper Exploration", fraction: 0.25, phase: "challenge" },
     { name: "Deep Dive & Evidence", fraction: 0.25, phase: "evidence" },
-    { name: "Escalation & Hot Buttons", fraction: 0.15, phase: "escalation" },
+    { name: "Emotional Peak", fraction: 0.15, phase: "escalation" },
     { name: "Landing & Final Words", fraction: 0.15, phase: "landing" },
   ];
 
@@ -533,7 +545,7 @@ function buildContentPrompt(
   topicContent: string,
   sourceUrls: string[],
   scrapedContent: string,
-  perspectives: { id: string; name: string; role: string; angle: string }[],
+  perspectives: { id: string; name: string; role: string; political: string; religious: string; beliefs: string[]; hotButtons: string[] }[],
   beat: { name: string; phase: string },
   targetWords: number,
   conversationSoFar: string,
@@ -543,57 +555,36 @@ function buildContentPrompt(
 
   const phaseInstructions: Record<string, string> = {
     opening: `PHASE: OPENING TAKES
-Generate each perspective's initial position on the topic.
-- Each perspective should lead with their STRONGEST, most specific argument
-- Include at least one SPECIFIC fact per perspective (a name, date, statistic, event, or policy)
-- One perspective should make a claim that will be difficult for the others to counter
-- Plant 2-3 factual seeds that will be developed deeper in later rounds
-- Don't just state opinions — provide the REASONING and EVIDENCE behind each position`,
+- Each character leads with what they find most fascinating or important about this topic
+- Include at least one SPECIFIC fact per character (a name, date, statistic, event)
+- One character should share something that genuinely surprises or excites the other
+- Plant 2-3 stories or factual threads that will be explored deeper in later rounds`,
 
-    challenge: `PHASE: CHALLENGES & PUSH BACK
-Generate direct challenges to the positions stated in the conversation so far.
-- Each challenge must ADDRESS A SPECIFIC CLAIM from the conversation — quote it or paraphrase it
-- Provide counter-evidence: opposing statistics, historical counter-examples, logical flaws
-- Include at least one "drill-down moment" — one perspective spends 3-4 sentences explaining a specific aspect in granular detail (e.g. the timeline of Iran's enrichment program, specific trade agreement clauses, specific policy outcomes with numbers)
-- Some challenges should be strong, others should be partial agreements that pivot to a different point
-- Include evidence that is genuinely hard to dismiss`,
+    challenge: `PHASE: GO DEEPER
+- Characters build on what was said — referencing and expanding on each other's points
+- Include at least one "drill-down moment" where one character spends 3-4 sentences breaking down a specific detail
+- Characters should react authentically to what they're hearing based on their beliefs
+- One character should share a lesser-known story or connection that reframes the discussion`,
 
-    evidence: `PHASE: DEEP DIVE & EVIDENCE
-Generate the most substantive part of the debate — this is where real depth happens.
-- Each perspective provides their MOST DETAILED, SPECIFIC arguments
-- Include extended explanations: a perspective spends 4-6 sentences on ONE specific sub-topic with real facts, names, dates, and numbers
-- Include a moment where one perspective brings up something the others hadn't considered — a genuinely new angle
-- One perspective should cite a specific historical parallel with DETAIL (not just "it happened before")
-- Include a sub-point where two perspectives partially agree on a specific fact but disagree on its interpretation
-- This round should contain the HIGHEST density of specific facts in the entire topic`,
+    evidence: `PHASE: DEEP DIVE
+- This is where real depth happens — the most substantive part of the conversation
+- One character provides an extended, detailed account of a specific event, person, or connection (4-6 sentences with real facts)
+- The other character should respond with their own deep dive on a RELATED angle
+- Include specific names, dates, places, amounts, documents, quotes
+- Stories should naturally LEAD to each other through genuine connections`,
 
-    escalation: `PHASE: ESCALATION & HOT BUTTONS
-Generate the emotional peak of the debate.
-- One perspective pushes a point that hits the others personally — not just intellectually
-- Include a provocative claim that is partially true but framed in the most inflammatory way
-- One perspective should oversimplify a complex issue deliberately to make a emotional point
-- Include a moment of genuine moral/ethical disagreement — not just policy disagreement
-- One perspective should bring up a consequence that the others are uncomfortable acknowledging`,
+    escalation: `PHASE: EMOTIONAL CORE
+- The conversation reaches peak intensity — passion, outrage, excitement, or revelation
+- Characters express genuine emotion about the topic based on their beliefs and hot buttons
+- Include a provocative or surprising claim backed by specific evidence
+- The energy should feel like people who CARE deeply about this topic`,
 
     landing: `PHASE: LANDING & FINAL WORDS
-Generate closing arguments that reflect evolution from the debate.
-- Each perspective should have SHIFTED slightly from their opening position — not reversed, but nuanced
-- Include one moment of unexpected concession: a perspective admits the other side has a point on ONE specific thing
-- The moderator observation should synthesize what was actually debated — not a generic summary
-- End with genuine unresolved tension on a specific sub-question
-- At least one perspective should end with a forward-looking question that lingers`,
+- Characters reflect on the conversation's journey
+- Each should leave the listener with something that sticks — a final story, a haunting question, or a powerful insight
+- End with a forward-looking hook or an unresolved question
+- The closing should feel natural, not formulaic`,
   };
-
-  // With only 2 characters, BOTH should debate — no pure moderator
-  const isTwoPersonDebate = perspectives.length <= 2;
-
-  const perspectiveBlock = perspectives
-    .map((p, i) => `${p.name} (${p.angle}): Argue from a ${p.angle} viewpoint`)
-    .join("\n");
-
-  const moderatorNote = isTwoPersonDebate
-    ? `\nIMPORTANT: There are only ${perspectives.length} participants. BOTH must argue their own position. The first character (${perspectives[0]?.name}) also guides the conversation — asking questions, framing topics — but they MUST ALSO argue their own viewpoint, not just moderate. There is NO separate moderator.`
-    : `\nMODERATOR: Guides discussion, asks probing follow-up questions, challenges all sides`;
 
   const topicTransitionNote = topicIndex > 0 && previousTopicSummary
     ? `\nIMPORTANT — TOPIC TRANSITION:\nThis is topic #${topicIndex + 1} in the SAME episode. The panelists have been talking already.
@@ -615,34 +606,53 @@ ${previousTopicSummary}\n`
     ? `\nSCRAPED ARTICLE CONTENT (use this as research material — cite specific facts, names, and details from these articles):\n${scrapedContent}\n`
     : "";
 
-  const system = `You are a senior investigative journalist and researcher preparing substantive debate content for an expert panel.
+  const system = `You are a senior researcher and storyteller preparing substantive content for a podcast conversation.
 
-Your job is to generate the RAW ARGUMENTS, FACTS, AND EVIDENCE for a debate — NOT the final dialogue. Another system will convert this into character voices later.
+Your job is to generate RAW STORIES, INSIGHTS, LESSER-KNOWN FACTS, AND REAL ANECDOTES for a conversation — NOT the final dialogue. Another system will convert this into character voices later.
 
-${perspectiveBlock}${moderatorNote}
+The purpose of this podcast is to EDUCATE and ENTERTAIN an audience. The characters are knowledgeable people sharing what they know.
+
+CHARACTERS:
+${perspectives.map(p => {
+  let profile = `${p.name} (${p.role})`;
+  if (p.political) profile += `\n  Political: ${p.political}`;
+  if (p.religious) profile += `\n  Religious/Spiritual: ${p.religious}`;
+  if (p.beliefs.length > 0) profile += `\n  Core Beliefs: ${p.beliefs.join("; ")}`;
+  if (p.hotButtons.length > 0) profile += `\n  Hot Buttons: ${p.hotButtons.join("; ")}`;
+  return profile;
+}).join("\n\n")}
+
+CONVERSATION RULES:
+- Read each character's beliefs carefully. Their worldview determines how they engage with this topic.
+- Characters who share beliefs will naturally agree, build on each other, share stories together.
+- Characters with opposing beliefs will naturally clash, challenge, and debate.
+- Do NOT force conflict where none exists. Do NOT force agreement where there's genuine disagreement.
+- Let the dynamic emerge from WHO THESE PEOPLE ARE and WHAT THEY BELIEVE about this topic.
+- The conversation should feel like real people talking — sharing what they know, reacting authentically, going on tangents that connect back.
 
 TOPIC: ${topicTitle}
-${topicContent ? `PRIMARY TALKING POINTS (these are the USER'S key angles — you MUST address each one specifically):\n${topicContent}` : ""}
+${topicContent ? `PRIMARY TALKING POINTS (you MUST address each one specifically):\n${topicContent}` : ""}
 ${sourceBlock}${scrapedBlock}
 
 ${phaseInstructions[beat.phase] || phaseInstructions.opening}
 ${topicTransitionNote}${previousContext}
 
-SUBSTANCE REQUIREMENTS:
-- Every claim MUST include at least one SPECIFIC: a person's name, a date, a statistic, a policy name, a dollar amount, a treaty, a historical event with year
-- Do NOT use vague references like "the data shows" or "experts say" — name the data, name the expert
-- When making a comparison, use specific numbers: "60% enrichment vs. the 90% needed for weaponization" not "close to weapons-grade"
-- Include at least one fact that is genuinely surprising or lesser-known
-- Arguments should BUILD on each other — address what was said before, don't just introduce new unrelated points
+STORYTELLING REQUIREMENTS:
+- Tell STORIES, not positions. Share what real people did, said, and experienced.
+- Include the HUMAN details — what someone said in a letter, how they reacted in a meeting, the specific moment something changed.
+- Include LESSER-KNOWN facts that would surprise even someone familiar with the topic.
+- Name SPECIFIC people, dates, places, amounts, documents, quotes.
+- Each character should bring UNIQUE knowledge — don't have them repeat what the other just said.
+- One story should naturally LEAD to the next through genuine connections.
 
-TARGET: ~${targetWords} words total across all perspectives.
+TARGET: ~${targetWords} words total across all characters.
 
 OUTPUT FORMAT: Write as labeled paragraphs using CHARACTER NAMES:
-${perspectives.map(p => `${p.name}: [their argument with evidence]`).join("\n")}
-${isTwoPersonDebate ? "" : "MODERATOR: [their framing/question]\n"}${perspectives[0]?.name}: [response]
+${perspectives.map(p => `${p.name}: [their story/insight with specific details]`).join("\n")}
+${perspectives[0]?.name}: [response/reaction/their own related story]
 etc.
 
-Write substantive prose — not bullet points. Each perspective entry should be 2-5 sentences.`;
+Write substantive prose — not bullet points. Each entry should be 2-5 sentences of rich, specific content.`;
 
   return {
     system,
@@ -664,53 +674,48 @@ function buildDirectorPrompt(
 
   const phaseFlow: Record<string, string> = {
     opening: `FLOW PATTERN FOR OPENING:
-- Host opens by framing the topic as a question to the room — addressing one guest by name first
-- The addressed guest gives their take (2-3 sentences of substance)
-- The OTHER guest jumps in unprompted: "Can I jump in here?" or "See, here's the thing..."
-- Host reacts briefly, then asks a follow-up to either guest
-- Allow 1-2 exchanges where two speakers go back and forth before the third joins
-- End with a setup statement that will provoke the challenge round`,
+- One character opens by framing the topic with energy — setting the stage for the conversation
+- The other character jumps in with their own angle: "Oh man, and get this..." or "See, here's the thing..."
+- If they AGREE: They build excitement together — one shares a fact, the other reacts with genuine surprise or outrage, then adds their own
+- If they DISAGREE: The second character pushes back — creating tension from the start
+- Allow 2-3 natural exchanges before the first transition
+- End with a setup that naturally leads to deeper exploration`,
 
-    challenge: `FLOW PATTERN FOR CHALLENGE:
-- One guest directly quotes or paraphrases what another guest said and challenges it
-- The challenged guest defends (2-3 sentences) — the host should NOT intervene immediately
-- After the defense, the host asks a pointed follow-up: "But what about [specific thing]?"
-- Include a moment where TWO speakers agree on a specific FACT before disagreeing on its meaning
-- Allow one speaker to hold the floor for an extended point (4+ sentences) while others add short interjections: "Right" / "But—" / "Hold on"
-- The guest who's been quiet should self-select: "You know, I haven't said much about this, but..."`,
+    challenge: `FLOW PATTERN FOR DEEPER EXPLORATION:
+- One character references what was said and goes deeper: "And you know what makes that even crazier?"
+- If they AGREE: They ADD to each other's case — each one brings new evidence, the other reacts: "No way" / "Exactly!" / "That's what I'm saying!" — they're building momentum together
+- If they DISAGREE: One directly challenges with counter-evidence while the other defends
+- Allow one character to hold the floor for an extended point (4+ sentences) while the other adds short reactions: "Right" / "Wow" / "See?"
+- Include natural conversation momentum — one revelation leads to the next`,
 
     evidence: `FLOW PATTERN FOR DEEP DIVE:
-- The host asks a SPECIFIC question that forces detailed evidence: "Give me the actual numbers on that"
-- One guest provides a detailed, multi-sentence explanation with specifics — this is a MONOLOGUE moment (4-6 sentences)
-- During the monologue, include 1-2 SHORT interjections from others: "Exactly" or "That's the problem though"
-- After the monologue, the other guest responds with their own counter-evidence — also detailed
-- Include a SEGUE moment where the conversation naturally drifts to a related sub-topic through a specific connection
-- Two guests may agree on a factual point and have a brief 2-3 turn agreement run before the third disrupts it
-- Host bridges between sub-topics: "OK but that brings up another question..."`,
+- One character digs deep into a specific angle: "OK let me break this down for you..."
+- They provide a detailed, multi-sentence explanation with specifics — this is a MONOLOGUE moment (4-6 sentences)
+- During the monologue, include 1-2 SHORT reactions from the other: "Exactly" / "That's insane" / "People don't know about this"
+- If they AGREE: The other character responds with their own deep dive on a RELATED angle: "And that connects to something else..." — they're building a web of evidence together
+- If they DISAGREE: The other responds with counter-evidence — also detailed
+- Include a SEGUE moment where the conversation naturally drifts to a related sub-topic`,
 
-    escalation: `FLOW PATTERN FOR ESCALATION:
-- The conversation is flowing normally, then ONE guest says something that triggers another's emotional core
-- The triggered guest's response is IMMEDIATE and intense — they interrupt or talk over
-- Allow a rapid-fire 2-turn exchange between the two heated speakers while the third watches
-- The observer then cuts in: "WHOA, hold on" or "Both of you, stop for a second"
-- Include one moment of SILENCE — marked as a pause or beat — after something hits hard
-- The guest who was triggered may try to regain composure but fail: "Look, I'm sorry but—no, actually I'm NOT sorry"
-- Host should be affected too — not just moderating, feeling the tension`,
+    escalation: `FLOW PATTERN FOR EMOTIONAL PEAK:
+- The conversation builds to peak intensity
+- If they AGREE: They reach shared outrage or excitement — "Can we just agree that this is absolutely insane?" / "This is what drives me crazy!" — they feed off each other's passion, getting heated about the SAME thing
+- If they DISAGREE: ONE character says something that triggers the other's emotional core — immediate, intense response
+- Include one moment where a character gets genuinely passionate — voice rising, speaking faster
+- The energy should feel like two people who CARE deeply about this topic`,
 
     landing: `FLOW PATTERN FOR LANDING:
-- Host pulls back from the heat: "Alright, let's bring it down a notch"
-- Each guest gets a closing thought — but NOT round-robin. The host asks each one specifically
-- One guest should CONCEDE something small but genuine before stating their final position
-- Another guest should respond to the concession with surprise: "Wait, did you just agree with me on that?"
-- The host closes with their own take — something personal, not just a summary
-- End with an unresolved question — the host names it explicitly: "The question nobody answered tonight is..."`,
+- The energy comes down naturally: "Alright, so here's the thing..."
+- If they AGREE: They summarize the shared case they've built — "So what we're really saying is..." / "And that's what people need to wake up to." One might add a call to action or a lingering question
+- If they DISAGREE: One CONCEDES something small: "OK, I'll give you that part..." — the other reacts with surprise
+- Each character gets a closing thought — personal, not just a summary
+- End with a forward-looking hook: "And next time, we need to get into..." or an unresolved question`,
   };
 
   const previousContext = conversationSoFar
     ? `\nCONVERSATION SO FAR (design the flow to continue naturally from here):\n${conversationSoFar.slice(-2000)}\n`
     : "";
 
-  const system = `You are a podcast conversation director. Your job is to take RAW DEBATE CONTENT and design how the conversation FLOWS between specific characters.
+  const system = `You are a podcast conversation director. Your job is to take RAW CONTENT and design how the conversation FLOWS between specific characters.
 
 You are applying the Sacks-Schegloff-Jefferson turn-taking model and conversation analysis principles to create natural, dynamic dialogue structure.
 
@@ -881,6 +886,17 @@ VOICE TRANSLATION RULES:
 7. When a character DISAGREES, make the DELAY audible: "Well... okay. I hear you. But here's where that falls apart—"
 8. Each character's SIGNATURE PHRASES should appear at MOST once per beat — NOT every line
 9. Characters should OCCASIONALLY reference what they heard another character say by PARAPHRASING it, not just pivoting to their own point
+
+DIA VOCAL EFFECTS — USE THESE to bring the dialogue to life:
+Available effects (place inside the text naturally): (laughs) (sighs) (clears throat) (chuckle) (gasps) (groans) (inhales) (exhales) (coughs) (mumbles)
+- Use (laughs) when something absurd or ironic is pointed out
+- Use (sighs) when expressing frustration, exhaustion, or resignation
+- Use (chuckle) for wry amusement or dark humor
+- Use (clears throat) before a serious, deliberate point
+- Use (gasps) for genuine shock or disbelief at a revelation
+- Place them naturally WITHIN the text: "Oh come on, (laughs) you can't seriously believe that"
+- Use 2-4 effects per beat — not every line, but enough to feel human
+- Do NOT use any effects not in the list above. No stage directions like (nods) or (pauses).
 
 CRITICAL ANTI-REPETITION RULES:
 - If a character already said "I know what I know" in a previous beat, they CANNOT say it again
