@@ -1235,30 +1235,29 @@ function EpisodeModal({
                           className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none"
                         />
 
-                        {/* Source Mode */}
-                        <div className="flex gap-1">
-                          {SOURCE_MODES.map((m) => (
-                            <button
-                              key={m.id}
-                              onClick={() =>
-                                updateSegment(i, "sourceMode", m.id)
-                              }
-                              className={cn(
-                                "px-2.5 py-1.5 rounded-lg text-[10px] border transition-colors flex-1",
-                                seg.sourceMode === m.id
-                                  ? "bg-violet-500/15 border-violet-500/30 text-violet-400"
-                                  : "bg-gray-900 border-gray-700 text-gray-500 hover:border-gray-600"
-                              )}
-                            >
-                              {m.label}
-                            </button>
-                          ))}
+                        {/* Talking Points / Premise */}
+                        <div>
+                          <label className="text-[10px] text-gray-500 mb-1 block">
+                            Talking Points & Premise
+                          </label>
+                          <textarea
+                            value={seg.topicContent}
+                            onChange={(e) =>
+                              updateSegment(i, "topicContent", e.target.value)
+                            }
+                            placeholder={"Paste your key talking points, facts, and angles here. The AI will focus on these as primary source material.\n\nExample:\n- East Germany's Stasi ran \"Romeo Operations\"...\n- KGB used bugged hotel rooms..."}
+                            rows={4}
+                            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none resize-y"
+                          />
                         </div>
 
-                        {/* URL inputs */}
-                        {seg.sourceMode === "URLS" && (
+                        {/* Reference URLs */}
+                        <div>
+                          <label className="text-[10px] text-gray-500 mb-1 block">
+                            Reference URLs <span className="text-gray-600">(optional — articles will be scraped for content)</span>
+                          </label>
                           <div className="space-y-1">
-                            {seg.sourceUrls.map((url, ui) => (
+                            {seg.sourceUrls.map((url: string, ui: number) => (
                               <div key={ui} className="flex gap-1">
                                 <input
                                   type="url"
@@ -1284,20 +1283,7 @@ function EpisodeModal({
                               <Plus className="w-3 h-3" /> Add URL
                             </button>
                           </div>
-                        )}
-
-                        {/* Manual premise */}
-                        {seg.sourceMode === "MANUAL_PREMISE" && (
-                          <textarea
-                            value={seg.topicContent}
-                            onChange={(e) =>
-                              updateSegment(i, "topicContent", e.target.value)
-                            }
-                            placeholder="Describe the debate premise..."
-                            rows={2}
-                            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none resize-none"
-                          />
-                        )}
+                        </div>
                       </>
                     )}
 

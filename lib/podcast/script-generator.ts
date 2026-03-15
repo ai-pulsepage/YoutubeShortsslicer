@@ -341,6 +341,69 @@ Emotions: "neutral", "excited", "amused", "serious", "angry", "sarcastic", "conc
   return callLLMForDialogue(systemPrompt, `Write the intro for "${showName}" episode "${episodeTitle}".`);
 }
 
+// ─── URL Scraping ───────────────────────────────────────
+
+async function scrapeSourceUrls(urls: string[]): Promise<string> {
+  if (!urls || urls.length === 0) return "";
+
+  const scrapedParts: string[] = [];
+
+  for (const url of urls) {
+    if (!url.trim()) continue;
+    try {
+      console.log(`[PODCAST] Scraping URL: ${url}`);
+      const res = await fetch(url, {
+        signal: AbortSignal.timeout(15000),
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; PodcastResearchBot/1.0)",
+          "Accept": "text/html,application/xhtml+xml,*/*",
+        },
+      });
+      if (!res.ok) {
+        console.warn(`[PODCAST] Scrape failed for ${url}: ${res.status}`);
+        continue;
+      }
+
+      let html = await res.text();
+
+      // Strip script/style tags and their content
+      html = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "");
+      html = html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "");
+      html = html.replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, "");
+      html = html.replace(/<header[^>]*>[\s\S]*?<\/header>/gi, "");
+      html = html.replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, "");
+
+      // Extract text content — strip all remaining HTML tags
+      let text = html
+        .replace(/<[^>]+>/g, " ")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      // Truncate to ~3000 chars to avoid overwhelming the prompt
+      if (text.length > 3000) {
+        text = text.slice(0, 3000) + "... [truncated]";
+      }
+
+      if (text.length > 100) { // Only include if we got meaningful content
+        scrapedParts.push(`=== FROM: ${url} ===\n${text}`);
+        console.log(`[PODCAST] Scraped ${text.length} chars from ${url}`);
+      } else {
+        console.warn(`[PODCAST] Too little content scraped from ${url} (${text.length} chars)`);
+      }
+    } catch (err: any) {
+      console.warn(`[PODCAST] Scrape error for ${url}: ${err.message}`);
+    }
+  }
+
+  return scrapedParts.join("\n\n");
+}
+
 async function generateTopicDialogue(
   characters: { id: string; name: string; role: string; prompt: string }[],
   topicTitle: string,
@@ -352,6 +415,8 @@ async function generateTopicDialogue(
   topicIndex: number = 0,
   previousTopicSummary: string = ""
 ): Promise<DialogueLine[]> {
+  // ─── Scrape URLs for real article content ──────────────
+  const scrapedContent = await scrapeSourceUrls(sourceUrls);
   const filterNote = contentFilter === "FAMILY_FRIENDLY"
     ? "Keep language completely clean."
     : contentFilter === "MODERATE"
@@ -397,7 +462,7 @@ async function generateTopicDialogue(
       // ═══════════════════════════════════════════════════════
 
       const contentPrompt = buildContentPrompt(
-        topicTitle, topicContent, sourceUrls, perspectives, beat, roundTargetWords, conversationSoFar,
+        topicTitle, topicContent, sourceUrls, scrapedContent, perspectives, beat, roundTargetWords, conversationSoFar,
         topicIndex, previousTopicSummary
       );
 
@@ -467,6 +532,7 @@ function buildContentPrompt(
   topicTitle: string,
   topicContent: string,
   sourceUrls: string[],
+  scrapedContent: string,
   perspectives: { id: string; name: string; role: string; angle: string }[],
   beat: { name: string; phase: string },
   targetWords: number,
@@ -538,6 +604,10 @@ ${previousTopicSummary}\n`
     ? `\nSOURCE REFERENCES:\n${sourceUrls.map((u) => `- ${u}`).join("\n")}\n`
     : "";
 
+  const scrapedBlock = scrapedContent
+    ? `\nSCRAPED ARTICLE CONTENT (use this as research material — cite specific facts, names, and details from these articles):\n${scrapedContent}\n`
+    : "";
+
   const system = `You are a senior investigative journalist and researcher preparing substantive debate content for an expert panel.
 
 Your job is to generate the RAW ARGUMENTS, FACTS, AND EVIDENCE for a debate — NOT the final dialogue. Another system will convert this into character voices later.
@@ -546,8 +616,8 @@ ${perspectiveBlock}
 MODERATOR: Guides discussion, asks probing follow-up questions, challenges all sides
 
 TOPIC: ${topicTitle}
-${topicContent ? `CONTEXT: ${topicContent}` : ""}
-${sourceBlock}
+${topicContent ? `PRIMARY TALKING POINTS (these are the USER'S key angles — you MUST address each one specifically):\n${topicContent}` : ""}
+${sourceBlock}${scrapedBlock}
 
 ${phaseInstructions[beat.phase] || phaseInstructions.opening}
 ${topicTransitionNote}${previousContext}
