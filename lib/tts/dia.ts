@@ -193,8 +193,11 @@ export async function generateSpeech(options: DiaGenerateOptions): Promise<Buffe
     // Larger chunk_size = more context per internal chunk = better prosody continuity
     const chunkSize = isClone ? 120 : 200;
 
-    // Map 'predefined' to 'single_s1' — Dia API only accepts: dialogue, single_s1, single_s2, clone
-    const apiVoiceMode = voiceMode === "predefined" ? "single_s1" : voiceMode;
+    // Dia API accepts: dialogue, single_s1, single_s2, clone, predefined
+    // 'predefined' mode uses clone_reference_filename to pick from ./voices/ directory
+    // 'clone' mode uses clone_reference_filename to pick from ./reference_audio/ directory
+    // DO NOT map predefined → single_s1 — single_s1 generates a RANDOM voice!
+    const apiVoiceMode = voiceMode;
 
     const body: Record<string, any> = {
         text: diaText,
