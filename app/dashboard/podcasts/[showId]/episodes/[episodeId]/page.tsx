@@ -1092,13 +1092,13 @@ function AudioStepPanel({
 
   const allHaveVoices = voiceAssignments.every(v => v.hasVoice);
 
-  const generateAudio = async () => {
+  const generateAudio = async (forceRegenerate = false) => {
     setGeneratingAudio(true);
     try {
       const res = await fetch("/api/podcast/audio/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ episodeId: episode.id, engine: audioEngine }),
+        body: JSON.stringify({ episodeId: episode.id, engine: audioEngine, forceRegenerate }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -1173,7 +1173,7 @@ function AudioStepPanel({
           )}
           {!hasAudio && scriptData && (
             <button
-              onClick={generateAudio}
+              onClick={() => generateAudio()}
               disabled={generatingAudio}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-50 transition-colors"
             >
@@ -1191,8 +1191,8 @@ function AudioStepPanel({
             <>
               <button
                 onClick={() => {
-                  if (confirm("Regenerate all audio clips? This will use ElevenLabs credits.")) {
-                    generateAudio();
+                  if (confirm("Regenerate ALL audio clips from scratch? Existing clips will be replaced.")) {
+                    generateAudio(true);
                   }
                 }}
                 disabled={generatingAudio}

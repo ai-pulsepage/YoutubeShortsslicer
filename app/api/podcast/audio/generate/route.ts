@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { episodeId, engine: requestedEngine } = await req.json();
+  const { episodeId, engine: requestedEngine, forceRegenerate } = await req.json();
   if (!episodeId) {
     return NextResponse.json({ error: "episodeId required" }, { status: 400 });
   }
@@ -243,9 +243,9 @@ async function generateAudioInBackground(
     const voiceId = voiceMap[line.speaker] || hostVoiceId;
     const diaVoiceRef = diaVoiceMap[line.speaker] || DEFAULT_DIA_VOICES[0];
 
-    // ─── Smart retry: skip clips that already have URLs ────
+    // ─── Smart retry: skip clips that already have URLs (unless force regenerating) ────
     const existingClip = existingClips[i];
-    if (existingClip && existingClip.url) {
+    if (!forceRegenerate && existingClip && existingClip.url) {
       // Already generated successfully in a previous run — keep it
       audioClips.push(existingClip);
       successCount++;
