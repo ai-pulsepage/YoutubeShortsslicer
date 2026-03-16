@@ -189,35 +189,91 @@ export async function generateSpeech(options: DiaGenerateOptions): Promise<Buffe
 
     console.log(`[Dia TTS] Generating: "${diaText.substring(0, 60)}..." (${cleanText.length} chars) | voice: ${voiceRef || "random"} | mode: ${voiceMode}`);
 
+    const isPredefined = voiceMode === "predefined";
     const isClone = voiceMode === "clone";
-    // Larger chunk_size = more context per internal chunk = better prosody continuity
-    const chunkSize = isClone ? 120 : 200;
 
-    // Dia API accepts: dialogue, single_s1, single_s2, clone, predefined
-    // 'predefined' mode uses clone_reference_filename to pick from ./voices/ directory
-    // 'clone' mode uses clone_reference_filename to pick from ./reference_audio/ directory
-    // DO NOT map predefined → single_s1 — single_s1 generates a RANDOM voice!
-    const apiVoiceMode = voiceMode;
+    // ─── PREDEFINED VOICES: use /v1/audio/speech endpoint ───
+    // The OpenAI-compatible endpoint handles predefined voices natively:
+    // just pass voice: "Henry.wav" and it finds the file in ./voices/ automatically.
+    // The /tts endpoint's clone_reference_filename ONLY searches ./reference_audio/,
+    // and single_s1/single_s2 generate RANDOM voices. So /v1/audio/speech is the only
+    // reliable way to use predefined voices on all server versions.
+    if (isPredefined && voiceRef) {
+        const oaiBody = {
+            input: diaText,
+            voice: voiceRef,  // e.g. "Henry.wav" — server finds it in ./voices/
+            response_format: outputFormat === "wav" ? "wav" : "opus",
+            speed: speed,
+            seed: seed,
+        };
+
+        console.log(`[Dia TTS] Using /v1/audio/speech endpoint for predefined voice: ${voiceRef}`);
+
+        const MAX_RETRIES = 2;
+        const RETRY_DELAYS = [10000];
+        const FETCH_TIMEOUT = 600000; // 10 min — long text takes time
+
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+
+                const response = await fetch(`${endpoint}/v1/audio/speech`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(oaiBody),
+                    signal: controller.signal,
+                });
+
+                clearTimeout(timeout);
+
+                if (!response.ok) {
+                    const errText = await response.text().catch(() => "");
+                    if ((response.status === 524 || response.status === 502 || response.status === 503) && attempt < MAX_RETRIES) {
+                        const delay = RETRY_DELAYS[attempt - 1] || 10000;
+                        console.warn(`[Dia TTS] Attempt ${attempt}/${MAX_RETRIES} got ${response.status} — retrying in ${delay / 1000}s...`);
+                        await new Promise(r => setTimeout(r, delay));
+                        continue;
+                    }
+                    throw new Error(`Dia TTS error: ${response.status} — ${errText.substring(0, 200)}`);
+                }
+
+                const arrayBuffer = await response.arrayBuffer();
+                if (attempt > 1) {
+                    console.log(`[Dia TTS] Succeeded on attempt ${attempt}`);
+                }
+                return Buffer.from(arrayBuffer);
+            } catch (err: any) {
+                if (err.name === "AbortError" && attempt < MAX_RETRIES) {
+                    const delay = RETRY_DELAYS[attempt - 1] || 10000;
+                    console.warn(`[Dia TTS] Attempt ${attempt}/${MAX_RETRIES} timed out — retrying in ${delay / 1000}s...`);
+                    await new Promise(r => setTimeout(r, delay));
+                    continue;
+                }
+                throw err;
+            }
+        }
+        throw new Error("Dia TTS: all retries exhausted");
+    }
+
+    // ─── CLONE / OTHER MODES: use /tts endpoint with full control ───
+    const chunkSize = isClone ? 120 : 200;
 
     const body: Record<string, any> = {
         text: diaText,
-        voice_mode: apiVoiceMode,
+        voice_mode: voiceMode,
         output_format: outputFormat,
         speed_factor: speed,
         seed,
         split_text: true,
         chunk_size: chunkSize,
-        // Generation quality params
         cfg_scale: 3.0,
         temperature: 1.3,
         top_p: 0.95,
         cfg_filter_top_k: 35,
     };
 
-    // Set voice reference based on mode
-    if (voiceMode === "predefined" && voiceRef) {
-        body.clone_reference_filename = voiceRef;
-    } else if (voiceMode === "clone" && voiceRef) {
+    if (isClone && voiceRef) {
         body.clone_reference_filename = voiceRef;
         if (transcript) {
             body.transcript = transcript;
@@ -225,12 +281,8 @@ export async function generateSpeech(options: DiaGenerateOptions): Promise<Buffe
         }
     }
 
-    // Long text = long generation. Give Dia plenty of time to process the full paragraph.
-    // Predefined voices: up to 10 min (600s). Clone voices: up to 5 min (300s).
-    // This is intentional — better to wait for a single consistent audio clip
-    // than to split into fragments with inconsistent voice/accent/intonation.
     const MAX_RETRIES = 2;
-    const RETRY_DELAYS = [10000]; // 10s between retries
+    const RETRY_DELAYS = [10000];
     const FETCH_TIMEOUT = isClone ? 300000 : 600000;
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
