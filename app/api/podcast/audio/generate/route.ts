@@ -170,7 +170,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No dialogue lines found in script" }, { status: 400 });
   }
 
-  console.log(`[Podcast Audio] Generating ${allLines.length} voice clips for "${episode.title}" via ${engine}`);
+  console.log(`[Podcast Audio] Generating ${allLines.length} voice clips for "${episode.title}" via ${engine}${forceRegenerate ? " [FORCE REGENERATE — all clips will be regenerated]" : ""}`);
 
   // ─── Fire-and-forget: generate in background ────────────
   generateAudioInBackground(episodeId, script, allLines, voiceMap, diaVoiceMap, hostVoiceId, engine, transcriptMap, speechRateMap, !!forceRegenerate).catch(async (err) => {

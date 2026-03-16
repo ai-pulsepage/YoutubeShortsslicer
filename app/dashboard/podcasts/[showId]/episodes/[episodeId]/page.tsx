@@ -1192,7 +1192,25 @@ function AudioStepPanel({
               <button
                 onClick={() => {
                   if (confirm("Regenerate ALL audio clips from scratch? Existing clips will be replaced.")) {
-                    generateAudio(true);
+                    // Clear all audio clips from DB first, then regenerate
+                    (async () => {
+                      try {
+                        // Wipe all existing audio URLs from the episode's scriptJson
+                        const cleared = (scriptData?.audioClips || []).map(() => ({ url: "", durationEstimate: 0 }));
+                        await fetch(`/api/podcast/episodes?id=${episode.id}`, {
+                          method: "PUT",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            status: "READY",
+                            scriptJson: { ...scriptData, audioClips: cleared, audioProgress: null },
+                          }),
+                        });
+                        // Now generate — skip logic will find no URLs
+                        generateAudio(true);
+                      } catch (err: any) {
+                        alert(`Failed to clear audio: ${err.message}`);
+                      }
+                    })();
                   }
                 }}
                 disabled={generatingAudio}
