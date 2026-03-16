@@ -58,7 +58,7 @@ const STYLES: Record<NarratorStyle, StyleConfig> = {
         similarityBoost: 0.65,
     },
     conversational: {
-        speed: 1.0,
+        speed: 0.94,
         pauseAfterSentence: 0.7,
         pauseAfterParagraph: 1.2,
         pauseAfterComma: 0.3,

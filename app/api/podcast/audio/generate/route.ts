@@ -310,9 +310,21 @@ async function generateAudioInBackground(
       // Convert R2 key to public URL
       const publicUrl = getR2PublicUrl(key);
 
-      // Rough duration estimate: ~150 words per minute
-      const wordCount = line.text.split(/\s+/).length;
-      const durationEstimate = (wordCount / 150) * 60;
+      // Extract actual duration from WAV header for precise playback timing
+      // WAV format: bytes 24-27 = sample rate (uint32LE), bytes 40-43 = data size (uint32LE)
+      // bytes 32-33 = block align (uint16LE) — bytes per sample frame
+      let durationEstimate: number;
+      if (audioFormat === "wav" && audioBuffer.length >= 44) {
+        const sampleRate = audioBuffer.readUInt32LE(24);
+        const dataSize = audioBuffer.readUInt32LE(40);
+        const blockAlign = audioBuffer.readUInt16LE(32);
+        durationEstimate = blockAlign > 0 && sampleRate > 0
+          ? dataSize / (sampleRate * blockAlign)
+          : (line.text.split(/\s+/).length / 130) * 60; // fallback
+      } else {
+        // For non-WAV or short buffers, estimate from text (~130 WPM for Dia)
+        durationEstimate = (line.text.split(/\s+/).length / 130) * 60;
+      }
 
       audioClips.push({
         speaker: line.speaker,
