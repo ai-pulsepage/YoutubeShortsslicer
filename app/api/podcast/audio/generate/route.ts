@@ -173,7 +173,7 @@ export async function POST(req: NextRequest) {
   console.log(`[Podcast Audio] Generating ${allLines.length} voice clips for "${episode.title}" via ${engine}`);
 
   // ─── Fire-and-forget: generate in background ────────────
-  generateAudioInBackground(episodeId, script, allLines, voiceMap, diaVoiceMap, hostVoiceId, engine, transcriptMap, speechRateMap).catch(async (err) => {
+  generateAudioInBackground(episodeId, script, allLines, voiceMap, diaVoiceMap, hostVoiceId, engine, transcriptMap, speechRateMap, !!forceRegenerate).catch(async (err) => {
     console.error(`[Podcast Audio] Fatal background error: ${err.message}`);
     try {
       await prisma.podcastEpisode.update({
@@ -208,6 +208,7 @@ async function generateAudioInBackground(
   engine: TtsEngine,
   transcriptMap: Record<string, string> = {},
   speechRateMap: Record<string, number> = {},
+  forceRegenerate = false,
 ) {
   const audioFormat = engine === "dia" ? "wav" : "mp3";
   const mimeType = engine === "dia" ? "audio/wav" : "audio/mpeg";
