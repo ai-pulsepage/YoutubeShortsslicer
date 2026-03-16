@@ -979,9 +979,9 @@ function AudioStepPanel({
   const [audioRef, setAudioRef] = useState<HTMLAudioElement | null>(null);
   const [audioEngine, setAudioEngine] = useState<"elevenlabs" | "dia">(() => {
     if (typeof window !== "undefined") {
-      return (localStorage.getItem("podcast-audio-engine") as "elevenlabs" | "dia") || "elevenlabs";
+      return (localStorage.getItem("podcast-audio-engine") as "elevenlabs" | "dia") || "dia";
     }
-    return "elevenlabs";
+    return "dia";
   });
   const [selectedClips, setSelectedClips] = useState<Set<number>>(new Set());
   const [regeneratingSelected, setRegeneratingSelected] = useState(false);

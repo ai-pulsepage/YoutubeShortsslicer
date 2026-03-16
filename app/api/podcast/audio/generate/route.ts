@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "episodeId required" }, { status: 400 });
   }
 
-  const engine: TtsEngine = requestedEngine === "dia" ? "dia" : "elevenlabs";
+  let engine: TtsEngine = requestedEngine === "dia" ? "dia" : "elevenlabs";
 
   // Load episode with script, participants, and show
   const episode = await prisma.podcastEpisode.findUnique({
@@ -117,10 +117,17 @@ export async function POST(req: NextRequest) {
     const missingVoices = episode.participants.filter((p: any) => !p.character.voiceId);
     if (missingVoices.length > 0) {
       const names = missingVoices.map((p: any) => p.character.name).join(", ");
-      console.warn(`[Podcast Audio] Characters without voices (will use host fallback): ${names}`);
+      console.warn(`[Podcast Audio] Characters without ElevenLabs voices: ${names}`);
     }
     if (!hostVoiceId) {
-      return NextResponse.json({ error: "No voice IDs assigned to any characters. Assign ElevenLabs voices first." }, { status: 400 });
+      // No ElevenLabs voices — auto-switch to Dia if Dia voices are available
+      const hasDiaVoices = Object.values(diaVoiceMap).some((v: any) => v && v !== DEFAULT_DIA_VOICES[0]);
+      if (hasDiaVoices || process.env.DIA_TTS_URL) {
+        console.log(`[Podcast Audio] No ElevenLabs voices assigned — auto-switching to Dia engine`);
+        engine = "dia" as TtsEngine;
+      } else {
+        return NextResponse.json({ error: "No voice IDs assigned to any characters. Assign ElevenLabs or Dia voices first." }, { status: 400 });
+      }
     }
   } else if (engine === "dia") {
     // Check Dia server is reachable
