@@ -221,8 +221,8 @@ async function generateAudioInBackground(
   const mimeType = engine === "dia" ? "audio/wav" : "audio/mpeg";
 
   // ─── Smart retry: load existing clips from previous run ────
-  const existingClips: { speaker: string; text: string; url: string; durationEstimate: number }[] = script.audioClips || [];
-  const audioClips: { speaker: string; text: string; url: string; durationEstimate: number }[] = [];
+  const existingClips: { speaker: string; text: string; url: string; durationEstimate: number; silenceAfter?: number }[] = script.audioClips || [];
+  const audioClips: { speaker: string; text: string; url: string; durationEstimate: number; silenceAfter: number }[] = [];
   let successCount = 0;
   let failCount = 0;
   let skippedCount = 0;
@@ -255,7 +255,7 @@ async function generateAudioInBackground(
     const existingClip = existingClips[i];
     if (!forceRegenerate && existingClip && existingClip.url) {
       // Already generated successfully in a previous run — keep it
-      audioClips.push(existingClip);
+      audioClips.push({ ...existingClip, silenceAfter: existingClip.silenceAfter ?? 0.4 });
       successCount++;
       skippedCount++;
       if (skippedCount <= 3 || skippedCount % 20 === 0) {
@@ -326,11 +326,17 @@ async function generateAudioInBackground(
         durationEstimate = (line.text.split(/\s+/).length / 130) * 60;
       }
 
+      // Determine silence gap based on speaker change
+      const prevSpeaker = i > 0 ? allLines[i - 1].speaker : line.speaker;
+      const isSpeakerChange = prevSpeaker !== line.speaker;
+      const silenceAfter = isSpeakerChange ? 0.9 : 0.4; // 0.9s between different speakers, 0.4s same speaker
+
       audioClips.push({
         speaker: line.speaker,
         text: line.text,
         url: publicUrl,
         durationEstimate,
+        silenceAfter,
       });
 
       successCount++;
@@ -360,6 +366,7 @@ async function generateAudioInBackground(
             text: line.text,
             url: publicUrl,
             durationEstimate,
+            silenceAfter: 0.4,
           });
           successCount++;
           console.log(`[Podcast Audio]   FALLBACK succeeded for line ${i} with ${fallbackVoice}`);
@@ -377,12 +384,13 @@ async function generateAudioInBackground(
         text: line.text,
         url: "",
         durationEstimate: 0,
+        silenceAfter: 0,
       });
 
-      // If we get 5+ consecutive failures, something is wrong — abort early
-      const recentClips = audioClips.slice(-5);
-      if (recentClips.length >= 5 && recentClips.every(c => !c.url)) {
-        console.error(`[Podcast Audio]   5 consecutive failures — aborting`);
+      // If we get 10+ consecutive failures, something is very wrong — abort early
+      const recentClips = audioClips.slice(-10);
+      if (recentClips.length >= 10 && recentClips.every(c => !c.url)) {
+        console.error(`[Podcast Audio]   10 consecutive failures — aborting`);
         break;
       }
     }

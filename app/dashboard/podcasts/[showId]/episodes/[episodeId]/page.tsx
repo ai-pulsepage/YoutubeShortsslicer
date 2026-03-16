@@ -1226,6 +1226,37 @@ function AudioStepPanel({
                 <RefreshCw className="w-3 h-3" />
                 Refresh
               </button>
+              <button
+                onClick={async () => {
+                  try {
+                    const btn = document.activeElement as HTMLButtonElement;
+                    if (btn) btn.disabled = true;
+                    const res = await fetch("/api/podcast/audio/download", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ episodeId: episode.id }),
+                    });
+                    if (!res.ok) {
+                      const err = await res.json();
+                      alert(`Download failed: ${err.error}`);
+                      return;
+                    }
+                    const blob = await res.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `${episode.title || "episode"}.wav`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  } catch (err: any) {
+                    alert(`Download error: ${err.message}`);
+                  }
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors"
+              >
+                <Download className="w-3 h-3" />
+                Download Full Episode
+              </button>
             </>
           )}
         </div>
