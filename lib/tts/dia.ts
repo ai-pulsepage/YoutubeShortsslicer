@@ -182,88 +182,20 @@ export async function generateSpeech(options: DiaGenerateOptions): Promise<Buffe
         cleanText = `${cleanText}... ... ...`;
     }
 
-    // PRE-SPLIT: For long text (>250 chars / ~3+ sentences), split into sentence segments
-    // and generate each separately to avoid timeouts. Then concatenate WAV buffers.
-    if (cleanText.length > 250) {
-        const segments = splitIntoSegments(cleanText, 250);
-        if (segments.length > 1) {
-            console.log(`[Dia TTS] Long text (${cleanText.length} chars) — splitting into ${segments.length} segments`);
-            const buffers: Buffer[] = [];
-            for (let si = 0; si < segments.length; si++) {
-                const segText = segments[si];
-                console.log(`[Dia TTS]   Segment ${si + 1}/${segments.length}: "${segText.substring(0, 50)}..." (${segText.length} chars)`);
-                const segBuffer = await generateSingleChunk(endpoint, segText, {
-                    voiceRef, voiceMode, transcript, seed: seed === -1 ? -1 : seed + si,
-                    speed, outputFormat,
-                });
-                buffers.push(segBuffer);
-            }
-            return concatWavBuffers(buffers);
-        }
-    }
-
-    return generateSingleChunk(endpoint, cleanText, {
-        voiceRef, voiceMode, transcript, seed, speed, outputFormat,
-    });
-}
-
-/** Split text into segments at sentence boundaries, keeping each under maxChars */
-function splitIntoSegments(text: string, maxChars: number): string[] {
-    // Split at sentence-ending punctuation followed by space
-    const sentences = text.split(/(?<=[.!?])\s+/);
-    const segments: string[] = [];
-    let current = "";
-
-    for (const sentence of sentences) {
-        if (current && (current.length + sentence.length + 1) > maxChars) {
-            segments.push(current.trim());
-            current = sentence;
-        } else {
-            current = current ? `${current} ${sentence}` : sentence;
-        }
-    }
-    if (current.trim()) segments.push(current.trim());
-    return segments;
-}
-
-/** Concatenate multiple WAV buffers into one (assumes same format/sample rate) */
-function concatWavBuffers(buffers: Buffer[]): Buffer {
-    if (buffers.length === 1) return buffers[0];
-    // WAV format: 44-byte header + raw PCM data
-    // Take header from first buffer, concatenate all PCM data
-    const headerSize = 44;
-    const pcmChunks = buffers.map(b => b.subarray(headerSize));
-    const totalPcmLength = pcmChunks.reduce((sum, c) => sum + c.length, 0);
-
-    // Clone header from first buffer and update data size fields
-    const header = Buffer.from(buffers[0].subarray(0, headerSize));
-    // Bytes 4-7: ChunkSize = 36 + totalPcmLength
-    header.writeUInt32LE(36 + totalPcmLength, 4);
-    // Bytes 40-43: Subchunk2Size = totalPcmLength
-    header.writeUInt32LE(totalPcmLength, 40);
-
-    return Buffer.concat([header, ...pcmChunks]);
-}
-
-async function generateSingleChunk(
-    endpoint: string,
-    cleanText: string,
-    opts: { voiceRef?: string; voiceMode: string; transcript?: string; seed: number; speed: number; outputFormat: string },
-): Promise<Buffer> {
-    const { voiceRef, voiceMode, transcript, seed, speed, outputFormat } = opts;
-
+    // Send the FULL text to Dia — do NOT pre-split into sentences.
+    // Dia's internal split_text + chunk_size handles chunking while maintaining
+    // voice consistency, accent, and intonation across the entire passage.
     const diaText = `[S1] ${cleanText}`;
 
     console.log(`[Dia TTS] Generating: "${diaText.substring(0, 60)}..." (${cleanText.length} chars) | voice: ${voiceRef || "random"} | mode: ${voiceMode}`);
 
     const isClone = voiceMode === "clone";
-    const chunkSize = isClone ? 100 : 120;
+    // Larger chunk_size = more context per internal chunk = better prosody continuity
+    const chunkSize = isClone ? 120 : 200;
 
     // Map 'predefined' to 'single_s1' — Dia API only accepts: dialogue, single_s1, single_s2, clone
-    // Predefined voices use single_s1 mode with clone_reference_filename pointing to the voice file
     const apiVoiceMode = voiceMode === "predefined" ? "single_s1" : voiceMode;
 
-    // Use the full-control /tts endpoint for maximum flexibility
     const body: Record<string, any> = {
         text: diaText,
         voice_mode: apiVoiceMode,
@@ -284,17 +216,19 @@ async function generateSingleChunk(
         body.clone_reference_filename = voiceRef;
     } else if (voiceMode === "clone" && voiceRef) {
         body.clone_reference_filename = voiceRef;
-        // Pass pre-computed transcript to skip Whisper entirely
         if (transcript) {
             body.transcript = transcript;
             console.log(`[Dia TTS] Using cached transcript (${transcript.length} chars) — skipping Whisper`);
         }
     }
 
-    // Retry logic for Cloudflare 524 timeouts (transient — the Dia server is just slow, not broken)
+    // Long text = long generation. Give Dia plenty of time to process the full paragraph.
+    // Predefined voices: up to 10 min (600s). Clone voices: up to 5 min (300s).
+    // This is intentional — better to wait for a single consistent audio clip
+    // than to split into fragments with inconsistent voice/accent/intonation.
     const MAX_RETRIES = 2;
-    const RETRY_DELAYS = [5000]; // 5s between retries — fail fast since we pre-split long text now
-    const FETCH_TIMEOUT = isClone ? 180000 : 300000; // clone: 180s, predefined: 300s — long enough for any single segment
+    const RETRY_DELAYS = [10000]; // 10s between retries
+    const FETCH_TIMEOUT = isClone ? 300000 : 600000;
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
