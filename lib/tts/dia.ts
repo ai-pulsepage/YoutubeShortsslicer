@@ -158,6 +158,71 @@ function sanitizeForDia(text: string): string {
     return t;
 }
 
+// ─── In-memory cache: track which predefined voices are set up as clone refs ───
+// Resets on deploy/restart — just avoids re-checking the server 87 times per episode
+const _predefinedRefCache = new Set<string>();
+
+/**
+ * Concatenate multiple WAV buffers into one seamless WAV file.
+ * Strips headers from subsequent files and writes a new combined header.
+ */
+function concatenateWavBuffers(buffers: Buffer[]): Buffer {
+    if (buffers.length === 0) throw new Error("No buffers to concatenate");
+    if (buffers.length === 1) return buffers[0];
+
+    // Extract raw PCM data from each WAV buffer (skip headers)
+    const pcmParts: Buffer[] = [];
+    let sampleRate = 44100;
+    let numChannels = 1;
+    let bitsPerSample = 16;
+
+    for (let i = 0; i < buffers.length; i++) {
+        const buf = buffers[i];
+        // Standard WAV header is 44 bytes, but find "data" chunk for safety
+        let dataOffset = 44;
+        for (let j = 0; j < Math.min(buf.length - 4, 200); j++) {
+            if (buf[j] === 0x64 && buf[j+1] === 0x61 && buf[j+2] === 0x74 && buf[j+3] === 0x61) {
+                // "data" found — data starts 8 bytes after (4 for "data" + 4 for size)
+                dataOffset = j + 8;
+                break;
+            }
+        }
+
+        // Read format from first buffer
+        if (i === 0 && buf.length >= 44) {
+            numChannels = buf.readUInt16LE(22);
+            sampleRate = buf.readUInt32LE(24);
+            bitsPerSample = buf.readUInt16LE(34);
+        }
+
+        pcmParts.push(buf.subarray(dataOffset));
+    }
+
+    const totalPcmLength = pcmParts.reduce((sum, p) => sum + p.length, 0);
+    const header = Buffer.alloc(44);
+    const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+    const blockAlign = numChannels * (bitsPerSample / 8);
+
+    // RIFF header
+    header.write("RIFF", 0);
+    header.writeUInt32LE(36 + totalPcmLength, 4);
+    header.write("WAVE", 8);
+    // fmt sub-chunk
+    header.write("fmt ", 12);
+    header.writeUInt32LE(16, 16);       // sub-chunk size
+    header.writeUInt16LE(1, 20);        // PCM format
+    header.writeUInt16LE(numChannels, 22);
+    header.writeUInt32LE(sampleRate, 24);
+    header.writeUInt32LE(byteRate, 28);
+    header.writeUInt16LE(blockAlign, 32);
+    header.writeUInt16LE(bitsPerSample, 34);
+    // data sub-chunk
+    header.write("data", 36);
+    header.writeUInt32LE(totalPcmLength, 40);
+
+    return Buffer.concat([header, ...pcmParts]);
+}
+
 export async function generateSpeech(options: DiaGenerateOptions): Promise<Buffer> {
     const endpoint = getDiaEndpoint();
     const {
@@ -192,147 +257,179 @@ export async function generateSpeech(options: DiaGenerateOptions): Promise<Buffe
     const isPredefined = voiceMode === "predefined";
     const isClone = voiceMode === "clone" || isPredefined;
 
-    // ─── PREDEFINED VOICES: ensure a clone reference exists, then use /tts clone mode ───
-    // The /v1/audio/speech endpoint doesn't support max_tokens (causes truncation),
-    // cfg_scale, temperature, or top_p (causes voice variance/drift).
-    // Instead, we ensure the predefined voice exists as a clone reference in ./reference_audio/
-    // and then use /tts with clone mode for full quality control.
+    // ─── PREDEFINED VOICES: clone reference + sentence-level generation ───
+    // Strategy:
+    //   1. Ensure a clone reference exists (cached in-memory across calls)
+    //   2. Split long text into sentences (each well under RunPod's ~120s proxy timeout)
+    //   3. Generate each sentence via /tts clone mode with quality params
+    //   4. Concatenate WAV buffers into one seamless clip
     if (isPredefined && voiceRef) {
-        // Check if this predefined voice is already in reference_audio
-        const refName = `pred_${voiceRef}`; // prefix to avoid name collisions
-        let refExists = false;
-        try {
-            const listRes = await fetch(`${endpoint}/get_reference_files`, {
-                signal: AbortSignal.timeout(5000),
-            });
-            if (listRes.ok) {
-                const data = await listRes.json();
-                const files: string[] = Array.isArray(data) ? data : (data.files || []);
-                refExists = files.some(f => f.toLowerCase() === refName.toLowerCase());
-            }
-        } catch { /* ignore */ }
+        const refName = `pred_${voiceRef}`;
 
-        if (!refExists) {
-            // Generate a short reference sample via /v1/audio/speech (only way to get predefined voice audio)
-            console.log(`[Dia TTS] Creating clone reference for predefined voice: ${voiceRef} → ${refName}`);
+        // ── Step 1: Ensure clone reference exists (in-memory cache) ──
+        if (!_predefinedRefCache.has(refName)) {
+            // Check server first
+            let found = false;
             try {
-                const sampleRes = await fetch(`${endpoint}/v1/audio/speech`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        input: "[S1] Hey, this is a sample of my voice. I'll be narrating this podcast episode today. Let me show you how I sound when speaking naturally about various topics.",
-                        voice: voiceRef,
-                        response_format: "wav",
-                        speed: 1.0,
-                        seed: 42, // fixed seed for consistent reference
-                    }),
-                    signal: AbortSignal.timeout(120000),
+                const listRes = await fetch(`${endpoint}/get_reference_files`, {
+                    signal: AbortSignal.timeout(5000),
                 });
-
-                if (sampleRes.ok) {
-                    const sampleBuffer = await sampleRes.arrayBuffer();
-                    // Upload as clone reference
-                    const form = new FormData();
-                    form.append("files", new Blob([sampleBuffer], { type: "audio/wav" }), refName);
-                    const uploadRes = await fetch(`${endpoint}/upload_reference`, {
-                        method: "POST",
-                        body: form,
-                        signal: AbortSignal.timeout(15000),
-                    });
-                    if (uploadRes.ok) {
-                        console.log(`[Dia TTS] ✓ Clone reference created: ${refName} (${(sampleBuffer.byteLength / 1024).toFixed(0)}KB)`);
-                    } else {
-                        console.warn(`[Dia TTS] Failed to upload reference: ${uploadRes.status}`);
-                    }
-                } else {
-                    console.warn(`[Dia TTS] Failed to generate reference sample: ${sampleRes.status}`);
+                if (listRes.ok) {
+                    const data = await listRes.json();
+                    const files: string[] = Array.isArray(data) ? data : (data.files || []);
+                    found = files.some(f => f.toLowerCase() === refName.toLowerCase());
                 }
-            } catch (err: any) {
-                console.warn(`[Dia TTS] Reference creation failed: ${err.message} — will try /v1/audio/speech fallback`);
+            } catch { /* ignore */ }
+
+            if (!found) {
+                console.log(`[Dia TTS] Creating clone reference: ${voiceRef} → ${refName}`);
+                try {
+                    const sampleRes = await fetch(`${endpoint}/v1/audio/speech`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            input: "[S1] Hello, this is my voice sample for reference. I speak clearly and naturally.",
+                            voice: voiceRef,
+                            response_format: "wav",
+                            speed: 1.0,
+                            seed: 42,
+                        }),
+                        signal: AbortSignal.timeout(60000),
+                    });
+                    if (sampleRes.ok) {
+                        const buf = await sampleRes.arrayBuffer();
+                        const form = new FormData();
+                        form.append("files", new Blob([buf], { type: "audio/wav" }), refName);
+                        const upRes = await fetch(`${endpoint}/upload_reference`, {
+                            method: "POST", body: form,
+                            signal: AbortSignal.timeout(15000),
+                        });
+                        if (upRes.ok) {
+                            console.log(`[Dia TTS] ✓ Reference created: ${refName} (${(buf.byteLength / 1024).toFixed(0)}KB)`);
+                        }
+                    }
+                } catch (err: any) {
+                    console.warn(`[Dia TTS] Reference creation failed: ${err.message}`);
+                }
+            } else {
+                console.log(`[Dia TTS] Reference already on server: ${refName}`);
             }
+            _predefinedRefCache.add(refName); // mark as handled for this session
         }
 
-        // Now use /tts with clone mode pointing to the reference
-        // This gives us max_tokens (prevents truncation), cfg_scale, temperature, top_p
-        const cloneBody: Record<string, any> = {
-            text: diaText,
-            voice_mode: "clone",
-            clone_reference_filename: refName,
-            output_format: outputFormat,
-            speed_factor: speed,
-            seed,
-            split_text: true,
-            chunk_size: 200,
-            // TIGHT voice adherence — less variance, more consistent
-            cfg_scale: 4.0,       // Higher = stricter adherence to reference voice
-            temperature: 0.7,     // Lower = less random = more consistent voice
-            top_p: 0.85,          // Lower = less creative sampling = steadier voice
-            cfg_filter_top_k: 30, // Tighter filtering
-            max_tokens: 3000,     // Prevent truncation on long paragraphs
-        };
+        // ── Step 2: Split long text into sentences for timeout safety ──
+        // RunPod proxy times out at ~120s. Long paragraphs (500+ chars) take 2-4 min.
+        // Split into sentences; each sentence ≤ 200 chars generates in ~20-40s.
+        const MAX_CHARS_PER_CHUNK = 250;
+        let textChunks: string[];
 
-        console.log(`[Dia TTS] Using /tts clone mode with quality params for predefined voice: ${refName}`);
+        if (cleanText.length > MAX_CHARS_PER_CHUNK) {
+            // Split by sentence boundaries
+            const sentences = cleanText.split(/(?<=[.!?])\s+/).filter(s => s.trim());
+            textChunks = [];
+            let current = "";
+            for (const s of sentences) {
+                if (current && (current + " " + s).length > MAX_CHARS_PER_CHUNK) {
+                    textChunks.push(current.trim());
+                    current = s;
+                } else {
+                    current = current ? current + " " + s : s;
+                }
+            }
+            if (current.trim()) textChunks.push(current.trim());
+            console.log(`[Dia TTS] Split ${cleanText.length} chars into ${textChunks.length} chunks for timeout safety`);
+        } else {
+            textChunks = [cleanText];
+        }
 
-        const MAX_RETRIES = 2;
-        const RETRY_DELAYS = [10000];
-        const FETCH_TIMEOUT = 600000;
+        // ── Step 3: Generate each chunk via /tts clone mode ──
+        const wavBuffers: Buffer[] = [];
+        for (let ci = 0; ci < textChunks.length; ci++) {
+            const chunkText = `[S1] ${textChunks[ci]}`;
+            const body = {
+                text: chunkText,
+                voice_mode: "clone",
+                clone_reference_filename: refName,
+                output_format: outputFormat,
+                speed_factor: speed,
+                seed,
+                split_text: true,
+                chunk_size: 200,
+                cfg_scale: 4.0,
+                temperature: 0.7,
+                top_p: 0.85,
+                cfg_filter_top_k: 30,
+            };
 
-        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-            try {
-                const controller = new AbortController();
-                const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+            // 90s timeout — well under RunPod's ~120s proxy limit
+            const CHUNK_TIMEOUT = 90000;
+            let chunkSuccess = false;
 
-                const response = await fetch(`${endpoint}/tts`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(cloneBody),
-                    signal: controller.signal,
-                });
+            for (let attempt = 1; attempt <= 2; attempt++) {
+                try {
+                    const controller = new AbortController();
+                    const timer = setTimeout(() => controller.abort(), CHUNK_TIMEOUT);
 
-                clearTimeout(timeout);
+                    const res = await fetch(`${endpoint}/tts`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(body),
+                        signal: controller.signal,
+                    });
+                    clearTimeout(timer);
 
-                if (!response.ok) {
-                    const errText = await response.text().catch(() => "");
-                    // If clone mode fails (reference not found), fall back to /v1/audio/speech
-                    if (response.status === 400 || response.status === 422) {
-                        console.warn(`[Dia TTS] /tts clone failed (${response.status}) — falling back to /v1/audio/speech`);
-                        const fallbackRes = await fetch(`${endpoint}/v1/audio/speech`, {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                                input: diaText,
-                                voice: voiceRef,
-                                response_format: outputFormat === "wav" ? "wav" : "opus",
-                                speed: speed,
-                                seed: seed,
-                            }),
-                            signal: AbortSignal.timeout(FETCH_TIMEOUT),
-                        });
-                        if (!fallbackRes.ok) {
-                            throw new Error(`Dia TTS fallback error: ${fallbackRes.status}`);
+                    if (!res.ok) {
+                        const errText = await res.text().catch(() => "");
+                        // 400/422 = server doesn't support clone mode, fall back to /v1/audio/speech
+                        if (res.status === 400 || res.status === 422) {
+                            console.warn(`[Dia TTS] Clone failed (${res.status}), falling back to /v1/audio/speech for chunk ${ci + 1}`);
+                            const fbRes = await fetch(`${endpoint}/v1/audio/speech`, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                    input: chunkText,
+                                    voice: voiceRef,
+                                    response_format: outputFormat === "wav" ? "wav" : "opus",
+                                    speed, seed,
+                                }),
+                                signal: AbortSignal.timeout(CHUNK_TIMEOUT),
+                            });
+                            if (fbRes.ok) {
+                                wavBuffers.push(Buffer.from(await fbRes.arrayBuffer()));
+                                chunkSuccess = true;
+                            }
+                            break;
                         }
-                        return Buffer.from(await fallbackRes.arrayBuffer());
+                        if ((res.status === 524 || res.status === 502 || res.status === 503) && attempt < 2) {
+                            console.warn(`[Dia TTS] Chunk ${ci + 1}/${textChunks.length} got ${res.status}, retrying...`);
+                            await new Promise(r => setTimeout(r, 5000));
+                            continue;
+                        }
+                        throw new Error(`Dia TTS error: ${res.status} — ${errText.substring(0, 150)}`);
                     }
-                    if ((response.status === 524 || response.status === 502 || response.status === 503) && attempt < MAX_RETRIES) {
-                        const delay = RETRY_DELAYS[attempt - 1] || 10000;
-                        console.warn(`[Dia TTS] Attempt ${attempt}/${MAX_RETRIES} got ${response.status} — retrying...`);
-                        await new Promise(r => setTimeout(r, delay));
+
+                    wavBuffers.push(Buffer.from(await res.arrayBuffer()));
+                    chunkSuccess = true;
+                    break;
+                } catch (err: any) {
+                    if (err.name === "AbortError" && attempt < 2) {
+                        console.warn(`[Dia TTS] Chunk ${ci + 1} timed out, retrying...`);
+                        await new Promise(r => setTimeout(r, 3000));
                         continue;
                     }
-                    throw new Error(`Dia TTS error: ${response.status} — ${errText.substring(0, 200)}`);
+                    throw err;
                 }
-
-                const arrayBuffer = await response.arrayBuffer();
-                return Buffer.from(arrayBuffer);
-            } catch (err: any) {
-                if (err.name === "AbortError" && attempt < MAX_RETRIES) {
-                    await new Promise(r => setTimeout(r, 10000));
-                    continue;
-                }
-                throw err;
+            }
+            if (!chunkSuccess) {
+                throw new Error(`Dia TTS: chunk ${ci + 1}/${textChunks.length} failed after retries`);
             }
         }
-        throw new Error("Dia TTS: all retries exhausted");
+
+        // ── Step 4: Concatenate WAV buffers ──
+        if (wavBuffers.length === 1) {
+            return wavBuffers[0];
+        }
+        return concatenateWavBuffers(wavBuffers);
     }
 
     // ─── CLONE / OTHER MODES: use /tts endpoint with full control ───
