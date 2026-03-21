@@ -5,7 +5,7 @@
 NIXPACKS_NODE_VERSION = "22.12"
 
 [phases.setup]
-aptPkgs = ["ffmpeg", "python3", "python3-pip"]
+aptPkgs = ["ffmpeg", "python3", "python3-pip", "fontconfig", "fonts-liberation", "fonts-noto-core"]
 
 [phases.install]
 cmds = [

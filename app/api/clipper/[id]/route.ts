@@ -1,0 +1,109 @@
+import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
+import { NextResponse } from "next/server";
+
+/**
+ * GET /api/clipper/[id] — Get a clip project with all segments and rendered clips
+ * DELETE /api/clipper/[id] — Delete a clip project
+ */
+
+export async function GET(
+    req: Request,
+    { params }: { params: Promise<{ id: string }> }
+) {
+    const session = await auth();
+    if (!session?.user?.id) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { id } = await params;
+
+    const project = await prisma.clipProject.findUnique({
+        where: { id, userId: session.user.id },
+        include: {
+            video: {
+                include: {
+                    transcript: {
+                        select: { id: true, segments: true },
+                    },
+                    segments: {
+                        orderBy: { aiScore: "desc" },
+                        include: {
+                            shortVideo: {
+                                select: {
+                                    id: true,
+                                    storagePath: true,
+                                    duration: true,
+                                    status: true,
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    });
+
+    if (!project) {
+        return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
+
+    // Compute estimated earnings for rendered clips
+    const renderedClips = project.video.segments
+        .filter((s) => s.shortVideo?.status === "RENDERED")
+        .map((s) => ({
+            id: s.id,
+            title: s.title,
+            description: s.description,
+            startTime: s.startTime,
+            endTime: s.endTime,
+            duration: s.endTime - s.startTime,
+            viralScore: s.aiScore,
+            hookStrength: s.hookStrength,
+            emotionalArc: s.emotionalArc,
+            status: s.status,
+            shortVideo: s.shortVideo,
+        }));
+
+    const pendingClips = project.video.segments
+        .filter((s) => !s.shortVideo || s.shortVideo.status !== "RENDERED")
+        .map((s) => ({
+            id: s.id,
+            title: s.title,
+            description: s.description,
+            startTime: s.startTime,
+            endTime: s.endTime,
+            duration: s.endTime - s.startTime,
+            viralScore: s.aiScore,
+            hookStrength: s.hookStrength,
+            emotionalArc: s.emotionalArc,
+            status: s.status,
+            shortVideo: s.shortVideo,
+        }));
+
+    return NextResponse.json({
+        ...project,
+        renderedClips,
+        pendingClips,
+        totalClips: project.video.segments.length,
+        renderedCount: renderedClips.length,
+    });
+}
+
+export async function DELETE(
+    req: Request,
+    { params }: { params: Promise<{ id: string }> }
+) {
+    const session = await auth();
+    if (!session?.user?.id) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { id } = await params;
+
+    await prisma.clipProject.deleteMany({
+        where: { id, userId: session.user.id },
+    });
+
+    return NextResponse.json({ success: true });
+}

@@ -15,6 +15,7 @@ enum Platform {
   YOUTUBE
   INSTAGRAM
   WHOP
+  TIKTOK
 }
 
 enum VideoStatus {
@@ -83,6 +84,7 @@ model User {
   subscription  Subscription?
   schedules     ContentSchedule[]
   documentaries Documentary[]
+  clipProjects  ClipProject[]
 
   // Podcast
   podcastCharacters PodcastCharacter[]
@@ -149,6 +151,7 @@ model Video {
   transcript  Transcript?
   segments    Segment[]
   videoTags   VideoTag[]
+  clipProjects ClipProject[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -825,4 +828,37 @@ model PodcastSponsor {
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+// ─── Clip Studio ─────────────────────────────────────────
+
+enum ClipProjectStatus {
+  DOWNLOADING
+  TRANSCRIBING
+  SEGMENTING
+  READY
+  FAILED
+}
+
+model ClipProject {
+  id             String            @id @default(cuid())
+  userId         String
+  videoId        String
+  campaignName   String?           // e.g. "Call of Duty BO7", "IShowSpeed Clips"
+  campaignCpm    Float?            // $/1k views — for earnings tracking
+  campaignPlatforms String[]       // ["tiktok", "instagram", "youtube"]
+  captionStyle   String            @default("word-highlight") // word-highlight | pop | fade | slide-up
+  faceTrack      Boolean           @default(true)
+  hookOverlay    Boolean           @default(true)  // Show hook title at start
+  ctaOverlay     Boolean           @default(true)  // Show CTA at end
+  ctaText        String?           @default("Follow for more") // Custom CTA text
+  status         ClipProjectStatus @default(DOWNLOADING)
+  clipCount      Int               @default(0)
+  errorMsg       String?           @db.Text
+
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video          Video             @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 }

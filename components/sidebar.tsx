@@ -32,10 +32,11 @@ import { useState } from "react";
 
 const topNavItems = [
     { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { label: "Clip Studio", href: "/dashboard/clipper", icon: Scissors },
     { label: "Library", href: "/dashboard/library", icon: Library },
     { label: "Ingest", href: "/dashboard/ingest", icon: Download },
-    { label: "Editor", href: "/dashboard/editor", icon: Scissors },
-    { label: "Render", href: "/dashboard/render", icon: Film },
+    { label: "Editor", href: "/dashboard/editor", icon: Film },
+    { label: "Render", href: "/dashboard/render", icon: Clapperboard },
     { label: "Subtitles", href: "/dashboard/style", icon: Type },
     { label: "Voiceover", href: "/dashboard/voiceover", icon: Mic },
     { label: "Channels", href: "/dashboard/channels", icon: Share2 },

@@ -401,3 +401,246 @@ async function getDbApiKey(service: string): Promise<string | null> {
     } catch { }
     return null;
 }
+
+// ─── Clipping-Optimized Segmentation ─────────────────────
+
+const CLIPPING_PROMPT = `You are an expert viral clip curator for TikTok, YouTube Shorts, and Instagram Reels. Your job is to find the MOST VIRAL moments from this video — not every moment, just the BEST ones.
+
+VIRAL CLIP CRITERIA:
+1. **HOOK** (most important): The clip MUST start at a moment that stops the scroll — a bold statement, surprising reveal, emotional peak, funny reaction, or dramatic tension
+2. **RETENTION**: Content must stay engaging throughout — fast verbal pacing, emotional intensity, or riveting information
+3. **COMPLETENESS**: The clip should make sense on its own without context
+4. **SHAREABILITY**: Would someone share this with a friend?
+
+CLIP RULES:
+- Each clip: 30-59 seconds (sweet spot: 35-50s)
+- Start at the PEAK moment, not the buildup — viewers decide in 1 second
+- End on a satisfying note or cliffhanger — never mid-sentence
+- Find 5-15 clips depending on video length
+- ONLY include clips scoring 7+ overall — skip mediocre content
+- If the video is a podcast/interview: focus on hot takes, controversial opinions, funny moments, shocking revelations
+
+SCORING (be honest, only high-quality clips):
+- hookStrength (1-10): How instantly attention-grabbing is the opening?
+- emotionalArc (1-10): Does it trigger emotion — laughter, shock, anger, curiosity?
+- completeness (1-10): Does it make sense standalone?
+- viralScore (1-10): Overall viral potential — would this get 100k+ views?
+
+Respond ONLY with valid JSON array:
+[
+  {
+    "start": 45.0,
+    "end": 92.5,
+    "title": "Short punchy title for the clip",
+    "description": "Why this moment is viral-worthy",
+    "hookStrength": 9,
+    "emotionalArc": 8,
+    "completeness": 9,
+    "viralScore": 9
+  }
+]`;
+
+/**
+ * Clipping-optimized segmentation — finds only the BEST viral moments.
+ * Unlike segmentVideo() which covers the entire transcript, this function
+ * is selective and only returns high-quality clips (score ≥ 7).
+ */
+export async function segmentForClipping(
+    transcript: TranscriptSegment[],
+    videoDuration: number
+): Promise<SegmentSuggestion[]> {
+    const CHUNK_DURATION = 600;
+    const OVERLAP = 120;
+
+    // For short videos, process in one shot
+    if (videoDuration <= CHUNK_DURATION + OVERLAP * 2) {
+        return clipChunk(transcript, videoDuration);
+    }
+
+    // Split into chunks for long videos
+    const chunks: TranscriptSegment[][] = [];
+    let chunkStart = 0;
+
+    while (chunkStart < videoDuration) {
+        const chunkEnd = Math.min(chunkStart + CHUNK_DURATION, videoDuration);
+        const chunkSegments = transcript.filter(
+            (s) => s.start >= Math.max(0, chunkStart - OVERLAP) && s.start < chunkEnd + OVERLAP
+        );
+        if (chunkSegments.length > 0) chunks.push(chunkSegments);
+        chunkStart += CHUNK_DURATION;
+    }
+
+    console.log(`[ClipAI] Processing ${chunks.length} chunks for viral clips...`);
+
+    const allClips: SegmentSuggestion[] = [];
+    for (let i = 0; i < chunks.length; i++) {
+        try {
+            const results = await clipChunk(chunks[i], videoDuration);
+            allClips.push(...results);
+            console.log(`[ClipAI] Chunk ${i + 1}: found ${results.length} viral clips`);
+        } catch (err: any) {
+            console.warn(`[ClipAI] Chunk ${i + 1} failed: ${err.message}`);
+        }
+    }
+
+    const deduped = deduplicateSegments(allClips);
+    // Only return clips with viralScore >= 7
+    const highQuality = deduped.filter((c) => c.overallScore >= 7);
+    console.log(`[ClipAI] Final: ${highQuality.length} high-quality clips from ${allClips.length} raw`);
+
+    return highQuality.sort((a, b) => b.overallScore - a.overallScore);
+}
+
+/**
+ * Process a single chunk with the clipping-optimized prompt
+ */
+async function clipChunk(
+    transcript: TranscriptSegment[],
+    videoDuration: number
+): Promise<SegmentSuggestion[]> {
+    let apiKey = process.env.DEEPSEEK_API_KEY;
+    const apiBase = process.env.DEEPSEEK_API_BASE || "https://api.deepseek.com";
+
+    if (!apiKey) {
+        apiKey = await getDbApiKey("deepseek_api_key") || undefined;
+    }
+    if (!apiKey) throw new Error("DEEPSEEK_API_KEY not configured");
+
+    const transcriptText = formatTranscript(transcript);
+    const timeRange = transcript.length > 0
+        ? `from ${formatTimeHMS(transcript[0].start)} to ${formatTimeHMS(transcript[transcript.length - 1].end)}`
+        : "";
+
+    const response = await fetch(`${apiBase}/v1/chat/completions`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+            model: "deepseek-chat",
+            messages: [
+                { role: "system", content: CLIPPING_PROMPT },
+                {
+                    role: "user",
+                    content: `Video duration: ${videoDuration}s (${formatTimeHMS(videoDuration)})\nThis section covers ${timeRange}.\n\nTranscript:\n${transcriptText}`,
+                },
+            ],
+            temperature: 0.4,
+            max_tokens: 8192,
+            response_format: { type: "json_object" },
+        }),
+    });
+
+    if (!response.ok) {
+        const err = await response.text();
+        // Fallback to Gemini
+        console.warn(`[ClipAI] DeepSeek failed (${response.status}), trying Gemini...`);
+        return clipChunkGemini(transcript, videoDuration);
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) throw new Error("Empty response from DeepSeek");
+
+    return parseClipSegments(content, videoDuration);
+}
+
+/**
+ * Gemini fallback for clip segmentation
+ */
+async function clipChunkGemini(
+    transcript: TranscriptSegment[],
+    videoDuration: number
+): Promise<SegmentSuggestion[]> {
+    let apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+        apiKey = await getDbApiKey("gemini_api_key") || undefined;
+    }
+    if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
+
+    const transcriptText = formatTranscript(transcript);
+    const timeRange = transcript.length > 0
+        ? `from ${formatTimeHMS(transcript[0].start)} to ${formatTimeHMS(transcript[transcript.length - 1].end)}`
+        : "";
+
+    const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [{
+                        text: `${CLIPPING_PROMPT}\n\nVideo duration: ${videoDuration}s (${formatTimeHMS(videoDuration)})\nThis section covers ${timeRange}.\n\nTranscript:\n${transcriptText}`,
+                    }],
+                }],
+                generationConfig: {
+                    temperature: 0.4,
+                    maxOutputTokens: 8192,
+                    responseMimeType: "application/json",
+                },
+            }),
+        }
+    );
+
+    if (!response.ok) {
+        const err = await response.text();
+        throw new Error(`Gemini API error: ${response.status} — ${err}`);
+    }
+
+    const data = await response.json();
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!content) throw new Error("Empty response from Gemini");
+
+    return parseClipSegments(content, videoDuration);
+}
+
+/**
+ * Parse clip segments — same as parseSegments but uses viralScore as overallScore
+ */
+function parseClipSegments(
+    content: string,
+    videoDuration: number
+): SegmentSuggestion[] {
+    let parsed: any;
+
+    try {
+        parsed = JSON.parse(content);
+    } catch {
+        const match = content.match(/\[[\s\S]*\]/);
+        if (match) {
+            parsed = JSON.parse(match[0]);
+        } else {
+            throw new Error("Could not parse AI response as JSON");
+        }
+    }
+
+    if (parsed && !Array.isArray(parsed)) {
+        if (parsed.segments) parsed = parsed.segments;
+        else if (parsed.clips) parsed = parsed.clips;
+        else if (parsed.data) parsed = parsed.data;
+        else parsed = Object.values(parsed)[0];
+    }
+
+    if (!Array.isArray(parsed)) {
+        throw new Error("AI response is not an array");
+    }
+
+    return parsed
+        .filter((s: any) => {
+            const duration = (s.end || 0) - (s.start || 0);
+            return duration > 15 && duration <= 65 && s.start >= 0;
+        })
+        .map((s: any) => ({
+            start: Math.max(0, s.start),
+            end: Math.min(videoDuration, s.end),
+            title: s.title || "Untitled Clip",
+            description: s.description || "",
+            hookStrength: clamp(s.hookStrength || s.hook_strength || 5, 1, 10),
+            emotionalArc: clamp(s.emotionalArc || s.emotional_arc || 5, 1, 10),
+            completeness: clamp(s.completeness || 5, 1, 10),
+            overallScore: clamp(s.viralScore || s.viral_score || s.overallScore || s.overall_score || 5, 1, 10),
+        }))
+        .sort((a: SegmentSuggestion, b: SegmentSuggestion) => b.overallScore - a.overallScore);
+}

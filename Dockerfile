@@ -1,13 +1,17 @@
 # Use Node 22 (latest LTS) - guarantees >=22.12 for Prisma 7.4.2
 FROM node:22-slim AS base
 
-# Install system dependencies
+# Install system dependencies + fonts for subtitle rendering
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     python3 \
     python3-pip \
     openssl \
-    && rm -rf /var/lib/apt/lists/*
+    fontconfig \
+    fonts-liberation \
+    fonts-noto-core \
+    && rm -rf /var/lib/apt/lists/* \
+    && fc-cache -fv
 
 # Install yt-dlp
 RUN pip3 install --break-system-packages yt-dlp
