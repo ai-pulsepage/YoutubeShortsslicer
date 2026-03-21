@@ -18,6 +18,7 @@ import {
     Send,
     Flag,
     Loader2,
+    Music2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -40,6 +41,13 @@ type Channel = {
 const PLATFORM_COLORS: Record<string, string> = {
     YOUTUBE: "text-red-400 bg-red-500/10 border-red-500/20",
     INSTAGRAM: "text-pink-400 bg-pink-500/10 border-pink-500/20",
+    TIKTOK: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20",
+};
+
+const PLATFORM_ICONS: Record<string, any> = {
+    YOUTUBE: Youtube,
+    INSTAGRAM: Instagram,
+    TIKTOK: Music2,
 };
 
 export default function ChannelsPage() {
@@ -90,6 +98,16 @@ export default function ChannelsPage() {
         window.location.href = `/api/youtube/connect?origin=${encodeURIComponent(window.location.origin)}`;
     };
 
+    const connectTikTok = () => {
+        setConnecting(true);
+        window.location.href = `/api/tiktok/connect?origin=${encodeURIComponent(window.location.origin)}`;
+    };
+
+    const connectInstagram = () => {
+        setConnecting(true);
+        window.location.href = `/api/instagram/connect?origin=${encodeURIComponent(window.location.origin)}`;
+    };
+
     const disconnectChannel = async (id: string, name: string) => {
         if (!confirm(`Disconnect "${name}"? This will remove the channel and its tokens.`)) return;
         await fetch(`/api/channels?id=${id}`, { method: "DELETE" });
@@ -123,21 +141,47 @@ export default function ChannelsPage() {
                 <div>
                     <h1 className="text-2xl font-bold text-white">Channels</h1>
                     <p className="text-gray-400 text-sm mt-1">
-                        Connect and manage your YouTube channels for publishing
+                        Connect and manage your social accounts for publishing
                     </p>
                 </div>
-                <button
-                    onClick={connectYouTube}
-                    disabled={connecting}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-600/20 transition-all hover:scale-[1.02] disabled:opacity-50"
-                >
-                    {connecting ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                        <Youtube className="w-4 h-4" />
-                    )}
-                    {connecting ? "Connecting..." : "Connect YouTube Channel"}
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={connectTikTok}
+                        disabled={connecting}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-400 border border-cyan-600/20 transition-all hover:scale-[1.02] disabled:opacity-50"
+                    >
+                        {connecting ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                            <Music2 className="w-4 h-4" />
+                        )}
+                        TikTok
+                    </button>
+                    <button
+                        onClick={connectInstagram}
+                        disabled={connecting}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-pink-600/20 hover:bg-pink-600/30 text-pink-400 border border-pink-600/20 transition-all hover:scale-[1.02] disabled:opacity-50"
+                    >
+                        {connecting ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                            <Instagram className="w-4 h-4" />
+                        )}
+                        Instagram
+                    </button>
+                    <button
+                        onClick={connectYouTube}
+                        disabled={connecting}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-600/20 transition-all hover:scale-[1.02] disabled:opacity-50"
+                    >
+                        {connecting ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                            <Youtube className="w-4 h-4" />
+                        )}
+                        YouTube
+                    </button>
+                </div>
             </div>
 
             {/* Success / Error banners */}
@@ -189,7 +233,7 @@ export default function ChannelsPage() {
                                             />
                                         ) : (
                                             <div className={cn("w-12 h-12 rounded-full flex items-center justify-center border", colorClass)}>
-                                                <Youtube className="w-6 h-6" />
+                                                {(() => { const PIcon = PLATFORM_ICONS[channel.platform] || Youtube; return <PIcon className="w-6 h-6" />; })()}
                                             </div>
                                         )}
                                     </div>
@@ -200,7 +244,7 @@ export default function ChannelsPage() {
                                             {channel.channelName}
                                         </h3>
                                         <p className="text-xs text-gray-500 flex items-center gap-1.5 mt-0.5">
-                                            <Youtube className="w-3 h-3 text-red-400" />
+                                            {(() => { const PIcon = PLATFORM_ICONS[channel.platform] || Youtube; return <PIcon className="w-3 h-3" />; })()}
                                             {channel.platform}
                                             {channel.channelId && (
                                                 <span className="text-gray-600">• {channel.channelId}</span>
@@ -327,16 +371,31 @@ export default function ChannelsPage() {
                     <Share2 className="w-14 h-14 text-gray-700 mx-auto mb-4" />
                     <h3 className="text-lg font-semibold text-white mb-2">No channels connected</h3>
                     <p className="text-gray-400 text-sm max-w-md mx-auto mb-6">
-                        Connect your YouTube channels to enable direct publishing of your shorts.
-                        We&apos;ll automatically detect all channels on your Google account.
+                        Connect your social accounts to enable direct publishing of your clips.
                     </p>
-                    <button
-                        onClick={connectYouTube}
-                        className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-medium bg-red-600 hover:bg-red-700 text-white transition-colors"
-                    >
-                        <Youtube className="w-4 h-4" />
-                        Connect YouTube Channel
-                    </button>
+                    <div className="flex items-center justify-center gap-3">
+                        <button
+                            onClick={connectTikTok}
+                            className="inline-flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-medium bg-cyan-600 hover:bg-cyan-700 text-white transition-colors"
+                        >
+                            <Music2 className="w-4 h-4" />
+                            Connect TikTok
+                        </button>
+                        <button
+                            onClick={connectInstagram}
+                            className="inline-flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-medium bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white transition-colors"
+                        >
+                            <Instagram className="w-4 h-4" />
+                            Connect Instagram
+                        </button>
+                        <button
+                            onClick={connectYouTube}
+                            className="inline-flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-medium bg-red-600 hover:bg-red-700 text-white transition-colors"
+                        >
+                            <Youtube className="w-4 h-4" />
+                            Connect YouTube
+                        </button>
+                    </div>
                 </div>
             )}
 
