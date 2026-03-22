@@ -85,5 +85,6 @@ function detectPlatform(url: string): string {
     if (u.includes("twitter.com") || u.includes("x.com")) return "twitter";
     if (u.includes("facebook.com") || u.includes("fb.watch")) return "facebook";
     if (u.includes("reddit.com")) return "reddit";
+    if (u.includes("frame.io")) return "frameio";
     return "other";
 }

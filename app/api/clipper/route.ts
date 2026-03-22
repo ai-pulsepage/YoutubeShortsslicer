@@ -85,6 +85,7 @@ export async function POST(req: Request) {
     if (sourceUrl.includes("tiktok.com")) platform = "tiktok";
     else if (sourceUrl.includes("twitch.tv")) platform = "twitch";
     else if (sourceUrl.includes("instagram.com")) platform = "instagram";
+    else if (sourceUrl.includes("frame.io")) platform = "frameio";
 
     try {
         // Step 1: Create the Video record (reuses existing download pipeline)
