@@ -6,6 +6,7 @@ import {
     DeleteObjectsCommand,
     ListObjectsV2Command,
 } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Upload } from "@aws-sdk/lib-storage";
 import { Readable } from "stream";
 import fs from "fs";
@@ -265,4 +266,22 @@ export async function getR2StorageStats(): Promise<{
         totalSizeMB: (totalSizeBytes / (1024 * 1024)).toFixed(2),
         prefixes,
     };
+}
+
+/**
+ * Generate a presigned PUT URL for direct browser → R2 uploads
+ * This bypasses Railway's proxy completely.
+ */
+export async function getPresignedUploadUrl(
+    r2Key: string,
+    contentType: string,
+    expiresIn = 3600 // 1 hour
+): Promise<string> {
+    const command = new PutObjectCommand({
+        Bucket: BUCKET,
+        Key: r2Key,
+        ContentType: contentType,
+    });
+
+    return getSignedUrl(s3, command, { expiresIn });
 }

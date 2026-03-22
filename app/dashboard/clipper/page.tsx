@@ -213,37 +213,82 @@ export default function ClipStudioPage() {
         e.preventDefault();
 
         if (inputMode === "upload" && uploadFile) {
-            // File upload mode
+            // Two-step presigned URL upload: init → upload to R2 → finalize
             setCreating(true);
-            setUploadProgress("Uploading video...");
+            setUploadProgress("Initializing...");
             try {
-                const formData = new FormData();
-                formData.append("file", uploadFile);
-                formData.append("title", uploadFile.name.replace(/\.[^.]+$/, ""));
-                if (campaignName) formData.append("campaignName", campaignName);
-                if (campaignCpm) formData.append("campaignCpm", campaignCpm);
-                formData.append("captionStyle", captionStyle);
-                formData.append("faceTrack", String(faceTrack));
-
-                const res = await fetch("/api/clipper/upload", {
+                // Step 1: Init — get presigned R2 URL
+                const initRes = await fetch("/api/clipper/upload", {
                     method: "POST",
-                    body: formData,
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        action: "init",
+                        fileName: uploadFile.name,
+                        fileSize: uploadFile.size,
+                        contentType: uploadFile.type || "video/mp4",
+                        title: uploadFile.name.replace(/\.[^.]+$/, ""),
+                        campaignName: campaignName || null,
+                        campaignCpm: campaignCpm || null,
+                        captionStyle,
+                        faceTrack,
+                    }),
                 });
 
-                if (res.ok) {
-                    setUploadFile(null);
-                    setCampaignName("");
-                    setCampaignCpm("");
-                    setUploadProgress("");
-                    if (fileInputRef.current) fileInputRef.current.value = "";
-                    await fetchProjects();
-                } else {
-                    const err = await res.json();
-                    alert(err.error || "Upload failed");
+                if (!initRes.ok) {
+                    const err = await initRes.json();
+                    throw new Error(err.error || "Init failed");
                 }
-            } catch (err) {
+
+                const { videoId, projectId, uploadUrl, r2Key } = await initRes.json();
+                setUploadProgress("Uploading to cloud...");
+
+                // Step 2: Upload directly to R2 (bypasses Railway proxy)
+                await new Promise<void>((resolve, reject) => {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open("PUT", uploadUrl, true);
+                    xhr.setRequestHeader("Content-Type", uploadFile!.type || "video/mp4");
+
+                    xhr.upload.onprogress = (e) => {
+                        if (e.lengthComputable) {
+                            const pct = Math.round((e.loaded / e.total) * 100);
+                            setUploadProgress(`Uploading... ${pct}% (${(e.loaded / 1024 / 1024).toFixed(0)}MB / ${(e.total / 1024 / 1024).toFixed(0)}MB)`);
+                        }
+                    };
+
+                    xhr.onload = () => {
+                        if (xhr.status >= 200 && xhr.status < 300) resolve();
+                        else reject(new Error(`R2 upload failed: HTTP ${xhr.status}`));
+                    };
+                    xhr.onerror = () => reject(new Error("R2 upload network error"));
+                    xhr.ontimeout = () => reject(new Error("R2 upload timed out"));
+                    xhr.timeout = 3600000; // 1 hour
+
+                    xhr.send(uploadFile);
+                });
+
+                setUploadProgress("Starting AI analysis...");
+
+                // Step 3: Finalize — start transcription pipeline
+                const finalRes = await fetch("/api/clipper/upload", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action: "finalize", videoId, projectId, r2Key }),
+                });
+
+                if (!finalRes.ok) {
+                    const err = await finalRes.json();
+                    throw new Error(err.error || "Finalize failed");
+                }
+
+                setUploadFile(null);
+                setCampaignName("");
+                setCampaignCpm("");
+                setUploadProgress("");
+                if (fileInputRef.current) fileInputRef.current.value = "";
+                await fetchProjects();
+            } catch (err: any) {
                 console.error("Upload error:", err);
-                alert("Upload failed — check console for details");
+                alert(`Upload failed: ${err.message}`);
             } finally {
                 setCreating(false);
                 setUploadProgress("");
