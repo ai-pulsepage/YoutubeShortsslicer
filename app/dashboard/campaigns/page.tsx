@@ -436,6 +436,34 @@ export default function CampaignsPage() {
                                             </div>
                                         )}
                                     </div>
+
+                                    {/* On-Screen Text */}
+                                    {(brief.onScreenTextNotes || brief.onScreenSuggestions.length > 0) && (
+                                        <div>
+                                            <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                                <Type className="w-3 h-3" /> On-Screen Text
+                                            </h4>
+                                            {brief.onScreenTextNotes && (
+                                                <p className="text-xs text-gray-300 mb-2 italic">{brief.onScreenTextNotes}</p>
+                                            )}
+                                            {brief.onScreenSuggestions.length > 0 && (
+                                                <div className="space-y-1.5">
+                                                    <p className="text-[10px] text-gray-500 uppercase font-medium">Suggested on-screen text:</p>
+                                                    {brief.onScreenSuggestions.map((text, i) => (
+                                                        <div key={i} className="flex items-center gap-2 group">
+                                                            <p className="text-xs text-gray-400 flex-1 truncate">&ldquo;{text}&rdquo;</p>
+                                                            <button
+                                                                onClick={() => navigator.clipboard.writeText(text)}
+                                                                className="opacity-0 group-hover:opacity-100 p-1 text-gray-500 hover:text-white transition-all"
+                                                            >
+                                                                <Copy className="w-3 h-3" />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -517,6 +545,11 @@ function CampaignEditorModal({
     const [requirements, setRequirements] = useState<string[]>(brief?.requirements || [""]);
     const [notAllowed, setNotAllowed] = useState<string[]>(brief?.notAllowed || [""]);
 
+    // On-Screen Text
+    const [onScreenTextNotes, setOnScreenTextNotes] = useState(brief?.onScreenTextNotes || "");
+    const [onScreenSuggestions, setOnScreenSuggestions] = useState<string[]>(brief?.onScreenSuggestions || [""]);
+
+
     // Section toggles
     const [openSections, setOpenSections] = useState<Set<string>>(new Set(["basic", "caption", "tags"]));
     const toggleSection = (s: string) => setOpenSections((prev) => {
@@ -558,6 +591,8 @@ function CampaignEditorModal({
             minPostDays: minPostDays ? parseInt(minPostDays) : null,
             requirements: cleanArray(requirements),
             notAllowed: cleanArray(notAllowed),
+            onScreenTextNotes: onScreenTextNotes.trim() || null,
+            onScreenSuggestions: cleanArray(onScreenSuggestions),
         };
 
         try {
@@ -899,6 +934,30 @@ function CampaignEditorModal({
                             <button onClick={() => addListItem(setNotAllowed)} className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1">
                                 <Plus className="w-3 h-3" /> Add restriction
                             </button>
+                        </>
+                    ))}
+
+                    {/* On-Screen Text */}
+                    {renderSection("onscreen", "On-Screen Text", <Type className="w-4 h-4 text-pink-400" />, (
+                        <>
+                            <div>
+                                <label className={labelClass}>On-Screen Text Notes</label>
+                                <textarea value={onScreenTextNotes} onChange={(e) => setOnScreenTextNotes(e.target.value)} placeholder='e.g. "Flexible — can reinforce gameplay moments or mode name"' className={`${inputClass} min-h-[60px] resize-y`} />
+                            </div>
+                            <div>
+                                <label className={labelClass}>Suggested On-Screen Text</label>
+                                {onScreenSuggestions.map((text, i) => (
+                                    <div key={i} className="flex gap-2 mb-1">
+                                        <input type="text" value={text} onChange={(e) => updateListItem(setOnScreenSuggestions, i, e.target.value)} placeholder="Enter suggested on-screen text..." className={`${inputClass} flex-1`} />
+                                        {onScreenSuggestions.length > 1 && (
+                                            <button onClick={() => removeListItem(setOnScreenSuggestions, i)} className="text-gray-500 hover:text-red-400"><X className="w-4 h-4" /></button>
+                                        )}
+                                    </div>
+                                ))}
+                                <button onClick={() => addListItem(setOnScreenSuggestions)} className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1">
+                                    <Plus className="w-3 h-3" /> Add text
+                                </button>
+                            </div>
                         </>
                     ))}
                 </div>
