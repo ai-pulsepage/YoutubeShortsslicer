@@ -1,6 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
+
+// Allow large file uploads (up to 2GB)
+export const maxDuration = 300; // 5 minutes timeout
+export const dynamic = "force-dynamic";
 import { uploadFileToR2, generateR2Key, generateAudioR2Key } from "@/lib/storage";
 import { getQueue, QUEUE_NAMES } from "@/lib/queue";
 import path from "path";
