@@ -19,7 +19,7 @@ export async function POST(
 
     const { id } = await params;
     const body = await req.json();
-    const { segmentIds, all } = body;
+    const { segmentIds, all, subtitleStyle } = body;
 
     // Verify project ownership
     const project = await prisma.clipProject.findUnique({
@@ -82,6 +82,7 @@ export async function POST(
             clipMode: true,
             faceTrack: project.faceTrack,
             captionStyle: project.captionStyle,
+            subtitleStyle: subtitleStyle || null,
             hookOverlay: project.hookOverlay,
             ctaOverlay: project.ctaOverlay,
             ctaText: project.ctaText,

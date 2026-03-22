@@ -649,31 +649,67 @@ const renderWorker = new Worker(
                 try {
                     const { generateASS } = await import("../lib/subtitles");
 
-                    // Load subtitle preset if set, otherwise use defaults
+                    // Build subtitle style from job data (captionStyle / subtitleStyle)
+                    // Priority: job.data.subtitleStyle > job.data.captionStyle > defaults
                     let subtitleStyle: any = {};
-                    const presetId = (segment as any).subtitlePresetId;
-                    if (presetId) {
-                        const preset = await prisma.subtitlePreset.findUnique({ where: { id: presetId } });
-                        if (preset) {
-                            subtitleStyle = {
-                                font: preset.font,
-                                fontSize: preset.fontSize,
-                                color: preset.color,
-                                outline: preset.outline,
-                                shadow: preset.shadow,
-                                position: preset.position,
-                                animation: preset.animation,
-                            };
+                    if (job.data.subtitleStyle) {
+                        subtitleStyle = job.data.subtitleStyle;
+                    } else if (job.data.captionStyle) {
+                        subtitleStyle = { animation: job.data.captionStyle };
+                    }
+                    // Fallback: check segment's subtitlePresetId
+                    if (Object.keys(subtitleStyle).length === 0) {
+                        const presetId = (segment as any).subtitlePresetId;
+                        if (presetId) {
+                            const preset = await prisma.subtitlePreset.findUnique({ where: { id: presetId } });
+                            if (preset) {
+                                subtitleStyle = {
+                                    font: preset.font, fontSize: preset.fontSize,
+                                    color: preset.color, outline: preset.outline,
+                                    shadow: preset.shadow, position: preset.position,
+                                    animation: preset.animation,
+                                };
+                            }
                         }
                     }
+                    console.log(`[Render] Subtitle style: ${JSON.stringify(subtitleStyle)}`);
 
-                    // Parse word timestamps — stored as JSON array [{word, start, end}]
-                    let wordTimestamps: any[] = [];
+                    // Parse transcript segments — Whisper stores as [{start, end, text, words: [{word, start, end}]}]
+                    let rawSegments: any[] = [];
                     try {
-                        wordTimestamps = typeof transcript.segments === "string"
+                        rawSegments = typeof transcript.segments === "string"
                             ? JSON.parse(transcript.segments)
                             : transcript.segments;
                     } catch { }
+
+                    // Flatten: extract word-level timestamps from nested segments
+                    // Whisper format: segments[].words[] = {word/text, start, end}
+                    // generateASS expects: [{word, start, end}]
+                    let wordTimestamps: any[] = [];
+                    for (const seg of rawSegments) {
+                        if (seg.words && Array.isArray(seg.words)) {
+                            // Nested Whisper format — flatten words out
+                            for (const w of seg.words) {
+                                wordTimestamps.push({
+                                    word: w.word || w.text || "",
+                                    start: w.start,
+                                    end: w.end,
+                                });
+                            }
+                        } else if (seg.word !== undefined) {
+                            // Already flat format ({word, start, end})
+                            wordTimestamps.push(seg);
+                        } else if (seg.text && seg.start !== undefined) {
+                            // Segment-level only (no word timestamps) — use full text as one block
+                            wordTimestamps.push({
+                                word: seg.text,
+                                start: seg.start,
+                                end: seg.end,
+                            });
+                        }
+                    }
+
+                    console.log(`[Render] Word timestamps: ${wordTimestamps.length} words extracted from ${rawSegments.length} segments`);
 
                     if (wordTimestamps.length > 0) {
                         const assContent = generateASS(
@@ -686,6 +722,7 @@ const renderWorker = new Worker(
                         if (assContent) {
                             const assPath = path.join(renderDir, "subs.ass");
                             fs.writeFileSync(assPath, assContent, "utf8");
+                            console.log(`[Render] ASS file written: ${assContent.split("\n").length} lines`);
 
                             // Burn subtitles — re-encode with ASS filter
                             const subtitledOutput = path.join(renderDir, "subtitled.mp4");
@@ -696,12 +733,19 @@ const renderWorker = new Worker(
                                 { timeout: 600000 }
                             );
                             fs.renameSync(subtitledOutput, outputPath);
-                            console.log(`[Render] Subtitles burned successfully (${wordTimestamps.length} words)`);
+                            console.log(`[Render] ✅ Subtitles burned successfully (${wordTimestamps.length} words, style=${subtitleStyle.animation || "word-highlight"})`);
+                        } else {
+                            console.log(`[Render] generateASS returned empty — no words matched segment time range ${segment.startTime}-${segment.endTime}`);
                         }
+                    } else {
+                        console.log(`[Render] No word timestamps found in transcript`);
                     }
                 } catch (subErr: any) {
-                    console.warn(`[Render] Subtitle burn skipped: ${subErr.message}`);
+                    console.warn(`[Render] Subtitle burn failed: ${subErr.message}`);
+                    console.warn(subErr.stack);
                 }
+            } else {
+                console.log(`[Render] No transcript found for subtitle burn`);
             }
             await job.updateProgress(70);
 

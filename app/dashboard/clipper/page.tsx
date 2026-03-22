@@ -172,6 +172,12 @@ export default function ClipStudioPage() {
     // Earnings calculator
     const [viewCount, setViewCount] = useState("");
 
+    // Subtitle settings for render
+    const [subAnimation, setSubAnimation] = useState("word-highlight");
+    const [subFont, setSubFont] = useState("Montserrat");
+    const [subPosition, setSubPosition] = useState("bottom");
+    const [subColor, setSubColor] = useState("#FFFFFF");
+
     // ─── Data Fetching ───────────────────────────────────
 
     const fetchProjects = useCallback(async () => {
@@ -364,7 +370,7 @@ export default function ClipStudioPage() {
             const res = await fetch(`/api/clipper/${projectId}/render`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ all: true }),
+                body: JSON.stringify({ all: true, subtitleStyle: { animation: subAnimation, font: subFont, position: subPosition, color: subColor } }),
             });
 
             if (res.ok) {
@@ -392,7 +398,7 @@ export default function ClipStudioPage() {
             const res = await fetch(`/api/clipper/${projectId}/render`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ segmentIds: [segmentId] }),
+                body: JSON.stringify({ segmentIds: [segmentId], subtitleStyle: { animation: subAnimation, font: subFont, position: subPosition, color: subColor } }),
             });
 
             if (res.ok) {
@@ -793,8 +799,82 @@ export default function ClipStudioPage() {
                             </button>
                         </div>
 
+                        {/* Subtitle Settings */}
+                        <div className="px-6 py-4 border-b border-gray-800 bg-gray-900/50">
+                            <h3 className="text-sm font-semibold text-violet-400 mb-3 flex items-center gap-2">
+                                <Sparkles className="w-4 h-4" />
+                                Subtitle Settings
+                            </h3>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                <div>
+                                    <label className="block text-xs text-gray-500 mb-1">Animation</label>
+                                    <select
+                                        value={subAnimation}
+                                        onChange={(e) => setSubAnimation(e.target.value)}
+                                        className="w-full px-2.5 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white focus:border-violet-500 focus:outline-none"
+                                    >
+                                        <option value="word-highlight">Word Highlight (Karaoke)</option>
+                                        <option value="pop">Pop Animation</option>
+                                        <option value="fade">Fade In/Out</option>
+                                        <option value="slide-up">Slide Up</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-500 mb-1">Font</label>
+                                    <select
+                                        value={subFont}
+                                        onChange={(e) => setSubFont(e.target.value)}
+                                        className="w-full px-2.5 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white focus:border-violet-500 focus:outline-none"
+                                    >
+                                        <option value="Montserrat">Montserrat</option>
+                                        <option value="Inter">Inter</option>
+                                        <option value="Bebas Neue">Bebas Neue</option>
+                                        <option value="Impact">Impact</option>
+                                        <option value="Arial Black">Arial Black</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-500 mb-1">Position</label>
+                                    <select
+                                        value={subPosition}
+                                        onChange={(e) => setSubPosition(e.target.value)}
+                                        className="w-full px-2.5 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white focus:border-violet-500 focus:outline-none"
+                                    >
+                                        <option value="bottom">Bottom</option>
+                                        <option value="center">Center</option>
+                                        <option value="top">Top</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-500 mb-1">Color</label>
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="color"
+                                            value={subColor}
+                                            onChange={(e) => setSubColor(e.target.value)}
+                                            className="w-8 h-8 rounded border border-gray-700 bg-transparent cursor-pointer"
+                                        />
+                                        <span className="text-xs text-gray-400">{subColor}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            {/* Live preview strip */}
+                            <div className="mt-3 bg-black rounded-lg p-3 flex items-center justify-center" style={{ minHeight: 48 }}>
+                                <span
+                                    className="text-lg font-bold tracking-wide"
+                                    style={{
+                                        fontFamily: subFont,
+                                        color: subColor,
+                                        textShadow: "2px 2px 4px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.5)",
+                                    }}
+                                >
+                                    Sample subtitle text
+                                </span>
+                            </div>
+                        </div>
+
                         {/* Clips List */}
-                        <div className="p-6 space-y-3 max-h-[70vh] overflow-y-auto">
+                        <div className="p-6 space-y-3 max-h-[60vh] overflow-y-auto">
                             {/* Rendered Clips */}
                             {selectedProject.renderedClips.length > 0 && (
                                 <>
