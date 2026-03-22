@@ -2,11 +2,12 @@ import pg from 'pg';
 const client = new pg.Client(process.env.DATABASE_URL);
 await client.connect();
 
-const videoId = 'cmn1vcej500040es1jgtxl1sd';
+const videoId = 'cmn21l7zh00000eq8uqjpffw7';
 
-// Reset back to FAILED so user can use the Retry button  
+// Reset to FAILED so user can hit Retry button which goes through Railway's Redis
 await client.query(`UPDATE "Video" SET status = 'FAILED', "errorMsg" = 'Ready for retry with Groq' WHERE id = $1`, [videoId]);
 await client.query(`UPDATE "ClipProject" SET status = 'FAILED' WHERE "videoId" = $1`, [videoId]);
-console.log("✅ Reset to FAILED — use the Retry button in the UI now");
+console.log("✅ Set to FAILED — click Retry in the Clip Studio UI now!");
+console.log("The worker will download from R2, transcribe with Groq, and segment.");
 
 await client.end();

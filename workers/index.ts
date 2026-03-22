@@ -427,8 +427,13 @@ const transcriptionWorker = new Worker(
                             retryForm.append("file", fs.createReadStream(chunkPath));
                             retryForm.append("model", provider.model);
                             retryForm.append("response_format", "verbose_json");
+                            // Groq supports timestamp_granularities but needs correct format
                             retryForm.append("timestamp_granularities[]", "word");
                             retryForm.append("timestamp_granularities[]", "segment");
+                            // Groq requires language param for some models
+                            if (provider.name === "Groq") {
+                                retryForm.append("language", "en");
+                            }
 
                             whisperRes = await fetch(provider.url, {
                                 method: "POST",
@@ -440,13 +445,11 @@ const transcriptionWorker = new Worker(
                             });
 
                             if (whisperRes.ok) {
-                                if (attempt > 0 || provider.name !== "Together.ai") {
-                                    console.log(`[Transcription] ✅ ${provider.name} succeeded for chunk ${i + 1}`);
-                                }
+                                console.log(`[Transcription] ✅ ${provider.name} succeeded for chunk ${i + 1}`);
                                 break;
                             }
                             lastErr = await whisperRes.text();
-                            console.warn(`[Transcription] ${provider.name} chunk ${i + 1} attempt ${attempt + 1} failed: ${whisperRes.status}`);
+                            console.warn(`[Transcription] ${provider.name} chunk ${i + 1} attempt ${attempt + 1} failed: ${whisperRes.status} — ${lastErr.substring(0, 300)}`);
                             if (attempt < 1) await new Promise(r => setTimeout(r, 3000));
                         } catch (e: any) {
                             lastErr = e.message;
