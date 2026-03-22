@@ -408,46 +408,56 @@ const transcriptionWorker = new Worker(
                 const chunkSize = (fs.statSync(chunkPath).size / 1024 / 1024).toFixed(1);
                 console.log(`[Transcription] Chunk ${i + 1}/${numChunks}: ${chunkSize}MB (offset ${chunkStart}s)`);
 
-                // Send chunk to Whisper
-                const form = new FormData();
-                form.append("file", fs.createReadStream(chunkPath));
-                form.append("model", "whisper-large-v3");
-                form.append("response_format", "verbose_json");
-                form.append("timestamp_granularities[]", "word");
-                form.append("timestamp_granularities[]", "segment");
+                // Build whisper providers list (try Together first, fallback to Groq)
+                const groqKey = process.env.GROQ_API_KEY;
+                const whisperProviders: { name: string; url: string; key: string; model: string }[] = [];
+                if (togetherKey) whisperProviders.push({ name: "Together.ai", url: "https://api.together.xyz/v1/audio/transcriptions", key: togetherKey, model: "whisper-large-v3" });
+                if (groqKey) whisperProviders.push({ name: "Groq", url: "https://api.groq.com/openai/v1/audio/transcriptions", key: groqKey, model: "whisper-large-v3-turbo" });
+                if (whisperProviders.length === 0) throw new Error("No Whisper API keys configured (TOGETHER_API_KEY or GROQ_API_KEY)");
 
                 let whisperRes: Response | null = null;
                 let lastErr = "";
-                // Retry each chunk up to 3 times
-                for (let attempt = 0; attempt < 3; attempt++) {
-                    try {
-                        const retryForm = new FormData();
-                        retryForm.append("file", fs.createReadStream(chunkPath));
-                        retryForm.append("model", "whisper-large-v3");
-                        retryForm.append("response_format", "verbose_json");
-                        retryForm.append("timestamp_granularities[]", "word");
-                        retryForm.append("timestamp_granularities[]", "segment");
 
-                        whisperRes = await fetch("https://api.together.xyz/v1/audio/transcriptions", {
-                            method: "POST",
-                            headers: {
-                                "Authorization": `Bearer ${togetherKey}`,
-                                ...retryForm.getHeaders(),
-                            },
-                            body: retryForm as any,
-                        });
-                        if (whisperRes.ok) break;
-                        lastErr = await whisperRes.text();
-                        console.warn(`[Transcription] Chunk ${i + 1} attempt ${attempt + 1} failed: ${whisperRes.status}`);
-                        if (attempt < 2) await new Promise(r => setTimeout(r, 5000 * (attempt + 1)));
-                    } catch (e: any) {
-                        lastErr = e.message;
-                        if (attempt < 2) await new Promise(r => setTimeout(r, 5000 * (attempt + 1)));
+                for (const provider of whisperProviders) {
+                    for (let attempt = 0; attempt < 2; attempt++) {
+                        try {
+                            const retryForm = new FormData();
+                            retryForm.append("file", fs.createReadStream(chunkPath));
+                            retryForm.append("model", provider.model);
+                            retryForm.append("response_format", "verbose_json");
+                            retryForm.append("timestamp_granularities[]", "word");
+                            retryForm.append("timestamp_granularities[]", "segment");
+
+                            whisperRes = await fetch(provider.url, {
+                                method: "POST",
+                                headers: {
+                                    "Authorization": `Bearer ${provider.key}`,
+                                    ...retryForm.getHeaders(),
+                                },
+                                body: retryForm as any,
+                            });
+
+                            if (whisperRes.ok) {
+                                if (attempt > 0 || provider.name !== "Together.ai") {
+                                    console.log(`[Transcription] ✅ ${provider.name} succeeded for chunk ${i + 1}`);
+                                }
+                                break;
+                            }
+                            lastErr = await whisperRes.text();
+                            console.warn(`[Transcription] ${provider.name} chunk ${i + 1} attempt ${attempt + 1} failed: ${whisperRes.status}`);
+                            if (attempt < 1) await new Promise(r => setTimeout(r, 3000));
+                        } catch (e: any) {
+                            lastErr = e.message;
+                            console.warn(`[Transcription] ${provider.name} chunk ${i + 1} error: ${lastErr}`);
+                            if (attempt < 1) await new Promise(r => setTimeout(r, 3000));
+                        }
                     }
+                    if (whisperRes?.ok) break; // Success — stop trying providers
+                    console.log(`[Transcription] ${provider.name} failed, trying next provider...`);
                 }
 
                 if (!whisperRes || !whisperRes.ok) {
-                    throw new Error(`Whisper API failed for chunk ${i + 1} after 3 attempts: ${lastErr}`);
+                    throw new Error(`All Whisper providers failed for chunk ${i + 1}: ${lastErr}`);
                 }
 
                 const whisperData = await whisperRes.json() as any;
