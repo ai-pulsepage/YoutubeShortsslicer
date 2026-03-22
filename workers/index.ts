@@ -408,11 +408,12 @@ const transcriptionWorker = new Worker(
                 const chunkSize = (fs.statSync(chunkPath).size / 1024 / 1024).toFixed(1);
                 console.log(`[Transcription] Chunk ${i + 1}/${numChunks}: ${chunkSize}MB (offset ${chunkStart}s)`);
 
-                // Build whisper providers list (try Together first, fallback to Groq)
+                // Build whisper providers list (try Groq first since Together.ai is unreliable)
                 const groqKey = process.env.GROQ_API_KEY;
                 const whisperProviders: { name: string; url: string; key: string; model: string }[] = [];
-                if (togetherKey) whisperProviders.push({ name: "Together.ai", url: "https://api.together.xyz/v1/audio/transcriptions", key: togetherKey, model: "whisper-large-v3" });
                 if (groqKey) whisperProviders.push({ name: "Groq", url: "https://api.groq.com/openai/v1/audio/transcriptions", key: groqKey, model: "whisper-large-v3-turbo" });
+                if (togetherKey) whisperProviders.push({ name: "Together.ai", url: "https://api.together.xyz/v1/audio/transcriptions", key: togetherKey, model: "whisper-large-v3" });
+                console.log(`[Transcription] Available providers: ${whisperProviders.map(p => p.name).join(", ")} | GROQ_API_KEY=${groqKey ? groqKey.substring(0, 8) + "..." : "NOT SET"}`);
                 if (whisperProviders.length === 0) throw new Error("No Whisper API keys configured (TOGETHER_API_KEY or GROQ_API_KEY)");
 
                 let whisperRes: Response | null = null;
