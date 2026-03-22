@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
     Scissors,
     Play,
@@ -19,6 +19,8 @@ import {
     Share2,
     Clock,
     Eye,
+    Upload,
+    FileVideo,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────
@@ -155,7 +157,11 @@ export default function ClipStudioPage() {
     const [rendering, setRendering] = useState<Set<string>>(new Set());
 
     // Form state
+    const [inputMode, setInputMode] = useState<"url" | "upload">("url");
     const [url, setUrl] = useState("");
+    const [uploadFile, setUploadFile] = useState<File | null>(null);
+    const [uploadProgress, setUploadProgress] = useState("");
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const [campaignName, setCampaignName] = useState("");
     const [campaignCpm, setCampaignCpm] = useState("");
     const [captionStyle, setCaptionStyle] = useState("word-highlight");
@@ -204,6 +210,47 @@ export default function ClipStudioPage() {
 
     const handleCreateProject = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (inputMode === "upload" && uploadFile) {
+            // File upload mode
+            setCreating(true);
+            setUploadProgress("Uploading video...");
+            try {
+                const formData = new FormData();
+                formData.append("file", uploadFile);
+                formData.append("title", uploadFile.name.replace(/\.[^.]+$/, ""));
+                if (campaignName) formData.append("campaignName", campaignName);
+                if (campaignCpm) formData.append("campaignCpm", campaignCpm);
+                formData.append("captionStyle", captionStyle);
+                formData.append("faceTrack", String(faceTrack));
+
+                const res = await fetch("/api/clipper/upload", {
+                    method: "POST",
+                    body: formData,
+                });
+
+                if (res.ok) {
+                    setUploadFile(null);
+                    setCampaignName("");
+                    setCampaignCpm("");
+                    setUploadProgress("");
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                    await fetchProjects();
+                } else {
+                    const err = await res.json();
+                    alert(err.error || "Upload failed");
+                }
+            } catch (err) {
+                console.error("Upload error:", err);
+                alert("Upload failed — check console for details");
+            } finally {
+                setCreating(false);
+                setUploadProgress("");
+            }
+            return;
+        }
+
+        // URL mode
         if (!url.trim()) return;
 
         setCreating(true);
@@ -323,7 +370,27 @@ export default function ClipStudioPage() {
                     New Clip Project
                 </h2>
                 <form onSubmit={handleCreateProject} className="space-y-4">
+                    {/* Input Mode Toggle */}
+                    <div className="flex items-center gap-1 bg-gray-800/60 rounded-lg p-1 w-fit">
+                        <button
+                            type="button"
+                            onClick={() => setInputMode("url")}
+                            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${inputMode === "url" ? "bg-violet-600 text-white" : "text-gray-400 hover:text-white"}`}
+                        >
+                            Paste URL
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setInputMode("upload")}
+                            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${inputMode === "upload" ? "bg-violet-600 text-white" : "text-gray-400 hover:text-white"}`}
+                        >
+                            <Upload className="w-3.5 h-3.5" />
+                            Upload File
+                        </button>
+                    </div>
+
                     {/* URL Input */}
+                    {inputMode === "url" ? (
                     <div>
                         <label className="block text-sm font-medium text-gray-300 mb-1">
                             Video URL
@@ -337,6 +404,56 @@ export default function ClipStudioPage() {
                             required
                         />
                     </div>
+                    ) : (
+                    /* File Upload */
+                    <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">
+                            Video File
+                        </label>
+                        <div
+                            onClick={() => fileInputRef.current?.click()}
+                            onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("border-violet-500"); }}
+                            onDragLeave={(e) => { e.currentTarget.classList.remove("border-violet-500"); }}
+                            onDrop={(e) => {
+                                e.preventDefault();
+                                e.currentTarget.classList.remove("border-violet-500");
+                                const dropped = e.dataTransfer.files[0];
+                                if (dropped) setUploadFile(dropped);
+                            }}
+                            className="w-full px-4 py-8 bg-gray-800/80 border-2 border-dashed border-gray-700 rounded-xl text-center cursor-pointer hover:border-violet-500/50 transition-colors"
+                        >
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept=".mp4,.mov,.webm,.mkv,video/*"
+                                className="hidden"
+                                onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                            />
+                            {uploadFile ? (
+                                <div className="flex items-center justify-center gap-3">
+                                    <FileVideo className="w-8 h-8 text-violet-400" />
+                                    <div className="text-left">
+                                        <p className="text-white font-medium">{uploadFile.name}</p>
+                                        <p className="text-gray-500 text-xs">{(uploadFile.size / 1024 / 1024).toFixed(1)} MB</p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); setUploadFile(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                                        className="ml-4 text-gray-500 hover:text-red-400"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                            ) : (
+                                <>
+                                    <Upload className="w-10 h-10 text-gray-600 mx-auto mb-2" />
+                                    <p className="text-gray-400">Drag & drop a video file or click to browse</p>
+                                    <p className="text-gray-600 text-xs mt-1">MP4, MOV, WebM, MKV — up to 2GB</p>
+                                </>  
+                            )}
+                        </div>
+                    </div>
+                    )}
 
                     {/* Campaign Fields (collapsible row) */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -411,18 +528,18 @@ export default function ClipStudioPage() {
                     {/* Submit */}
                     <button
                         type="submit"
-                        disabled={creating || !url.trim()}
+                        disabled={creating || (inputMode === "url" ? !url.trim() : !uploadFile)}
                         className="w-full py-3 px-6 bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-500 hover:to-pink-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 text-lg shadow-lg shadow-violet-500/25"
                     >
                         {creating ? (
                             <>
                                 <Loader2 className="w-5 h-5 animate-spin" />
-                                Processing...
+                                {uploadProgress || "Processing..."}
                             </>
                         ) : (
                             <>
-                                <Scissors className="w-5 h-5" />
-                                Find Viral Clips
+                                {inputMode === "upload" ? <Upload className="w-5 h-5" /> : <Scissors className="w-5 h-5" />}
+                                {inputMode === "upload" ? "Upload & Find Clips" : "Find Viral Clips"}
                             </>
                         )}
                     </button>
@@ -485,7 +602,7 @@ export default function ClipStudioPage() {
                         <Scissors className="w-12 h-12 text-gray-600 mx-auto mb-3" />
                         <p className="text-gray-400">No projects yet</p>
                         <p className="text-gray-500 text-sm mt-1">
-                            Paste a YouTube URL above to get started
+                            Paste a URL or upload a video file above to get started
                         </p>
                     </div>
                 ) : (
