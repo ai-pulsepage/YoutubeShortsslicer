@@ -420,28 +420,30 @@ const transcriptionWorker = new Worker(
                 let whisperRes: Response | null = null;
                 let lastErr = "";
 
+                // Read chunk into buffer once (avoids stream EOF issues with some APIs)
+                const chunkBuffer = fs.readFileSync(chunkPath);
+                const chunkBlob = new Blob([chunkBuffer], { type: "audio/mpeg" });
+
                 for (const provider of whisperProviders) {
                     for (let attempt = 0; attempt < 2; attempt++) {
                         try {
-                            const retryForm = new FormData();
-                            retryForm.append("file", fs.createReadStream(chunkPath));
-                            retryForm.append("model", provider.model);
-                            retryForm.append("response_format", "verbose_json");
-                            // Groq supports timestamp_granularities but needs correct format
-                            retryForm.append("timestamp_granularities[]", "word");
-                            retryForm.append("timestamp_granularities[]", "segment");
-                            // Groq requires language param for some models
+                            // Use native FormData + Blob (form-data streams cause EOF on Groq)
+                            const nativeForm = new globalThis.FormData();
+                            nativeForm.append("file", chunkBlob, "chunk.mp3");
+                            nativeForm.append("model", provider.model);
+                            nativeForm.append("response_format", "verbose_json");
+                            nativeForm.append("timestamp_granularities[]", "word");
+                            nativeForm.append("timestamp_granularities[]", "segment");
                             if (provider.name === "Groq") {
-                                retryForm.append("language", "en");
+                                nativeForm.append("language", "en");
                             }
 
                             whisperRes = await fetch(provider.url, {
                                 method: "POST",
                                 headers: {
                                     "Authorization": `Bearer ${provider.key}`,
-                                    ...retryForm.getHeaders(),
                                 },
-                                body: retryForm as any,
+                                body: nativeForm,
                             });
 
                             if (whisperRes.ok) {
