@@ -86,6 +86,7 @@ export default function SchedulerPage() {
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showAssignModal, setShowAssignModal] = useState(false);
     const [editingJob, setEditingJob] = useState<PublishJob | null>(null);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
 
     useEffect(() => {
         Promise.all([
@@ -99,6 +100,24 @@ export default function SchedulerPage() {
             setLoading(false);
         });
     }, []);
+
+    const deleteJob = async (jobId: string) => {
+        if (!confirm("Delete this scheduled post? This cannot be undone.")) return;
+        setDeletingId(jobId);
+        try {
+            const res = await fetch(`/api/publish?id=${jobId}`, { method: "DELETE" });
+            if (res.ok) {
+                setJobs(prev => prev.filter(j => j.id !== jobId));
+            } else {
+                const err = await res.json();
+                alert(err.error || "Delete failed");
+            }
+        } catch (err) {
+            console.error("Delete error:", err);
+        } finally {
+            setDeletingId(null);
+        }
+    };
 
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -433,6 +452,18 @@ export default function SchedulerPage() {
                                             title="Edit job"
                                         >
                                             <Edit3 className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            onClick={() => deleteJob(job.id)}
+                                            disabled={deletingId === job.id}
+                                            className="p-2 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                                            title="Delete job"
+                                        >
+                                            {deletingId === job.id ? (
+                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                            ) : (
+                                                <Trash2 className="w-4 h-4" />
+                                            )}
                                         </button>
                                     </div>
                                 ))

@@ -584,6 +584,12 @@ export default function ClipStudioPage() {
                                     </div>
                                 );
                             })()}
+                            <a
+                                href="/dashboard/campaigns"
+                                className="text-[10px] text-violet-400 hover:text-violet-300 mt-1.5 inline-flex items-center gap-1"
+                            >
+                                {briefs.length === 0 ? "→ Create your first campaign" : "→ Manage campaigns"}
+                            </a>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-400 mb-1">

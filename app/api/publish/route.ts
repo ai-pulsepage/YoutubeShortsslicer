@@ -117,3 +117,32 @@ export async function PATCH(req: Request) {
 
     return NextResponse.json(updated);
 }
+
+export async function DELETE(req: Request) {
+    const session = await auth();
+    if (!session?.user?.id) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const jobId = searchParams.get("id");
+
+    if (!jobId) {
+        return NextResponse.json({ error: "id query param is required" }, { status: 400 });
+    }
+
+    // Verify ownership
+    const existing = await prisma.publishJob.findFirst({
+        where: {
+            id: jobId,
+            shortVideo: { segment: { video: { userId: session.user.id } } },
+        },
+    });
+
+    if (!existing) {
+        return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    }
+
+    await prisma.publishJob.delete({ where: { id: jobId } });
+    return NextResponse.json({ success: true });
+}
