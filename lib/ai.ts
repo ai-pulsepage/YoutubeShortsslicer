@@ -375,7 +375,7 @@ function parseSegments(
         })
         .map((s: any) => ({
             start: Math.max(0, s.start),
-            end: Math.min(videoDuration, s.end),
+            end: videoDuration > 0 ? Math.min(videoDuration, s.end) : s.end,
             title: s.title || "Untitled Segment",
             description: s.description || "",
             hookStrength: clamp(s.hookStrength || s.hook_strength || 5, 1, 10),
@@ -634,7 +634,7 @@ function parseClipSegments(
         })
         .map((s: any) => ({
             start: Math.max(0, s.start),
-            end: Math.min(videoDuration, s.end),
+            end: videoDuration > 0 ? Math.min(videoDuration, s.end) : s.end,
             title: s.title || "Untitled Clip",
             description: s.description || "",
             hookStrength: clamp(s.hookStrength || s.hook_strength || 5, 1, 10),

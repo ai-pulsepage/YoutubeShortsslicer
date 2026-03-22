@@ -549,7 +549,8 @@ const segmentationWorker = new Worker(
             if (!transcript) throw new Error(`Transcript ${transcriptId} not found`);
 
             const segments = transcript.segments as any[];
-            const videoDuration = transcript.video.duration || 0;
+            // Use video duration, or infer from last transcript segment if duration is null
+            const videoDuration = transcript.video.duration || (segments.length > 0 ? Math.ceil(segments[segments.length - 1].end || 0) : 0);
 
             if (!segments || segments.length === 0) throw new Error("Transcript has no segments");
             await job.updateProgress(20);
