@@ -909,16 +909,50 @@ function ClipCard({
             <div className="flex-shrink-0 flex items-center gap-2">
                 {isRendered && clip.shortVideo?.storagePath ? (
                     <>
-                        <a
-                            href={`/api/shorts/${clip.shortVideo.id}/download`}
+                        <button
+                            onClick={async () => {
+                                try {
+                                    const res = await fetch(`/api/shorts/${clip.shortVideo!.id}/stream`);
+                                    if (!res.ok) throw new Error("Download failed");
+                                    const blob = await res.blob();
+                                    const url = URL.createObjectURL(blob);
+                                    const a = document.createElement("a");
+                                    a.href = url;
+                                    a.download = `${clip.title || "short"}.mp4`;
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    document.body.removeChild(a);
+                                    URL.revokeObjectURL(url);
+                                } catch (err) {
+                                    console.error("Download error:", err);
+                                    alert("Download failed. Please try again.");
+                                }
+                            }}
                             className="p-2 rounded-lg bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 transition-colors"
                             title="Download"
                         >
                             <Download className="w-4 h-4" />
-                        </a>
+                        </button>
                         <button
+                            onClick={async () => {
+                                try {
+                                    if (navigator.share) {
+                                        const res = await fetch(`/api/shorts/${clip.shortVideo!.id}/stream`);
+                                        const blob = await res.blob();
+                                        const file = new File([blob], `${clip.title || "short"}.mp4`, { type: "video/mp4" });
+                                        await navigator.share({ title: clip.title || "Short", files: [file] });
+                                    } else {
+                                        await navigator.clipboard.writeText(clip.title || "Short clip");
+                                        alert("Title copied! Download the video and share it on your preferred platform.");
+                                    }
+                                } catch (err: any) {
+                                    if (err.name !== "AbortError") {
+                                        console.error("Share error:", err);
+                                    }
+                                }
+                            }}
                             className="p-2 rounded-lg bg-violet-600/20 text-violet-400 hover:bg-violet-600/30 transition-colors"
-                            title="Post to social"
+                            title="Share to social"
                         >
                             <Share2 className="w-4 h-4" />
                         </button>

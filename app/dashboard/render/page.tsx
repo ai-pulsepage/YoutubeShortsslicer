@@ -194,14 +194,30 @@ export default function RenderPage() {
                                 </div>
 
                                 <div className="flex gap-2">
-                                    <a
-                                        href={`/api/shorts/${short.id}/stream`}
-                                        download={`${short.segment?.title || "short"}.mp4`}
+                                    <button
+                                        onClick={async () => {
+                                            try {
+                                                const res = await fetch(`/api/shorts/${short.id}/stream`);
+                                                if (!res.ok) throw new Error("Download failed");
+                                                const blob = await res.blob();
+                                                const url = URL.createObjectURL(blob);
+                                                const a = document.createElement("a");
+                                                a.href = url;
+                                                a.download = `${short.segment?.title || "short"}.mp4`;
+                                                document.body.appendChild(a);
+                                                a.click();
+                                                document.body.removeChild(a);
+                                                URL.revokeObjectURL(url);
+                                            } catch (err) {
+                                                console.error("Download error:", err);
+                                                alert("Download failed. Please try again.");
+                                            }
+                                        }}
                                         className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium bg-violet-600 hover:bg-violet-500 text-white transition-colors"
                                     >
                                         <Download className="w-3 h-3" />
                                         Download
-                                    </a>
+                                    </button>
                                 </div>
                             </div>
                         </div>
