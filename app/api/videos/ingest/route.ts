@@ -55,6 +55,8 @@ export async function POST(req: Request) {
         } as VideoDownloadJobData,
         {
             priority: 1,
+            attempts: 3,
+            backoff: { type: "exponential", delay: 30000 },
         }
     );
 

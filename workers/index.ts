@@ -306,6 +306,7 @@ const downloadWorker = new Worker(
         concurrency: 1,
         lockDuration: 600000,      // 10 minutes — long videos take time
         stalledInterval: 300000,   // 5 minutes — don't mark as stalled too early
+        maxStalledCount: 2,        // Only retry stalled jobs twice
         settings: {
             backoffStrategy: (attemptsMade: number) => {
                 // Exponential backoff: 30s, 60s, 120s, 240s, 480s
@@ -451,7 +452,7 @@ const transcriptionWorker = new Worker(
             throw error;
         }
     },
-    { connection: redis as any, concurrency: 1 }
+    { connection: redis as any, concurrency: 1, maxStalledCount: 2 }
 );
 
 // ─── Segmentation Worker ─────────────────────────
@@ -512,7 +513,7 @@ const segmentationWorker = new Worker(
             throw error;
         }
     },
-    { connection: redis as any, concurrency: 3 }
+    { connection: redis as any, concurrency: 3, maxStalledCount: 2 }
 );
 
 // ─── Render Worker ───────────────────────────────
@@ -689,7 +690,7 @@ const renderWorker = new Worker(
             throw error;
         }
     },
-    { connection: redis as any, concurrency: 2 }
+    { connection: redis as any, concurrency: 2, maxStalledCount: 2 }
 );
 
 // ─── Event Handlers ──────────────────────────────
