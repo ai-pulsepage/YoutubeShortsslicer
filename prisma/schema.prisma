@@ -85,6 +85,7 @@ model User {
   schedules     ContentSchedule[]
   documentaries Documentary[]
   clipProjects  ClipProject[]
+  campaignBriefs CampaignBrief[]
 
   // Podcast
   podcastCharacters PodcastCharacter[]
@@ -844,6 +845,7 @@ model ClipProject {
   id             String            @id @default(cuid())
   userId         String
   videoId        String
+  briefId        String?           // link to CampaignBrief
   campaignName   String?           // e.g. "Call of Duty BO7", "IShowSpeed Clips"
   campaignCpm    Float?            // $/1k views — for earnings tracking
   campaignPlatforms String[]       // ["tiktok", "instagram", "youtube"]
@@ -858,7 +860,72 @@ model ClipProject {
 
   user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   video          Video             @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  brief          CampaignBrief?    @relation(fields: [briefId], references: [id], onDelete: SetNull)
 
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
+}
+
+// ─── Campaign Briefs ─────────────────────────────────────
+
+model CampaignBrief {
+  id                 String   @id @default(cuid())
+  userId             String
+  name               String           // "Call of Duty: Black Ops Royale"
+  brand              String?          // "Call of Duty"
+  status             String   @default("active") // active | paused | completed | archived
+
+  // Content Source
+  contentSourceUrls  String[]         // frame.io, dropbox links
+  contentSourceNotes String?  @db.Text // "Use official assets only"
+
+  // Target Platforms
+  targetPlatforms    String[]         // ["tiktok", "instagram", "youtube"]
+
+  // Caption Rules
+  captionGuidelines  String?  @db.Text  // Free-text guidance
+  suggestedCaptions  String[]           // List of example captions
+  requiredPhrases    String[]           // Must appear in every post
+
+  // Tags & Hashtags (per platform)
+  platformTags       Json     @default("[]")  // [{platform:"tiktok", tags:["@callofduty"]}]
+  requiredHashtags   String[]                 // #arenazero, #higgsfieldoriginalseries
+  optionalHashtags   String[]                 // Additional allowed tags
+
+  // Disclosure
+  disclosureRequired Boolean  @default(false)
+  disclosureOptions  String[]                 // ["#Ad", "#Sponsored"]
+  disclosurePlacement String? @db.Text        // Rules about placement
+
+  // On-Screen Text
+  onScreenTextNotes  String?  @db.Text
+  onScreenSuggestions String[]
+
+  // Video Settings
+  formatNotes        String?  @db.Text        // "voiceover narration style"
+  minLengthSec       Int?
+  maxLengthSec       Int?
+
+  // Watermark
+  watermarkRequired  Boolean  @default(false)
+  watermarkUrl       String?                  // URL to PNG
+  watermarkNotes     String?
+
+  // Subtitle Defaults
+  subtitleStyle      Json?                    // {font, color, position, animation}
+
+  // Monetization
+  cpmRate            Float?
+  engagementRateMin  Float?                   // 0.20 = 0.20%
+  minPostDays        Int?                     // 30
+
+  // Requirements & Restrictions
+  requirements       String[]                 // Checklist items
+  notAllowed         String[]                 // Restriction items
+
+  user               User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clipProjects       ClipProject[]
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 }

@@ -46,6 +46,24 @@ export async function GET(req: Request) {
                             videoTags: {
                                 include: { tag: { select: { id: true, name: true, color: true } } },
                             },
+                            clipProjects: {
+                                select: {
+                                    id: true,
+                                    campaignName: true,
+                                    campaignCpm: true,
+                                    briefId: true,
+                                    brief: {
+                                        select: {
+                                            id: true,
+                                            name: true,
+                                            brand: true,
+                                            targetPlatforms: true,
+                                            cpmRate: true,
+                                        },
+                                    },
+                                },
+                                take: 1,
+                            },
                         },
                     },
                 },

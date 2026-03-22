@@ -163,6 +163,8 @@ export default function ClipStudioPage() {
     const [uploadFile, setUploadFile] = useState<File | null>(null);
     const [uploadProgress, setUploadProgress] = useState("");
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [selectedBriefId, setSelectedBriefId] = useState("");
+    const [briefs, setBriefs] = useState<{id: string; name: string; brand: string | null; cpmRate: number | null; targetPlatforms: string[]; watermarkRequired: boolean; disclosureRequired: boolean}[]>([]);
     const [campaignName, setCampaignName] = useState("");
     const [campaignCpm, setCampaignCpm] = useState("");
     const [captionStyle, setCaptionStyle] = useState("word-highlight");
@@ -208,6 +210,10 @@ export default function ClipStudioPage() {
 
     useEffect(() => {
         fetchProjects();
+        // Fetch campaign briefs for selector
+        fetch("/api/briefs").then(r => r.ok ? r.json() : []).then(data => {
+            if (Array.isArray(data)) setBriefs(data);
+        }).catch(() => {});
         // Auto-refresh every 10 seconds for processing updates
         const interval = setInterval(fetchProjects, 10000);
         return () => clearInterval(interval);
@@ -233,6 +239,7 @@ export default function ClipStudioPage() {
                         fileSize: uploadFile.size,
                         contentType: uploadFile.type || "video/mp4",
                         title: uploadFile.name.replace(/\.[^.]+$/, ""),
+                        briefId: selectedBriefId || null,
                         campaignName: campaignName || null,
                         campaignCpm: campaignCpm || null,
                         captionStyle,
@@ -312,6 +319,7 @@ export default function ClipStudioPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     sourceUrl: url.trim(),
+                    briefId: selectedBriefId || null,
                     campaignName: campaignName || null,
                     campaignCpm: campaignCpm || null,
                     captionStyle,
@@ -535,31 +543,59 @@ export default function ClipStudioPage() {
                     </div>
                     )}
 
-                    {/* Campaign Fields (collapsible row) */}
+                    {/* Campaign Brief Selector */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-400 mb-1">
-                                Campaign Name (optional)
+                                Campaign Brief
+                            </label>
+                            <select
+                                value={selectedBriefId}
+                                onChange={(e) => {
+                                    setSelectedBriefId(e.target.value);
+                                    const brief = briefs.find(b => b.id === e.target.value);
+                                    if (brief) {
+                                        setCampaignName(brief.name);
+                                        setCampaignCpm(brief.cpmRate?.toString() || "");
+                                    } else {
+                                        setCampaignName("");
+                                        setCampaignCpm("");
+                                    }
+                                }}
+                                className="w-full px-3 py-2 bg-gray-800/60 border border-gray-700/50 rounded-lg text-white focus:border-violet-500 focus:outline-none text-sm"
+                            >
+                                <option value="">No campaign (manual)</option>
+                                {briefs.map(b => (
+                                    <option key={b.id} value={b.id}>
+                                        {b.name}{b.cpmRate ? ` · $${b.cpmRate}/1k` : ""}
+                                    </option>
+                                ))}
+                            </select>
+                            {selectedBriefId && (() => {
+                                const brief = briefs.find(b => b.id === selectedBriefId);
+                                if (!brief) return null;
+                                return (
+                                    <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                                        {brief.targetPlatforms.map(p => (
+                                            <span key={p} className="text-[9px] px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-400">{p}</span>
+                                        ))}
+                                        {brief.watermarkRequired && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-purple-500/15 text-purple-400">Watermark</span>}
+                                        {brief.disclosureRequired && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400">Disclosure</span>}
+                                    </div>
+                                );
+                            })()}
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-400 mb-1">
+                                Campaign Name {selectedBriefId ? "(from brief)" : "(optional)"}
                             </label>
                             <input
                                 type="text"
                                 value={campaignName}
                                 onChange={(e) => setCampaignName(e.target.value)}
                                 placeholder="e.g. Call of Duty BO7"
-                                className="w-full px-3 py-2 bg-gray-800/60 border border-gray-700/50 rounded-lg text-white placeholder-gray-600 focus:border-violet-500 focus:outline-none text-sm"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-400 mb-1">
-                                CPM Rate ($/1k views)
-                            </label>
-                            <input
-                                type="number"
-                                step="0.01"
-                                value={campaignCpm}
-                                onChange={(e) => setCampaignCpm(e.target.value)}
-                                placeholder="1.50"
-                                className="w-full px-3 py-2 bg-gray-800/60 border border-gray-700/50 rounded-lg text-white placeholder-gray-600 focus:border-violet-500 focus:outline-none text-sm"
+                                readOnly={!!selectedBriefId}
+                                className={`w-full px-3 py-2 bg-gray-800/60 border border-gray-700/50 rounded-lg text-white placeholder-gray-600 focus:border-violet-500 focus:outline-none text-sm ${selectedBriefId ? "opacity-60" : ""}`}
                             />
                         </div>
                         <div>

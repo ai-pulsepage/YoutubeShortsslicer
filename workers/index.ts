@@ -607,7 +607,21 @@ const renderWorker = new Worker(
                 where: { id: segmentId },
                 include: {
                     video: {
-                        include: { transcript: true },
+                        include: {
+                            transcript: true,
+                            clipProjects: {
+                                select: {
+                                    brief: {
+                                        select: {
+                                            watermarkRequired: true,
+                                            watermarkUrl: true,
+                                            watermarkNotes: true,
+                                        },
+                                    },
+                                },
+                                take: 1,
+                            },
+                        },
                     },
                 },
             });
@@ -748,6 +762,36 @@ const renderWorker = new Worker(
                 console.log(`[Render] No transcript found for subtitle burn`);
             }
             await job.updateProgress(70);
+
+            // Step 3.7: Watermark overlay if campaign brief requires it
+            const clipProject = (segment.video as any)?.clipProjects?.[0];
+            const brief = clipProject?.brief;
+            if (brief?.watermarkRequired && brief?.watermarkUrl) {
+                try {
+                    console.log(`[Render] Downloading watermark: ${brief.watermarkUrl}`);
+                    const watermarkPath = path.join(renderDir, "watermark.png");
+                    
+                    // Download watermark image
+                    const wmRes = await fetch(brief.watermarkUrl);
+                    if (wmRes.ok) {
+                        const wmBuffer = Buffer.from(await wmRes.arrayBuffer());
+                        fs.writeFileSync(watermarkPath, wmBuffer);
+                        
+                        // Overlay watermark: ¼ of screen width, top-right corner with padding
+                        const watermarkedOutput = path.join(renderDir, "watermarked.mp4");
+                        execSync(
+                            `ffmpeg -i "${outputPath}" -i "${watermarkPath}" -filter_complex "[1:v]scale=270:-1[wm];[0:v][wm]overlay=W-w-30:30" -c:v libx264 -preset fast -crf 23 -c:a copy "${watermarkedOutput}" -y`,
+                            { timeout: 300000 }
+                        );
+                        fs.renameSync(watermarkedOutput, outputPath);
+                        console.log(`[Render] ✅ Watermark burned (¼ screen, top-right)`);
+                    } else {
+                        console.warn(`[Render] Watermark download failed: ${wmRes.status}`);
+                    }
+                } catch (wmErr: any) {
+                    console.warn(`[Render] Watermark overlay failed: ${wmErr.message}`);
+                }
+            }
 
             // Step 4: Generate and mix voiceover if enabled
             const mixMode = (segment as any).voiceoverMixMode || "mix";

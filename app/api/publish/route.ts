@@ -80,3 +80,40 @@ export async function POST(req: Request) {
 
     return NextResponse.json(job, { status: 201 });
 }
+
+export async function PATCH(req: Request) {
+    const session = await auth();
+    if (!session?.user?.id) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { jobId, scheduledAt, title, description } = await req.json();
+
+    if (!jobId) {
+        return NextResponse.json({ error: "jobId is required" }, { status: 400 });
+    }
+
+    // Verify ownership through shortVideo -> segment -> video -> user chain
+    const existing = await prisma.publishJob.findFirst({
+        where: {
+            id: jobId,
+            shortVideo: { segment: { video: { userId: session.user.id } } },
+        },
+    });
+
+    if (!existing) {
+        return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    }
+
+    const updateData: Record<string, any> = {};
+    if (scheduledAt !== undefined) updateData.scheduledAt = scheduledAt ? new Date(scheduledAt) : null;
+    if (title !== undefined) updateData.title = title;
+    if (description !== undefined) updateData.description = description;
+
+    const updated = await prisma.publishJob.update({
+        where: { id: jobId },
+        data: updateData,
+    });
+
+    return NextResponse.json(updated);
+}

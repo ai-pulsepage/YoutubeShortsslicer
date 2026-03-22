@@ -27,11 +27,13 @@ import {
     Headphones,
     Sparkles,
     Users,
+    Briefcase,
 } from "lucide-react";
 import { useState } from "react";
 
 const topNavItems = [
     { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { label: "Campaigns", href: "/dashboard/campaigns", icon: Briefcase },
     { label: "Clip Studio", href: "/dashboard/clipper", icon: Scissors },
     { label: "Library", href: "/dashboard/library", icon: Library },
     { label: "Ingest", href: "/dashboard/ingest", icon: Download },

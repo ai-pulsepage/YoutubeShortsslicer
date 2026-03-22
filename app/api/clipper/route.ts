@@ -63,6 +63,7 @@ export async function POST(req: Request) {
     const body = await req.json();
     const {
         sourceUrl,
+        briefId,
         campaignName,
         campaignCpm,
         campaignPlatforms,
@@ -72,6 +73,7 @@ export async function POST(req: Request) {
         ctaOverlay,
         ctaText,
     } = body;
+
 
     if (!sourceUrl) {
         return NextResponse.json(
@@ -88,6 +90,22 @@ export async function POST(req: Request) {
     else if (sourceUrl.includes("frame.io")) platform = "frameio";
 
     try {
+        // If briefId is provided, fetch the brief to auto-populate campaign fields
+        let resolvedName = campaignName || null;
+        let resolvedCpm = campaignCpm ? parseFloat(campaignCpm) : null;
+        let resolvedPlatforms = campaignPlatforms || ["tiktok", "instagram"];
+
+        if (briefId) {
+            const brief = await prisma.campaignBrief.findFirst({
+                where: { id: briefId, userId: session.user.id },
+            });
+            if (brief) {
+                resolvedName = resolvedName || brief.name;
+                resolvedCpm = resolvedCpm || brief.cpmRate || null;
+                resolvedPlatforms = brief.targetPlatforms.length > 0 ? brief.targetPlatforms : resolvedPlatforms;
+            }
+        }
+
         // Step 1: Create the Video record (reuses existing download pipeline)
         const video = await prisma.video.create({
             data: {
@@ -103,9 +121,10 @@ export async function POST(req: Request) {
             data: {
                 userId: session.user.id,
                 videoId: video.id,
-                campaignName: campaignName || null,
-                campaignCpm: campaignCpm ? parseFloat(campaignCpm) : null,
-                campaignPlatforms: campaignPlatforms || ["tiktok", "instagram"],
+                briefId: briefId || null,
+                campaignName: resolvedName,
+                campaignCpm: resolvedCpm,
+                campaignPlatforms: resolvedPlatforms,
                 captionStyle: captionStyle || "word-highlight",
                 faceTrack: faceTrack !== false,
                 hookOverlay: hookOverlay !== false,

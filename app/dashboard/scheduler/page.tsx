@@ -16,6 +16,8 @@ import {
     AlertCircle,
     Check,
     X,
+    Edit3,
+    Briefcase,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -43,6 +45,7 @@ type PublishJob = {
     scheduledAt: string | null;
     publishedAt: string | null;
     title: string | null;
+    description: string | null;
     errorMsg: string | null;
     scheduleId: string | null;
     shortVideo: {
@@ -82,6 +85,7 @@ export default function SchedulerPage() {
     const [loading, setLoading] = useState(true);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showAssignModal, setShowAssignModal] = useState(false);
+    const [editingJob, setEditingJob] = useState<PublishJob | null>(null);
 
     useEffect(() => {
         Promise.all([
@@ -415,7 +419,7 @@ export default function SchedulerPage() {
                                                 </p>
                                             )}
                                         </div>
-                                        <span
+                                    <span
                                             className={cn(
                                                 "text-xs font-medium px-2.5 py-1 rounded-full border",
                                                 STATUS_COLORS[job.status] || STATUS_COLORS.DRAFT
@@ -423,6 +427,13 @@ export default function SchedulerPage() {
                                         >
                                             {job.status}
                                         </span>
+                                        <button
+                                            onClick={() => setEditingJob(job)}
+                                            className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+                                            title="Edit job"
+                                        >
+                                            <Edit3 className="w-4 h-4" />
+                                        </button>
                                     </div>
                                 ))
                         )}
@@ -463,10 +474,21 @@ export default function SchedulerPage() {
                     onClose={() => setShowAssignModal(false)}
                     onAssigned={() => {
                         setShowAssignModal(false);
-                        // Reload jobs
                         fetch("/api/publish").then(r => r.json()).then(data => {
                             if (Array.isArray(data)) setJobs(data);
                         });
+                    }}
+                />
+            )}
+
+            {/* Edit Job Modal */}
+            {editingJob && (
+                <EditJobModal
+                    job={editingJob}
+                    onClose={() => setEditingJob(null)}
+                    onSaved={(updated) => {
+                        setJobs(prev => prev.map(j => j.id === updated.id ? { ...j, ...updated } : j));
+                        setEditingJob(null);
                     }}
                 />
             )}
@@ -794,6 +816,164 @@ function AssignVideosModal({
                     >
                         {assigning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                         Assign {selectedIds.size > 0 ? `(${selectedIds.size})` : ""}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ─── Edit Job Modal ────────────────────────────────
+
+function EditJobModal({
+    job,
+    onClose,
+    onSaved,
+}: {
+    job: PublishJob;
+    onClose: () => void;
+    onSaved: (updated: any) => void;
+}) {
+    const [title, setTitle] = useState(job.title || job.shortVideo?.segment?.title || "");
+    const [description, setDescription] = useState(job.description || "");
+    const [scheduledAt, setScheduledAt] = useState(
+        job.scheduledAt ? new Date(job.scheduledAt).toISOString().slice(0, 16) : ""
+    );
+    const [saving, setSaving] = useState(false);
+    const [autoFilling, setAutoFilling] = useState(false);
+
+    // Auto-fill description from campaign brief
+    const handleAutoFill = async () => {
+        setAutoFilling(true);
+        try {
+            // Fetch briefs and find one matching the platform
+            const briefsRes = await fetch("/api/briefs");
+            if (briefsRes.ok) {
+                const briefs = await briefsRes.json();
+                if (briefs.length > 0) {
+                    // Use first available brief's build-description
+                    const brief = briefs[0];
+                    const buildRes = await fetch(`/api/briefs/${brief.id}/build-description`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            captionText: title,
+                            platform: job.channel?.platform || "youtube",
+                        }),
+                    });
+                    if (buildRes.ok) {
+                        const { description: built } = await buildRes.json();
+                        setDescription(built);
+                    }
+                }
+            }
+        } catch (err) {
+            console.error("Auto-fill error:", err);
+        } finally {
+            setAutoFilling(false);
+        }
+    };
+
+    const handleSave = async () => {
+        setSaving(true);
+        try {
+            const res = await fetch("/api/publish", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    jobId: job.id,
+                    title,
+                    description,
+                    scheduledAt: scheduledAt || null,
+                }),
+            });
+            if (res.ok) {
+                const updated = await res.json();
+                onSaved(updated);
+            } else {
+                const err = await res.json();
+                alert(err.error || "Failed to save");
+            }
+        } catch (err) {
+            console.error("Save error:", err);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const inputClass = "w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-violet-500 focus:outline-none";
+
+    return (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-md p-6 shadow-2xl">
+                <div className="flex items-center justify-between mb-5">
+                    <h2 className="text-lg font-semibold text-white">Edit Scheduled Post</h2>
+                    <button onClick={onClose} className="text-gray-500 hover:text-white">
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+
+                <div className="space-y-4">
+                    <div>
+                        <label className="text-xs text-gray-400 mb-1 block">Title</label>
+                        <input
+                            type="text"
+                            value={title}
+                            onChange={(e) => setTitle(e.target.value)}
+                            placeholder="Post title"
+                            className={inputClass}
+                        />
+                    </div>
+
+                    <div>
+                        <div className="flex items-center justify-between mb-1">
+                            <label className="text-xs text-gray-400">Description</label>
+                            <button
+                                onClick={handleAutoFill}
+                                disabled={autoFilling}
+                                className="text-[10px] text-amber-400 hover:text-amber-300 flex items-center gap-1 disabled:opacity-50"
+                            >
+                                {autoFilling ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                    <Briefcase className="w-3 h-3" />
+                                )}
+                                Auto-fill from Campaign
+                            </button>
+                        </div>
+                        <textarea
+                            value={description}
+                            onChange={(e) => setDescription(e.target.value)}
+                            placeholder="Post description with tags and hashtags..."
+                            className={`${inputClass} min-h-[120px] resize-y`}
+                        />
+                    </div>
+
+                    <div>
+                        <label className="text-xs text-gray-400 mb-1 block">Scheduled Date & Time</label>
+                        <input
+                            type="datetime-local"
+                            value={scheduledAt}
+                            onChange={(e) => setScheduledAt(e.target.value)}
+                            className={inputClass}
+                        />
+                    </div>
+                </div>
+
+                <div className="flex gap-2 mt-6">
+                    <button
+                        onClick={onClose}
+                        className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium bg-gray-800 hover:bg-gray-700 text-white transition-colors"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={handleSave}
+                        disabled={saving}
+                        className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium bg-violet-600 hover:bg-violet-700 text-white transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                        Save Changes
                     </button>
                 </div>
             </div>
