@@ -343,6 +343,21 @@ export default function ClipStudioPage() {
         }
     };
 
+    const handleRetryProject = async (projectId: string) => {
+        try {
+            const res = await fetch(`/api/clipper/${projectId}/retry`, { method: "POST" });
+            if (res.ok) {
+                alert("🔄 Retrying transcription — check back in a few minutes");
+                await fetchProjects();
+            } else {
+                const err = await res.json();
+                alert(err.error || "Retry failed");
+            }
+        } catch (err) {
+            console.error("Retry error:", err);
+        }
+    };
+
     const handleRenderAll = async (projectId: string) => {
         setRendering((prev) => new Set(prev).add(projectId));
         try {
@@ -729,6 +744,16 @@ export default function ClipStudioPage() {
                                                 <Sparkles className="w-4 h-4" />
                                             )}
                                             Render All
+                                        </button>
+                                    )}
+
+                                    {project.status === "FAILED" && (
+                                        <button
+                                            onClick={() => handleRetryProject(project.id)}
+                                            className="flex-1 py-1.5 px-3 bg-amber-600/80 hover:bg-amber-500/80 text-sm text-white rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                                        >
+                                            <RefreshCw className="w-4 h-4" />
+                                            Retry
                                         </button>
                                     )}
 
