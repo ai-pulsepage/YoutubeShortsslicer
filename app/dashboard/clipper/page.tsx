@@ -21,6 +21,7 @@ import {
     Eye,
     Upload,
     FileVideo,
+    Trash2,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────
@@ -281,6 +282,19 @@ export default function ClipStudioPage() {
             console.error("Create error:", err);
         } finally {
             setCreating(false);
+        }
+    };
+
+    const handleDeleteProject = async (projectId: string) => {
+        if (!confirm("Delete this project? This cannot be undone.")) return;
+        try {
+            const res = await fetch(`/api/clipper/${projectId}`, { method: "DELETE" });
+            if (res.ok) {
+                setProjects((prev) => prev.filter((p) => p.id !== projectId));
+                if (selectedProject?.id === projectId) setSelectedProject(null);
+            }
+        } catch (err) {
+            console.error("Delete error:", err);
         }
     };
 
@@ -672,6 +686,14 @@ export default function ClipStudioPage() {
                                             Render All
                                         </button>
                                     )}
+
+                                    <button
+                                        onClick={() => handleDeleteProject(project.id)}
+                                        className="py-1.5 px-3 bg-red-900/30 hover:bg-red-800/50 text-sm text-red-400 rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                                        title="Delete project"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
                                 </div>
                             </div>
                         ))}
