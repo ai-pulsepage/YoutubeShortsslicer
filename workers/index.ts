@@ -377,45 +377,106 @@ const transcriptionWorker = new Worker(
             console.log(`[Transcription] Audio: ${(fs.statSync(audioPath).size / 1024 / 1024).toFixed(1)}MB`);
             await job.updateProgress(40);
 
-            // Step 3: Send to Together.ai Whisper
-            console.log(`[Transcription] Sending to Together.ai Whisper...`);
+            // Step 3: Get audio duration and split into chunks if needed
+            const durationOutput = execSync(
+                `ffprobe -v error -show_entries format=duration -of csv=p=0 "${audioPath}"`,
+                { encoding: "utf8", timeout: 30000 }
+            ).trim();
+            const totalDuration = parseFloat(durationOutput) || 0;
+            const CHUNK_SECONDS = 600; // 10 minutes per chunk
+            const numChunks = Math.ceil(totalDuration / CHUNK_SECONDS);
+            console.log(`[Transcription] Duration: ${(totalDuration / 60).toFixed(1)}min → ${numChunks} chunk(s)`);
+
             const FormData = (await import("form-data")).default;
-            const form = new FormData();
-            form.append("file", fs.createReadStream(audioPath));
-            form.append("model", "whisper-large-v3");
-            form.append("response_format", "verbose_json");
-            form.append("timestamp_granularities[]", "word");
-            form.append("timestamp_granularities[]", "segment");
+            const allSegments: any[] = [];
 
-            const whisperRes = await fetch("https://api.together.xyz/v1/audio/transcriptions", {
-                method: "POST",
-                headers: {
-                    "Authorization": `Bearer ${togetherKey}`,
-                    ...form.getHeaders(),
-                },
-                body: form as any,
-            });
+            for (let i = 0; i < numChunks; i++) {
+                const chunkStart = i * CHUNK_SECONDS;
+                const chunkPath = path.join(workDir, `chunk_${i}.mp3`);
 
-            if (!whisperRes.ok) {
-                const errText = await whisperRes.text();
-                throw new Error(`Whisper API ${whisperRes.status}: ${errText}`);
+                // Split audio chunk
+                if (numChunks > 1) {
+                    execSync(
+                        `ffmpeg -ss ${chunkStart} -i "${audioPath}" -t ${CHUNK_SECONDS} -c copy "${chunkPath}" -y`,
+                        { encoding: "utf8", timeout: 60000 }
+                    );
+                } else {
+                    // Single chunk — just use the original
+                    fs.copyFileSync(audioPath, chunkPath);
+                }
+
+                const chunkSize = (fs.statSync(chunkPath).size / 1024 / 1024).toFixed(1);
+                console.log(`[Transcription] Chunk ${i + 1}/${numChunks}: ${chunkSize}MB (offset ${chunkStart}s)`);
+
+                // Send chunk to Whisper
+                const form = new FormData();
+                form.append("file", fs.createReadStream(chunkPath));
+                form.append("model", "whisper-large-v3");
+                form.append("response_format", "verbose_json");
+                form.append("timestamp_granularities[]", "word");
+                form.append("timestamp_granularities[]", "segment");
+
+                let whisperRes: Response | null = null;
+                let lastErr = "";
+                // Retry each chunk up to 3 times
+                for (let attempt = 0; attempt < 3; attempt++) {
+                    try {
+                        const retryForm = new FormData();
+                        retryForm.append("file", fs.createReadStream(chunkPath));
+                        retryForm.append("model", "whisper-large-v3");
+                        retryForm.append("response_format", "verbose_json");
+                        retryForm.append("timestamp_granularities[]", "word");
+                        retryForm.append("timestamp_granularities[]", "segment");
+
+                        whisperRes = await fetch("https://api.together.xyz/v1/audio/transcriptions", {
+                            method: "POST",
+                            headers: {
+                                "Authorization": `Bearer ${togetherKey}`,
+                                ...retryForm.getHeaders(),
+                            },
+                            body: retryForm as any,
+                        });
+                        if (whisperRes.ok) break;
+                        lastErr = await whisperRes.text();
+                        console.warn(`[Transcription] Chunk ${i + 1} attempt ${attempt + 1} failed: ${whisperRes.status}`);
+                        if (attempt < 2) await new Promise(r => setTimeout(r, 5000 * (attempt + 1)));
+                    } catch (e: any) {
+                        lastErr = e.message;
+                        if (attempt < 2) await new Promise(r => setTimeout(r, 5000 * (attempt + 1)));
+                    }
+                }
+
+                if (!whisperRes || !whisperRes.ok) {
+                    throw new Error(`Whisper API failed for chunk ${i + 1} after 3 attempts: ${lastErr}`);
+                }
+
+                const whisperData = await whisperRes.json() as any;
+                console.log(`[Transcription] Chunk ${i + 1}: ${whisperData.segments?.length || 0} segments`);
+
+                // Merge segments with time offset
+                for (const seg of (whisperData.segments || [])) {
+                    allSegments.push({
+                        start: seg.start + chunkStart,
+                        end: seg.end + chunkStart,
+                        text: seg.text?.trim() || "",
+                        words: (seg.words || []).map((w: any) => ({
+                            start: w.start + chunkStart,
+                            end: w.end + chunkStart,
+                            text: w.word?.trim() || "",
+                        })),
+                    });
+                }
+
+                // Cleanup chunk
+                if (fs.existsSync(chunkPath)) fs.unlinkSync(chunkPath);
+
+                // Update progress proportionally
+                const chunkProgress = 40 + Math.round(((i + 1) / numChunks) * 30);
+                await job.updateProgress(chunkProgress);
             }
 
-            const whisperData = await whisperRes.json() as any;
-            console.log(`[Transcription] Whisper returned ${whisperData.segments?.length || 0} segments`);
-            await job.updateProgress(70);
-
-            // Step 4: Parse into transcript segments
-            const segments = (whisperData.segments || []).map((seg: any) => ({
-                start: seg.start,
-                end: seg.end,
-                text: seg.text?.trim() || "",
-                words: (seg.words || []).map((w: any) => ({
-                    start: w.start,
-                    end: w.end,
-                    text: w.word?.trim() || "",
-                })),
-            }));
+            console.log(`[Transcription] Total segments from all chunks: ${allSegments.length}`);
+            const segments = allSegments;
 
             if (segments.length === 0) throw new Error("Whisper returned no segments");
 
