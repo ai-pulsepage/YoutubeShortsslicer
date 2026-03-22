@@ -22,6 +22,7 @@ import {
     Upload,
     FileVideo,
     Trash2,
+    Briefcase,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────
@@ -173,6 +174,9 @@ export default function ClipStudioPage() {
 
     // Earnings calculator
     const [viewCount, setViewCount] = useState("");
+
+    // Campaign assignment on existing projects
+    const [assigningCampaign, setAssigningCampaign] = useState<string | null>(null);
 
     // Subtitle settings for render
     const [subAnimation, setSubAnimation] = useState("word-highlight");
@@ -422,6 +426,27 @@ export default function ClipStudioPage() {
                 next.delete(segmentId);
                 return next;
             });
+        }
+    };
+
+    const handleAssignCampaign = async (projectId: string, briefId: string) => {
+        setAssigningCampaign(projectId);
+        try {
+            const res = await fetch(`/api/clipper/${projectId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ briefId: briefId || null }),
+            });
+            if (res.ok) {
+                await fetchProjects();
+            } else {
+                const err = await res.json();
+                alert(err.error || "Failed to assign campaign");
+            }
+        } catch (err) {
+            console.error("Assign error:", err);
+        } finally {
+            setAssigningCampaign(null);
         }
     };
 
@@ -741,12 +766,28 @@ export default function ClipStudioPage() {
                                             <h3 className="text-white font-medium truncate">
                                                 {project.video.title || "Untitled Video"}
                                             </h3>
-                                            {project.campaignName && (
-                                                <p className="text-violet-400 text-xs font-medium mt-0.5">
-                                                    📋 {project.campaignName}
-                                                    {project.campaignCpm && ` · $${project.campaignCpm}/1k views`}
-                                                </p>
-                                            )}
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <Briefcase className="w-3 h-3 text-violet-400 flex-shrink-0" />
+                                                <select
+                                                    value={briefs.find(b => b.name === project.campaignName)?.id || ""}
+                                                    onChange={(e) => handleAssignCampaign(project.id, e.target.value)}
+                                                    disabled={assigningCampaign === project.id}
+                                                    className="text-xs bg-transparent border border-gray-700/50 rounded px-1.5 py-0.5 text-violet-400 focus:border-violet-500 focus:outline-none cursor-pointer max-w-[200px] truncate"
+                                                >
+                                                    <option value="">No campaign</option>
+                                                    {briefs.map(b => (
+                                                        <option key={b.id} value={b.id}>
+                                                            {b.name}{b.cpmRate ? ` · $${b.cpmRate}/1k` : ""}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                {assigningCampaign === project.id && (
+                                                    <Loader2 className="w-3 h-3 animate-spin text-violet-400" />
+                                                )}
+                                                {project.campaignCpm && (
+                                                    <span className="text-[10px] text-emerald-400">${project.campaignCpm}/1k</span>
+                                                )}
+                                            </div>
                                         </div>
                                         <StatusBadge status={project.status} />
                                     </div>

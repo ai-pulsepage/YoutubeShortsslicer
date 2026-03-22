@@ -90,6 +90,60 @@ export async function GET(
     });
 }
 
+export async function PATCH(
+    req: Request,
+    { params }: { params: Promise<{ id: string }> }
+) {
+    const session = await auth();
+    if (!session?.user?.id) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { id } = await params;
+    const body = await req.json();
+
+    // Verify ownership first
+    const existing = await prisma.clipProject.findFirst({
+        where: { id, userId: session.user.id },
+    });
+
+    if (!existing) {
+        return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
+
+    const updateData: Record<string, any> = {};
+
+    // If briefId is provided, fetch brief details and auto-fill fields
+    if (body.briefId !== undefined) {
+        if (body.briefId) {
+            const brief = await prisma.campaignBrief.findFirst({
+                where: { id: body.briefId, userId: session.user.id },
+            });
+            if (!brief) {
+                return NextResponse.json({ error: "Campaign brief not found" }, { status: 404 });
+            }
+            updateData.briefId = brief.id;
+            updateData.campaignName = brief.name;
+            updateData.campaignCpm = brief.cpmRate;
+            updateData.campaignPlatforms = brief.targetPlatforms;
+        } else {
+            // Unlinking: set briefId to null but keep manual fields
+            updateData.briefId = null;
+        }
+    }
+
+    // Allow manual overrides
+    if (body.campaignName !== undefined) updateData.campaignName = body.campaignName;
+    if (body.campaignCpm !== undefined) updateData.campaignCpm = body.campaignCpm ? parseFloat(body.campaignCpm) : null;
+
+    const updated = await prisma.clipProject.update({
+        where: { id },
+        data: updateData,
+    });
+
+    return NextResponse.json(updated);
+}
+
 export async function DELETE(
     req: Request,
     { params }: { params: Promise<{ id: string }> }
