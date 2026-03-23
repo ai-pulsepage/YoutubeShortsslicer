@@ -21,25 +21,28 @@ export async function POST(
     const body = await req.json();
     const { segmentIds, all, subtitleStyle } = body;
 
-    // Verify project ownership
+    // Verify project ownership + load campaign brief
     const project = await prisma.clipProject.findUnique({
         where: { id, userId: session.user.id },
-        include: { video: true },
+        include: { video: true, brief: true },
     });
 
     if (!project) {
         return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
+    // Get on-screen suggestions from campaign brief for auto hookText
+    const onScreenSuggestions = (project.brief as any)?.onScreenSuggestions as string[] || [];
+
     // Get segments to render
     let segments;
     if (all) {
-        // Render all segments with viral score ≥ 7
+        // Render all segments with viral score ≥ 7 (including already rendered for re-render)
         segments = await prisma.segment.findMany({
             where: {
                 videoId: project.videoId,
                 aiScore: { gte: 7 },
-                status: { in: ["AI_SUGGESTED", "APPROVED"] }, // Not already rendered
+                status: { in: ["AI_SUGGESTED", "APPROVED", "RENDERED"] },
             },
         });
     } else if (segmentIds && Array.isArray(segmentIds)) {
@@ -74,6 +77,13 @@ export async function POST(
             data: { status: "RENDERING" },
         });
 
+        // Auto-generate hookText: user edit > campaign suggestion + clip title
+        let resolvedHookText = (segment as any).hookText || null;
+        if (!resolvedHookText && onScreenSuggestions.length > 0) {
+            const suggestion = onScreenSuggestions[Math.floor(Math.random() * onScreenSuggestions.length)];
+            resolvedHookText = [suggestion, segment.title].filter(Boolean).join(" ");
+        }
+
         const job = await renderQueue.add("render-clip", {
             segmentId: segment.id,
             userId: session.user.id,
@@ -84,7 +94,9 @@ export async function POST(
             captionStyle: project.captionStyle,
             subtitleStyle: subtitleStyle || null,
             hookOverlay: project.hookOverlay,
-            hookText: (segment as any).hookText || null,
+            hookText: resolvedHookText,
+            hookFontSize: (segment as any).hookFontSize || null,
+            hookFont: (segment as any).hookFont || null,
             ctaOverlay: project.ctaOverlay,
             ctaText: project.ctaText,
             editedWords: (segment as any).editedWords || null,

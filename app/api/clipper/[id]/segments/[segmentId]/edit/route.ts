@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
  * PATCH /api/clipper/[id]/segments/[segmentId]/edit
  * Save user edits on a segment (hookText, editedWords) before rendering.
  *
- * Body: { hookText?: string, editedWords?: Array<{text, start, end}> }
+ * Body: { hookText?: string, hookFontSize?: number, hookFont?: string, editedWords?: Array<{text, start, end}> }
  */
 export async function PATCH(
   req: Request,
@@ -19,7 +19,7 @@ export async function PATCH(
 
   const { id, segmentId } = await params;
   const body = await req.json();
-  const { hookText, editedWords } = body;
+  const { hookText, hookFontSize, hookFont, editedWords } = body;
 
   // Verify project ownership
   const project = await prisma.clipProject.findUnique({
@@ -43,6 +43,12 @@ export async function PATCH(
   const updateData: any = {};
   if (hookText !== undefined) {
     updateData.hookText = hookText || null;
+  }
+  if (hookFontSize !== undefined) {
+    updateData.hookFontSize = hookFontSize ? parseInt(hookFontSize) : null;
+  }
+  if (hookFont !== undefined) {
+    updateData.hookFont = hookFont || null;
   }
   if (editedWords !== undefined) {
     // Validate editedWords format

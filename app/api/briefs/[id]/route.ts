@@ -67,7 +67,7 @@ export async function PATCH(
         "name", "brand", "status",
         "contentSourceUrls", "contentSourceNotes",
         "targetPlatforms",
-        "captionGuidelines", "suggestedCaptions", "requiredPhrases", "requiredPhrasesMode",
+        "captionGuidelines", "suggestedCaptions",
         "platformTags", "requiredHashtags", "optionalHashtags",
         "disclosureRequired", "disclosureOptions", "disclosurePlacement",
         "onScreenTextNotes", "onScreenSuggestions",

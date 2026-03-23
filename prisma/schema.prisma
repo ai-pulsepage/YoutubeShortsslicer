@@ -186,6 +186,8 @@ model Segment {
   voiceoverMixMode String?  @default("mix")        // replace | mix | original
   subtitlePresetId String?  // reference to SubtitlePreset
   hookText         String?  // on-screen title/hook text overlay
+  hookFontSize     Int?     // hook text font size (default 24)
+  hookFont         String?  // hook text font family (default "Montserrat")
   editedWords      Json?    // user-corrected word timestamps [{text, start, end}]
 
   video       Video         @relation(fields: [videoId], references: [id], onDelete: Cascade)

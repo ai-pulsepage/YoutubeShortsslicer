@@ -44,7 +44,8 @@ async function processRender(job: Job<RenderJobData>) {
     const {
         segmentId, userId, videoId,
         captionStyle, subtitleStyle, hookOverlay, ctaOverlay, ctaText,
-        hookText: jobHookText, editedWords: jobEditedWords,
+        hookText: jobHookText, hookFontSize: jobHookFontSize, hookFont: jobHookFont,
+        editedWords: jobEditedWords,
     } = job.data;
 
     try {
@@ -186,12 +187,14 @@ async function processRender(job: Job<RenderJobData>) {
         // Hook text overlay (top of video, first 4 seconds with fade)
         const resolvedHookText = jobHookText || (segment as any).hookText;
         if (hookOverlay && resolvedHookText) {
+            const hookFontSize = jobHookFontSize || (segment as any).hookFontSize || 24;
+            const hookFont = jobHookFont || (segment as any).hookFont || "Montserrat";
             const escapedHook = resolvedHookText
                 .replace(/'/g, "'\\''")
                 .replace(/:/g, "\\:")
                 .replace(/\\/g, "\\\\");
             filterChain.push(
-                `drawtext=text='${escapedHook}':fontsize=36:fontcolor=white:borderw=3:bordercolor=black:shadowcolor=black@0.5:shadowx=2:shadowy=2:x=(w-text_w)/2:y=100:enable='between(t,0.5,4)':alpha='if(lt(t,1),t-0.5,if(gt(t,3.5),4-t,1))'`
+                `drawtext=text='${escapedHook}':fontsize=${hookFontSize}:font='${hookFont}':fontcolor=white:borderw=3:bordercolor=black:shadowcolor=black@0.5:shadowx=2:shadowy=2:x=(w-text_w)/2:y=100:enable='between(t,0.5,4)':alpha='if(lt(t,1),t-0.5,if(gt(t,3.5),4-t,1))'`
             );
         }
 
@@ -249,12 +252,19 @@ async function processRender(job: Job<RenderJobData>) {
         await job.updateProgress(95);
 
         // Step 7: Create/update ShortVideo record
-        await prisma.shortVideo.create({
-            data: {
+        await prisma.shortVideo.upsert({
+            where: { segmentId },
+            create: {
                 segmentId,
                 storagePath: r2Key,
                 duration: Math.round(duration),
                 status: "RENDERED",
+            },
+            update: {
+                storagePath: r2Key,
+                duration: Math.round(duration),
+                status: "RENDERED",
+                errorMsg: null,
             },
         });
 

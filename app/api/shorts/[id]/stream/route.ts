@@ -34,7 +34,8 @@ export async function GET(
         include: {
             segment: {
                 select: {
-                    video: { select: { userId: true } },
+                    title: true,
+                    video: { select: { userId: true, title: true } },
                 },
             },
         },
@@ -61,8 +62,13 @@ export async function GET(
 
         const response = await s3.send(new GetObjectCommand(s3Params));
 
+        // Build a safe filename from the segment/clip title
+        const segmentTitle = short.segment?.title || short.segment?.video?.title || "short";
+        const safeFilename = segmentTitle.replace(/[^a-zA-Z0-9_\- ]/g, "").substring(0, 80).trim() || "short";
+
         const headers: Record<string, string> = {
             "Content-Type": response.ContentType || "video/mp4",
+            "Content-Disposition": `attachment; filename="${safeFilename}.mp4"`,
             "Accept-Ranges": "bytes",
             "Cache-Control": "public, max-age=86400",
         };

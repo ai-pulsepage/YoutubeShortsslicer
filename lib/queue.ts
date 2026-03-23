@@ -83,6 +83,8 @@ export interface RenderJobData {
     subtitleStyle?: any;         // snapshot of SubtitlePreset
     hookOverlay?: boolean;
     hookText?: string;           // on-screen title text
+    hookFontSize?: number;       // hook text font size (default 24)
+    hookFont?: string;           // hook text font family (default "Montserrat")
     ctaOverlay?: boolean;
     ctaText?: string;
     editedWords?: Array<{ text: string; start: number; end: number }>;

@@ -70,6 +70,8 @@ interface Segment {
     emotionalArc: string | null;
     status: string;
     hookText: string | null;
+    hookFontSize: number | null;
+    hookFont: string | null;
     editedWords: Array<{ text: string; start: number; end: number }> | null;
     shortVideo: {
         id: string;
@@ -190,6 +192,7 @@ export default function ClipStudioPage() {
     const [subFont, setSubFont] = useState("Montserrat");
     const [subPosition, setSubPosition] = useState("bottom");
     const [subColor, setSubColor] = useState("#FFFFFF");
+    const [subFontSize, setSubFontSize] = useState(48);
 
     // ─── Data Fetching ───────────────────────────────────
 
@@ -389,7 +392,7 @@ export default function ClipStudioPage() {
             const res = await fetch(`/api/clipper/${projectId}/render`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ all: true, subtitleStyle: { animation: subAnimation, font: subFont, position: subPosition, color: subColor } }),
+                body: JSON.stringify({ all: true, subtitleStyle: { animation: subAnimation, font: subFont, position: subPosition, color: subColor, fontSize: subFontSize } }),
             });
 
             if (res.ok) {
@@ -417,7 +420,7 @@ export default function ClipStudioPage() {
             const res = await fetch(`/api/clipper/${projectId}/render`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ segmentIds: [segmentId], subtitleStyle: { animation: subAnimation, font: subFont, position: subPosition, color: subColor } }),
+                body: JSON.stringify({ segmentIds: [segmentId], subtitleStyle: { animation: subAnimation, font: subFont, position: subPosition, color: subColor, fontSize: subFontSize } }),
             });
 
             if (res.ok) {
@@ -895,7 +898,7 @@ export default function ClipStudioPage() {
                                 <Sparkles className="w-4 h-4" />
                                 Subtitle Settings
                             </h3>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                                 <div>
                                     <label className="block text-xs text-gray-500 mb-1">Animation</label>
                                     <select
@@ -946,6 +949,20 @@ export default function ClipStudioPage() {
                                         />
                                         <span className="text-xs text-gray-400">{subColor}</span>
                                     </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-500 mb-1">Font Size</label>
+                                    <select
+                                        value={subFontSize}
+                                        onChange={(e) => setSubFontSize(parseInt(e.target.value))}
+                                        className="w-full px-2.5 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white focus:border-violet-500 focus:outline-none"
+                                    >
+                                        <option value={28}>28 (Small)</option>
+                                        <option value={36}>36 (Medium)</option>
+                                        <option value={48}>48 (Default)</option>
+                                        <option value={56}>56 (Large)</option>
+                                        <option value={64}>64 (XL)</option>
+                                    </select>
                                 </div>
                             </div>
                             {/* Live preview strip */}
@@ -1069,6 +1086,8 @@ function ClipCard({
 }) {
     const [expanded, setExpanded] = useState(false);
     const [hookText, setHookText] = useState(clip.hookText || "");
+    const [hookFontSize, setHookFontSize] = useState(clip.hookFontSize || 24);
+    const [hookFont, setHookFont] = useState(clip.hookFont || "Montserrat");
     const [editedWords, setEditedWords] = useState<Array<{ text: string; start: number; end: number }>>(clip.editedWords || []);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
@@ -1082,13 +1101,15 @@ function ClipCard({
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     hookText: hookText || null,
+                    hookFontSize: hookFontSize || 24,
+                    hookFont: hookFont || "Montserrat",
                     editedWords: editedWords.length > 0 ? editedWords : null,
                 }),
             });
             if (res.ok) {
                 setSaved(true);
                 setTimeout(() => setSaved(false), 2000);
-                onClipUpdate?.({ id: clip.id, hookText, editedWords });
+                onClipUpdate?.({ id: clip.id, hookText, hookFontSize, hookFont, editedWords });
             }
         } catch (err) {
             console.error("Save error:", err);
@@ -1207,6 +1228,18 @@ function ClipCard({
                             >
                                 <Share2 className="w-4 h-4" />
                             </button>
+                            <button
+                                onClick={() => onRender(projectId, clip.id)}
+                                disabled={isRendering}
+                                className="p-2 rounded-lg bg-amber-600/20 text-amber-400 hover:bg-amber-600/30 disabled:opacity-50 transition-colors"
+                                title="Re-render with updated settings"
+                            >
+                                {isRendering ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                    <RefreshCw className="w-4 h-4" />
+                                )}
+                            </button>
                         </>
                     ) : clip.status === "RENDERING" ? (
                         <span className="text-xs text-yellow-400 flex items-center gap-1">
@@ -1266,6 +1299,39 @@ function ClipCard({
                             placeholder="e.g. JoeWo Shreds in Black Ops Royale First Look"
                             className="w-full px-3 py-2 bg-gray-800/60 border border-gray-700/50 rounded-lg text-white placeholder-gray-600 focus:border-violet-500 focus:outline-none text-sm"
                         />
+
+                        {/* Hook Font Controls */}
+                        <div className="flex gap-3 mt-2">
+                            <div className="flex-1">
+                                <label className="block text-[10px] text-gray-500 mb-1">Hook Font</label>
+                                <select
+                                    value={hookFont}
+                                    onChange={(e) => setHookFont(e.target.value)}
+                                    className="w-full px-2.5 py-1.5 bg-gray-800/60 border border-gray-700/50 rounded-lg text-xs text-white focus:border-violet-500 focus:outline-none"
+                                >
+                                    <option value="Montserrat">Montserrat</option>
+                                    <option value="Inter">Inter</option>
+                                    <option value="Bebas Neue">Bebas Neue</option>
+                                    <option value="Impact">Impact</option>
+                                    <option value="Arial Black">Arial Black</option>
+                                </select>
+                            </div>
+                            <div className="flex-1">
+                                <label className="block text-[10px] text-gray-500 mb-1">Hook Size</label>
+                                <select
+                                    value={hookFontSize}
+                                    onChange={(e) => setHookFontSize(parseInt(e.target.value))}
+                                    className="w-full px-2.5 py-1.5 bg-gray-800/60 border border-gray-700/50 rounded-lg text-xs text-white focus:border-violet-500 focus:outline-none"
+                                >
+                                    <option value={16}>16 (XS)</option>
+                                    <option value={20}>20 (Small)</option>
+                                    <option value={24}>24 (Default)</option>
+                                    <option value={28}>28 (Medium)</option>
+                                    <option value={32}>32 (Large)</option>
+                                    <option value={36}>36 (XL)</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
 
                     {/* Editable Transcript Words */}
@@ -1350,29 +1416,45 @@ function ClipCard({
                         </div>
                     </div>
 
-                    {/* Save Button */}
+                    {/* Save + Re-render Buttons */}
                     <div className="flex items-center justify-between">
                         <p className="text-[10px] text-gray-600">
                             Hook text and word edits are saved per clip and used in rendering
                         </p>
-                        <button
-                            onClick={handleSave}
-                            disabled={saving}
-                            className={`py-1.5 px-4 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
-                                saved
-                                    ? "bg-emerald-600/20 text-emerald-400 border border-emerald-600/30"
-                                    : "bg-violet-600 hover:bg-violet-500 text-white"
-                            }`}
-                        >
-                            {saving ? (
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                            ) : saved ? (
-                                <CheckCircle2 className="w-3 h-3" />
-                            ) : (
-                                <Save className="w-3 h-3" />
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={handleSave}
+                                disabled={saving}
+                                className={`py-1.5 px-4 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
+                                    saved
+                                        ? "bg-emerald-600/20 text-emerald-400 border border-emerald-600/30"
+                                        : "bg-violet-600 hover:bg-violet-500 text-white"
+                                }`}
+                            >
+                                {saving ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : saved ? (
+                                    <CheckCircle2 className="w-3 h-3" />
+                                ) : (
+                                    <Save className="w-3 h-3" />
+                                )}
+                                {saved ? "Saved!" : "Save Changes"}
+                            </button>
+                            {isRendered && (
+                                <button
+                                    onClick={() => onRender(projectId, clip.id)}
+                                    disabled={isRendering}
+                                    className="py-1.5 px-4 rounded-lg text-xs font-medium bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white transition-all flex items-center gap-1.5"
+                                >
+                                    {isRendering ? (
+                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                    ) : (
+                                        <RefreshCw className="w-3 h-3" />
+                                    )}
+                                    Re-render
+                                </button>
                             )}
-                            {saved ? "Saved!" : "Save Changes"}
-                        </button>
+                        </div>
                     </div>
                 </div>
             )}

@@ -55,21 +55,7 @@ export async function POST(
         parts.push(firstLine);
     }
 
-    // 2. Check required phrases against the assembled first line
-    if ((brief as any).requiredPhrasesMode === "pick-one") {
-        const hasAny = brief.requiredPhrases.some(
-            (phrase) => firstLine.toLowerCase().includes(phrase.toLowerCase())
-        );
-        if (brief.requiredPhrases.length > 0 && !hasAny) {
-            warnings.push(`Caption should mention at least one of: ${brief.requiredPhrases.map(p => `"${p}"`).join(", ")}`);
-        }
-    } else {
-        for (const phrase of brief.requiredPhrases) {
-            if (!firstLine.toLowerCase().includes(phrase.toLowerCase())) {
-                warnings.push(`Caption should mention: "${phrase}"`);
-            }
-        }
-    }
+
 
     // 3. Disclosure (on its own line)
     if (brief.disclosureRequired && brief.disclosureOptions.length > 0) {

@@ -62,8 +62,10 @@ export async function GET(
             hookStrength: s.hookStrength,
             emotionalArc: s.emotionalArc,
             status: s.status,
-            hookText: (s as any).hookText,
-            editedWords: (s as any).editedWords,
+            hookText: s.hookText,
+            hookFontSize: (s as any).hookFontSize,
+            hookFont: (s as any).hookFont,
+            editedWords: s.editedWords,
             shortVideo: s.shortVideo,
         }));
 
@@ -80,8 +82,10 @@ export async function GET(
             hookStrength: s.hookStrength,
             emotionalArc: s.emotionalArc,
             status: s.status,
-            hookText: (s as any).hookText,
-            editedWords: (s as any).editedWords,
+            hookText: s.hookText,
+            hookFontSize: (s as any).hookFontSize,
+            hookFont: (s as any).hookFont,
+            editedWords: s.editedWords,
             shortVideo: s.shortVideo,
         }));
 
