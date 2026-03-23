@@ -84,8 +84,10 @@ export async function POST(
             captionStyle: project.captionStyle,
             subtitleStyle: subtitleStyle || null,
             hookOverlay: project.hookOverlay,
+            hookText: (segment as any).hookText || null,
             ctaOverlay: project.ctaOverlay,
             ctaText: project.ctaText,
+            editedWords: (segment as any).editedWords || null,
         });
 
         jobs.push({

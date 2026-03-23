@@ -4,10 +4,12 @@
  * Processes rendered short videos:
  * 1. Downloads source video segment from R2
  * 2. Cuts segment (start → end)
- * 3. Burns subtitles if available
- * 4. Converts to 9:16 vertical if needed
- * 5. Mixes voiceover audio if enabled
- * 6. Uploads final short to R2
+ * 3. Burns karaoke-style ASS subtitles if available
+ * 4. Adds hook text overlay at top (first 4 seconds)
+ * 5. Adds CTA text overlay at bottom-right (last 3 seconds)
+ * 6. Converts to 9:16 vertical if needed
+ * 7. Mixes voiceover audio if enabled
+ * 8. Uploads final short to R2
  *
  * Run: npx tsx workers/render.ts
  */
@@ -23,6 +25,7 @@ import os from "os";
 import { QUEUE_NAMES, RenderJobData } from "../lib/queue";
 import { uploadFileToR2, downloadFileFromR2, generateShortR2Key } from "../lib/storage";
 import { generateVoiceover } from "../lib/tts";
+import { generateAssSubtitles, WordTimestamp, SubtitleStyle } from "../lib/ass-subtitles";
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
@@ -38,7 +41,11 @@ if (!fs.existsSync(TEMP_DIR)) {
 }
 
 async function processRender(job: Job<RenderJobData>) {
-    const { segmentId, userId, videoId } = job.data;
+    const {
+        segmentId, userId, videoId,
+        captionStyle, subtitleStyle, hookOverlay, ctaOverlay, ctaText,
+        hookText: jobHookText, editedWords: jobEditedWords,
+    } = job.data;
 
     try {
         console.log(`[Render] Starting: segment=${segmentId}`);
@@ -77,33 +84,126 @@ async function processRender(job: Job<RenderJobData>) {
         );
         await job.updateProgress(30);
 
-        // Step 3: Build subtitle filter if available
-        let subtitleFilter = "";
-        const preset = await prisma.subtitlePreset.findFirst({
-            where: { userId },
-            orderBy: { createdAt: "desc" },
-        });
+        // Step 3: Build subtitle filter — ASS karaoke or fallback drawtext
+        let assFilePath: string | null = null;
+        const shouldBurnCaptions = captionStyle && captionStyle !== "none";
 
-        if (preset) {
-            const fontName = preset.font || "Inter";
-            const fontSize = preset.fontSize || 24;
-            const primaryColor = hexToAss(preset.color || "#FFFFFF");
-            const outlineColor = hexToAss(preset.outline || "#000000");
-            const shadowColor = hexToAss(preset.shadow || "#00000080");
+        if (shouldBurnCaptions) {
+            try {
+                // Get word-level timestamps: prefer editedWords, fall back to transcript
+                let words: WordTimestamp[] = [];
 
-            subtitleFilter = `drawtext=fontfile=/usr/share/fonts/truetype/${fontName}.ttf:fontsize=${fontSize}:fontcolor=${primaryColor}:borderw=2:bordercolor=${outlineColor}:shadowcolor=${shadowColor}:shadowx=2:shadowy=2`;
+                // Priority 1: editedWords from job data (user-corrected)
+                if (jobEditedWords && Array.isArray(jobEditedWords) && jobEditedWords.length > 0) {
+                    words = jobEditedWords;
+                    console.log(`[Render] Using ${words.length} edited words from user`);
+                }
+                // Priority 2: editedWords from segment DB record
+                else if ((segment as any).editedWords && Array.isArray((segment as any).editedWords) && ((segment as any).editedWords as any[]).length > 0) {
+                    words = (segment as any).editedWords as WordTimestamp[];
+                    console.log(`[Render] Using ${words.length} edited words from DB`);
+                }
+                // Priority 3: Transcript word-level timestamps
+                else {
+                    const transcript = await prisma.transcript.findUnique({
+                        where: { videoId: segment.videoId },
+                    });
+
+                    if (transcript && transcript.segments) {
+                        const segments = transcript.segments as any[];
+                        // Extract all words from transcript segments that overlap with this clip
+                        for (const seg of segments) {
+                            if (seg.words && Array.isArray(seg.words)) {
+                                for (const w of seg.words) {
+                                    const wordStart = w.start ?? w.startTime;
+                                    const wordEnd = w.end ?? w.endTime;
+                                    const wordText = w.text || w.word || "";
+                                    // Only include words within this segment's time range
+                                    if (wordStart >= segment.startTime && wordEnd <= segment.endTime) {
+                                        words.push({
+                                            text: wordText.trim(),
+                                            start: wordStart,
+                                            end: wordEnd,
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                        console.log(`[Render] Extracted ${words.length} words from transcript`);
+                    }
+                }
+
+                if (words.length > 0) {
+                    // Get subtitle preset for styling
+                    const preset = subtitleStyle || await prisma.subtitlePreset.findFirst({
+                        where: { userId },
+                        orderBy: { createdAt: "desc" },
+                    });
+
+                    const style: Partial<SubtitleStyle> = {};
+                    if (preset) {
+                        style.font = preset.font || "Montserrat";
+                        style.fontSize = preset.fontSize || 48;
+                        style.primaryColor = preset.color || "#FFFFFF";
+                        style.outlineColor = preset.outline || "#000000";
+                        style.shadowColor = preset.shadow || "#00000080";
+                        style.position = (preset.position as any) || "bottom";
+                        style.animation = (captionStyle as any) || (preset.animation as any) || "word-highlight";
+                        style.bold = true;
+                    }
+                    style.highlightColor = "#FFD700"; // Gold highlight — configurable later
+
+                    // Generate ASS file
+                    const assContent = generateAssSubtitles(words, style, segment.startTime);
+                    assFilePath = path.join(renderDir, "subtitles.ass");
+                    fs.writeFileSync(assFilePath, assContent, "utf8");
+                    console.log(`[Render] Generated ASS subtitles: ${assFilePath}`);
+                }
+            } catch (assErr: any) {
+                console.warn(`[Render] ASS subtitle generation failed, falling back: ${assErr.message}`);
+            }
         }
 
-        // Step 4: Convert to 9:16 vertical
+        await job.updateProgress(40);
+
+        // Step 4: Convert to 9:16 vertical with subtitles + overlays
         const outputPath = path.join(renderDir, "final.mp4");
-        const filterChain = [
+        const filterChain: string[] = [
             "scale=1080:1920:force_original_aspect_ratio=decrease",
             "pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black",
             "setsar=1",
         ];
 
-        if (subtitleFilter) {
-            filterChain.push(subtitleFilter);
+        // Apply ASS subtitles if available
+        if (assFilePath) {
+            // Escape path for FFmpeg (backslashes and colons)
+            const escapedAssPath = assFilePath
+                .replace(/\\/g, "/")
+                .replace(/:/g, "\\:");
+            filterChain.push(`ass='${escapedAssPath}'`);
+        }
+
+        // Hook text overlay (top of video, first 4 seconds with fade)
+        const resolvedHookText = jobHookText || (segment as any).hookText;
+        if (hookOverlay && resolvedHookText) {
+            const escapedHook = resolvedHookText
+                .replace(/'/g, "'\\''")
+                .replace(/:/g, "\\:")
+                .replace(/\\/g, "\\\\");
+            filterChain.push(
+                `drawtext=text='${escapedHook}':fontsize=36:fontcolor=white:borderw=3:bordercolor=black:shadowcolor=black@0.5:shadowx=2:shadowy=2:x=(w-text_w)/2:y=100:enable='between(t,0.5,4)':alpha='if(lt(t,1),t-0.5,if(gt(t,3.5),4-t,1))'`
+            );
+        }
+
+        // CTA text overlay (bottom-right, last 3 seconds)
+        if (ctaOverlay && ctaText) {
+            const escapedCta = ctaText
+                .replace(/'/g, "'\\''")
+                .replace(/:/g, "\\:")
+                .replace(/\\/g, "\\\\");
+            filterChain.push(
+                `drawtext=text='${escapedCta}':fontsize=28:fontcolor=white:borderw=2:bordercolor=black:x=w-text_w-40:y=h-80:enable='gte(t,${Math.max(0, duration - 3)})'`
+            );
         }
 
         execSync(
@@ -116,9 +216,15 @@ async function processRender(job: Job<RenderJobData>) {
         if (segment.voiceoverEnabled && segment.voiceoverText) {
             try {
                 console.log(`[Render] Generating voiceover for segment ${segmentId}`);
+                const voiceId = segment.voiceoverVoice || "bm_george";
+                // Determine TTS engine from voice ID pattern
+                const engine = voiceId.startsWith("dia_") ? "dia" as const
+                    : (voiceId.startsWith("bm_") || voiceId.startsWith("af_")) ? "xtts" as const
+                    : "elevenlabs" as const;
                 const audioBuffer = await generateVoiceover({
                     text: segment.voiceoverText,
-                    voiceId: "bm_george",
+                    voiceId,
+                    engine,
                 });
 
                 const voiceoverPath = path.join(renderDir, "voiceover.wav");
@@ -168,10 +274,6 @@ async function processRender(job: Job<RenderJobData>) {
         console.error(`[Render] Failed: ${segmentId}`, error.message);
         throw error;
     }
-}
-
-function hexToAss(hex: string): string {
-    return hex.replace("#", "0x");
 }
 
 // ─── Start Worker ────────────────────────────────

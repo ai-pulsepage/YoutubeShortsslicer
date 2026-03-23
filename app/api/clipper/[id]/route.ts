@@ -62,6 +62,8 @@ export async function GET(
             hookStrength: s.hookStrength,
             emotionalArc: s.emotionalArc,
             status: s.status,
+            hookText: (s as any).hookText,
+            editedWords: (s as any).editedWords,
             shortVideo: s.shortVideo,
         }));
 
@@ -78,6 +80,8 @@ export async function GET(
             hookStrength: s.hookStrength,
             emotionalArc: s.emotionalArc,
             status: s.status,
+            hookText: (s as any).hookText,
+            editedWords: (s as any).editedWords,
             shortVideo: s.shortVideo,
         }));
 

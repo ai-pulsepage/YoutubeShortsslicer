@@ -185,6 +185,8 @@ model Segment {
   voiceoverVoice   String?  @default("bm_george")  // Kokoro voice ID
   voiceoverMixMode String?  @default("mix")        // replace | mix | original
   subtitlePresetId String?  // reference to SubtitlePreset
+  hookText         String?  // on-screen title/hook text overlay
+  editedWords      Json?    // user-corrected word timestamps [{text, start, end}]
 
   video       Video         @relation(fields: [videoId], references: [id], onDelete: Cascade)
   shortVideo  ShortVideo?

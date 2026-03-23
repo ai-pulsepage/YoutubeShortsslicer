@@ -76,6 +76,16 @@ export interface RenderJobData {
     segmentId: string;
     userId: string;
     videoId: string;
+    // Clip Studio options
+    clipMode?: boolean;
+    faceTrack?: boolean;
+    captionStyle?: string;       // "word-highlight" | "pop" | "fade" | "none"
+    subtitleStyle?: any;         // snapshot of SubtitlePreset
+    hookOverlay?: boolean;
+    hookText?: string;           // on-screen title text
+    ctaOverlay?: boolean;
+    ctaText?: string;
+    editedWords?: Array<{ text: string; start: number; end: number }>;
 }
 
 // ─── RunPod Worker Queue (XTTS / MusicGen / Video) ──────

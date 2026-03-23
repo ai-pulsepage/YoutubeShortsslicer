@@ -23,6 +23,11 @@ import {
     FileVideo,
     Trash2,
     Briefcase,
+    Type,
+    Pencil,
+    ChevronDown,
+    ChevronUp,
+    Save,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────
@@ -64,6 +69,8 @@ interface Segment {
     hookStrength: number | null;
     emotionalArc: string | null;
     status: string;
+    hookText: string | null;
+    editedWords: Array<{ text: string; start: number; end: number }> | null;
     shortVideo: {
         id: string;
         storagePath: string | null;
@@ -165,7 +172,7 @@ export default function ClipStudioPage() {
     const [uploadProgress, setUploadProgress] = useState("");
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [selectedBriefId, setSelectedBriefId] = useState("");
-    const [briefs, setBriefs] = useState<{id: string; name: string; brand: string | null; cpmRate: number | null; targetPlatforms: string[]; watermarkRequired: boolean; disclosureRequired: boolean}[]>([]);
+    const [briefs, setBriefs] = useState<{id: string; name: string; brand: string | null; cpmRate: number | null; targetPlatforms: string[]; watermarkRequired: boolean; disclosureRequired: boolean; onScreenSuggestions: string[]}[]>([]);
     const [campaignName, setCampaignName] = useState("");
     const [campaignCpm, setCampaignCpm] = useState("");
     const [captionStyle, setCaptionStyle] = useState("word-highlight");
@@ -973,8 +980,19 @@ export default function ClipStudioPage() {
                                             onRender={handleRenderSegment}
                                             isRendering={rendering.has(clip.id)}
                                             isRendered
+                                            hookSuggestions={briefs.find(b => b.name === selectedProject.campaignName)?.onScreenSuggestions || []}
+                                            onClipUpdate={(updatedClip) => {
+                                                setSelectedProject(prev => {
+                                                    if (!prev) return prev;
+                                                    return {
+                                                        ...prev,
+                                                        renderedClips: prev.renderedClips.map(c => c.id === updatedClip.id ? { ...c, ...updatedClip } : c),
+                                                        pendingClips: prev.pendingClips.map(c => c.id === updatedClip.id ? { ...c, ...updatedClip } : c),
+                                                    };
+                                                });
+                                            }}
                                         />
-                                    ))}
+                                    ))}  
                                 </>
                             )}
 
@@ -992,6 +1010,17 @@ export default function ClipStudioPage() {
                                             projectId={selectedProject.id}
                                             onRender={handleRenderSegment}
                                             isRendering={rendering.has(clip.id)}
+                                            hookSuggestions={briefs.find(b => b.name === selectedProject.campaignName)?.onScreenSuggestions || []}
+                                            onClipUpdate={(updatedClip) => {
+                                                setSelectedProject(prev => {
+                                                    if (!prev) return prev;
+                                                    return {
+                                                        ...prev,
+                                                        pendingClips: prev.pendingClips.map(c => c.id === updatedClip.id ? { ...c, ...updatedClip } : c),
+                                                        renderedClips: prev.renderedClips.map(c => c.id === updatedClip.id ? { ...c, ...updatedClip } : c),
+                                                    };
+                                                });
+                                            }}
                                         />
                                     ))}
                                 </>
@@ -1027,119 +1056,326 @@ function ClipCard({
     onRender,
     isRendering,
     isRendered,
+    hookSuggestions = [],
+    onClipUpdate,
 }: {
     clip: Segment;
     projectId: string;
     onRender: (projectId: string, segmentId: string) => void;
     isRendering: boolean;
     isRendered?: boolean;
+    hookSuggestions?: string[];
+    onClipUpdate?: (updatedClip: Partial<Segment> & { id: string }) => void;
 }) {
+    const [expanded, setExpanded] = useState(false);
+    const [hookText, setHookText] = useState(clip.hookText || "");
+    const [editedWords, setEditedWords] = useState<Array<{ text: string; start: number; end: number }>>(clip.editedWords || []);
+    const [saving, setSaving] = useState(false);
+    const [saved, setSaved] = useState(false);
+    const [editingWordIdx, setEditingWordIdx] = useState<number | null>(null);
+
+    const handleSave = async () => {
+        setSaving(true);
+        try {
+            const res = await fetch(`/api/clipper/${projectId}/segments/${clip.id}/edit`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    hookText: hookText || null,
+                    editedWords: editedWords.length > 0 ? editedWords : null,
+                }),
+            });
+            if (res.ok) {
+                setSaved(true);
+                setTimeout(() => setSaved(false), 2000);
+                onClipUpdate?.({ id: clip.id, hookText, editedWords });
+            }
+        } catch (err) {
+            console.error("Save error:", err);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleWordEdit = (idx: number, newText: string) => {
+        setEditedWords(prev => {
+            const updated = [...prev];
+            updated[idx] = { ...updated[idx], text: newText };
+            return updated;
+        });
+    };
+
     return (
         <div
-            className={`flex items-center gap-4 p-3 rounded-xl border transition-colors ${
+            className={`rounded-xl border transition-colors ${
                 isRendered
                     ? "bg-emerald-900/10 border-emerald-800/30"
                     : "bg-gray-800/40 border-gray-800 hover:border-gray-700"
             }`}
         >
-            {/* Score */}
-            <div className="flex-shrink-0">
-                <ViralScoreBadge score={clip.viralScore} />
-            </div>
+            {/* Main Row */}
+            <div className="flex items-center gap-4 p-3">
+                {/* Score */}
+                <div className="flex-shrink-0">
+                    <ViralScoreBadge score={clip.viralScore} />
+                </div>
 
-            {/* Info */}
-            <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white truncate">
-                    {clip.title || "Untitled Clip"}
-                </p>
-                <p className="text-xs text-gray-500 mt-0.5 truncate">
-                    {clip.description}
-                </p>
-                <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
-                    <span>
-                        {formatDuration(clip.startTime)} → {formatDuration(clip.endTime)}
-                    </span>
-                    <span>{formatDuration(clip.duration)}</span>
-                    {clip.hookStrength && (
-                        <span className="text-orange-400">
-                            Hook: {clip.hookStrength}/10
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-white truncate">
+                        {clip.title || "Untitled Clip"}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5 truncate">
+                        {clip.description}
+                    </p>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                        <span>
+                            {formatDuration(clip.startTime)} → {formatDuration(clip.endTime)}
                         </span>
+                        <span>{formatDuration(clip.duration)}</span>
+                        {clip.hookStrength && (
+                            <span className="text-orange-400">
+                                Hook: {clip.hookStrength}/10
+                            </span>
+                        )}
+                        {clip.hookText && (
+                            <span className="text-violet-400 flex items-center gap-0.5">
+                                <Type className="w-3 h-3" />
+                                Hook set
+                            </span>
+                        )}
+                    </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex-shrink-0 flex items-center gap-2">
+                    {/* Expand toggle */}
+                    <button
+                        onClick={() => setExpanded(!expanded)}
+                        className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+                        title="Edit hook text & words"
+                    >
+                        {expanded ? <ChevronUp className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
+                    </button>
+
+                    {isRendered && clip.shortVideo?.storagePath ? (
+                        <>
+                            <button
+                                onClick={async () => {
+                                    try {
+                                        const res = await fetch(`/api/shorts/${clip.shortVideo!.id}/stream`);
+                                        if (!res.ok) throw new Error("Download failed");
+                                        const blob = await res.blob();
+                                        const url = URL.createObjectURL(blob);
+                                        const a = document.createElement("a");
+                                        a.href = url;
+                                        a.download = `${clip.title || "short"}.mp4`;
+                                        document.body.appendChild(a);
+                                        a.click();
+                                        document.body.removeChild(a);
+                                        URL.revokeObjectURL(url);
+                                    } catch (err) {
+                                        console.error("Download error:", err);
+                                        alert("Download failed. Please try again.");
+                                    }
+                                }}
+                                className="p-2 rounded-lg bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 transition-colors"
+                                title="Download"
+                            >
+                                <Download className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    try {
+                                        if (navigator.share) {
+                                            const res = await fetch(`/api/shorts/${clip.shortVideo!.id}/stream`);
+                                            const blob = await res.blob();
+                                            const file = new File([blob], `${clip.title || "short"}.mp4`, { type: "video/mp4" });
+                                            await navigator.share({ title: clip.title || "Short", files: [file] });
+                                        } else {
+                                            await navigator.clipboard.writeText(clip.title || "Short clip");
+                                            alert("Title copied! Download the video and share it on your preferred platform.");
+                                        }
+                                    } catch (err: any) {
+                                        if (err.name !== "AbortError") {
+                                            console.error("Share error:", err);
+                                        }
+                                    }
+                                }}
+                                className="p-2 rounded-lg bg-violet-600/20 text-violet-400 hover:bg-violet-600/30 transition-colors"
+                                title="Share to social"
+                            >
+                                <Share2 className="w-4 h-4" />
+                            </button>
+                        </>
+                    ) : clip.status === "RENDERING" ? (
+                        <span className="text-xs text-yellow-400 flex items-center gap-1">
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            Rendering...
+                        </span>
+                    ) : (
+                        <button
+                            onClick={() => onRender(projectId, clip.id)}
+                            disabled={isRendering}
+                            className="py-1.5 px-3 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-xs text-white rounded-lg transition-colors flex items-center gap-1.5"
+                        >
+                            {isRendering ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                                <Play className="w-3 h-3" />
+                            )}
+                            Render
+                        </button>
                     )}
                 </div>
             </div>
 
-            {/* Actions */}
-            <div className="flex-shrink-0 flex items-center gap-2">
-                {isRendered && clip.shortVideo?.storagePath ? (
-                    <>
-                        <button
-                            onClick={async () => {
-                                try {
-                                    const res = await fetch(`/api/shorts/${clip.shortVideo!.id}/stream`);
-                                    if (!res.ok) throw new Error("Download failed");
-                                    const blob = await res.blob();
-                                    const url = URL.createObjectURL(blob);
-                                    const a = document.createElement("a");
-                                    a.href = url;
-                                    a.download = `${clip.title || "short"}.mp4`;
-                                    document.body.appendChild(a);
-                                    a.click();
-                                    document.body.removeChild(a);
-                                    URL.revokeObjectURL(url);
-                                } catch (err) {
-                                    console.error("Download error:", err);
-                                    alert("Download failed. Please try again.");
-                                }
-                            }}
-                            className="p-2 rounded-lg bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 transition-colors"
-                            title="Download"
-                        >
-                            <Download className="w-4 h-4" />
-                        </button>
-                        <button
-                            onClick={async () => {
-                                try {
-                                    if (navigator.share) {
-                                        const res = await fetch(`/api/shorts/${clip.shortVideo!.id}/stream`);
-                                        const blob = await res.blob();
-                                        const file = new File([blob], `${clip.title || "short"}.mp4`, { type: "video/mp4" });
-                                        await navigator.share({ title: clip.title || "Short", files: [file] });
-                                    } else {
-                                        await navigator.clipboard.writeText(clip.title || "Short clip");
-                                        alert("Title copied! Download the video and share it on your preferred platform.");
-                                    }
-                                } catch (err: any) {
-                                    if (err.name !== "AbortError") {
-                                        console.error("Share error:", err);
-                                    }
-                                }
-                            }}
-                            className="p-2 rounded-lg bg-violet-600/20 text-violet-400 hover:bg-violet-600/30 transition-colors"
-                            title="Share to social"
-                        >
-                            <Share2 className="w-4 h-4" />
-                        </button>
-                    </>
-                ) : clip.status === "RENDERING" ? (
-                    <span className="text-xs text-yellow-400 flex items-center gap-1">
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                        Rendering...
-                    </span>
-                ) : (
-                    <button
-                        onClick={() => onRender(projectId, clip.id)}
-                        disabled={isRendering}
-                        className="py-1.5 px-3 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-xs text-white rounded-lg transition-colors flex items-center gap-1.5"
-                    >
-                        {isRendering ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                        ) : (
-                            <Play className="w-3 h-3" />
+            {/* Expanded Edit Panel */}
+            {expanded && (
+                <div className="border-t border-gray-800/50 p-4 space-y-4">
+                    {/* Hook Text Picker */}
+                    <div>
+                        <label className="block text-xs font-semibold text-violet-400 mb-2 flex items-center gap-1.5">
+                            <Type className="w-3.5 h-3.5" />
+                            Hook Text (on-screen title)
+                        </label>
+
+                        {/* Campaign Suggestions */}
+                        {hookSuggestions.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mb-2">
+                                {hookSuggestions.map((suggestion, i) => (
+                                    <button
+                                        key={i}
+                                        onClick={() => setHookText(suggestion)}
+                                        className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${
+                                            hookText === suggestion
+                                                ? "bg-violet-600/30 border-violet-500 text-violet-300"
+                                                : "bg-gray-800/60 border-gray-700/50 text-gray-400 hover:border-violet-500/50 hover:text-violet-400"
+                                        }`}
+                                    >
+                                        {suggestion}
+                                    </button>
+                                ))}
+                            </div>
                         )}
-                        Render
-                    </button>
-                )}
-            </div>
+
+                        <input
+                            type="text"
+                            value={hookText}
+                            onChange={(e) => setHookText(e.target.value)}
+                            placeholder="e.g. JoeWo Shreds in Black Ops Royale First Look"
+                            className="w-full px-3 py-2 bg-gray-800/60 border border-gray-700/50 rounded-lg text-white placeholder-gray-600 focus:border-violet-500 focus:outline-none text-sm"
+                        />
+                    </div>
+
+                    {/* Editable Transcript Words */}
+                    {editedWords.length > 0 && (
+                        <div>
+                            <label className="block text-xs font-semibold text-amber-400 mb-2 flex items-center gap-1.5">
+                                <Pencil className="w-3.5 h-3.5" />
+                                Editable Transcript ({editedWords.length} words)
+                            </label>
+                            <div className="flex flex-wrap gap-1 bg-gray-900/50 rounded-lg p-3 max-h-40 overflow-y-auto">
+                                {editedWords.map((word, i) => (
+                                    <span key={i} className="inline-block">
+                                        {editingWordIdx === i ? (
+                                            <input
+                                                type="text"
+                                                value={word.text}
+                                                onChange={(e) => handleWordEdit(i, e.target.value)}
+                                                onBlur={() => setEditingWordIdx(null)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === "Enter") setEditingWordIdx(null);
+                                                    if (e.key === "Tab") {
+                                                        e.preventDefault();
+                                                        setEditingWordIdx(i + 1 < editedWords.length ? i + 1 : null);
+                                                    }
+                                                }}
+                                                autoFocus
+                                                className="px-1.5 py-0.5 bg-violet-600/30 border border-violet-500 rounded text-xs text-white focus:outline-none w-auto"
+                                                style={{ width: Math.max(30, word.text.length * 8) }}
+                                            />
+                                        ) : (
+                                            <button
+                                                onClick={() => setEditingWordIdx(i)}
+                                                className="px-1.5 py-0.5 rounded text-xs text-gray-300 hover:bg-gray-700/50 hover:text-white transition-colors cursor-text"
+                                                title={`${word.start.toFixed(1)}s → ${word.end.toFixed(1)}s · click to edit`}
+                                            >
+                                                {word.text}
+                                            </button>
+                                        )}
+                                    </span>
+                                ))}
+                            </div>
+                            <p className="text-[10px] text-gray-600 mt-1">Click any word to edit it. Changes affect rendered subtitles.</p>
+                        </div>
+                    )}
+
+                    {/* Visual Preview */}
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 mb-2">Preview</label>
+                        <div className="relative bg-black rounded-lg overflow-hidden" style={{ aspectRatio: "9/16", maxHeight: 200 }}>
+                            {/* Hook text preview at top */}
+                            {hookText && (
+                                <div className="absolute top-4 left-0 right-0 text-center px-4 z-10">
+                                    <span className="text-white text-sm font-bold" style={{
+                                        textShadow: "2px 2px 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.6)",
+                                    }}>
+                                        {hookText}
+                                    </span>
+                                </div>
+                            )}
+
+                            {/* Subtitle preview at bottom */}
+                            <div className="absolute bottom-6 left-0 right-0 text-center px-3 z-10">
+                                <span className="text-white text-xs font-bold" style={{
+                                    textShadow: "1px 1px 3px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.5)",
+                                }}>
+                                    {editedWords.length > 0 ? (
+                                        editedWords.slice(0, 8).map((w, i) => (
+                                            <span key={i} className={i === 2 ? "text-yellow-400" : ""}>
+                                                {w.text}{" "}
+                                            </span>
+                                        ))
+                                    ) : (
+                                        <span className="text-gray-500 italic">No transcript words loaded</span>
+                                    )}
+                                </span>
+                            </div>
+
+                            {/* Dark placeholder */}
+                            <div className="w-full h-full bg-gradient-to-b from-gray-800/50 to-gray-900/80 flex items-center justify-center">
+                                <Film className="w-8 h-8 text-gray-700" />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Save Button */}
+                    <div className="flex items-center justify-between">
+                        <p className="text-[10px] text-gray-600">
+                            Hook text and word edits are saved per clip and used in rendering
+                        </p>
+                        <button
+                            onClick={handleSave}
+                            disabled={saving}
+                            className={`py-1.5 px-4 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
+                                saved
+                                    ? "bg-emerald-600/20 text-emerald-400 border border-emerald-600/30"
+                                    : "bg-violet-600 hover:bg-violet-500 text-white"
+                            }`}
+                        >
+                            {saving ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : saved ? (
+                                <CheckCircle2 className="w-3 h-3" />
+                            ) : (
+                                <Save className="w-3 h-3" />
+                            )}
+                            {saved ? "Saved!" : "Save Changes"}
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
