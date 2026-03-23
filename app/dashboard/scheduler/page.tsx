@@ -888,7 +888,7 @@ function EditJobModal({
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
-                            captionText: title,
+                            clipTitle: title,
                             platform: job.channel?.platform || "youtube",
                         }),
                     });

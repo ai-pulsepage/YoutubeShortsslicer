@@ -6,11 +6,11 @@ import { NextResponse } from "next/server";
  * POST /api/briefs/[id]/build-description
  * 
  * Assembles a compliant post description from the campaign brief.
- * Input:  { captionText, platform }
- * Output: { description, warnings[] }
+ * Input:  { clipTitle, platform }
+ * Output: { description, warnings[], selectedCaption }
  * 
  * Description format:
- *   [Caption text]
+ *   [Suggested Caption] [Clip Title]
  *   
  *   [Disclosure on its own line, if required]
  *   
@@ -29,7 +29,7 @@ export async function POST(
 
     const { id } = await params;
     const body = await req.json();
-    const { captionText, platform } = body;
+    const { clipTitle, platform } = body;
 
     const brief = await prisma.campaignBrief.findFirst({
         where: { id, userId: session.user.id },
@@ -42,25 +42,30 @@ export async function POST(
     const warnings: string[] = [];
     const parts: string[] = [];
 
-    // 1. Caption text
-    const caption = captionText || (brief.suggestedCaptions.length > 0 ? brief.suggestedCaptions[0] : "");
-    if (caption) {
-        parts.push(caption);
+    // 1. Build the first line: [Suggested Caption] + [Clip Title]
+    let selectedCaption = "";
+    if (brief.suggestedCaptions.length > 0) {
+        // Randomly pick one suggested caption
+        const idx = Math.floor(Math.random() * brief.suggestedCaptions.length);
+        selectedCaption = brief.suggestedCaptions[idx];
     }
 
-    // 2. Check required phrases
+    const firstLine = [selectedCaption, clipTitle || ""].filter(Boolean).join(" ");
+    if (firstLine) {
+        parts.push(firstLine);
+    }
+
+    // 2. Check required phrases against the assembled first line
     if ((brief as any).requiredPhrasesMode === "pick-one") {
-        // At least one phrase must appear
         const hasAny = brief.requiredPhrases.some(
-            (phrase) => caption.toLowerCase().includes(phrase.toLowerCase())
+            (phrase) => firstLine.toLowerCase().includes(phrase.toLowerCase())
         );
         if (brief.requiredPhrases.length > 0 && !hasAny) {
             warnings.push(`Caption should mention at least one of: ${brief.requiredPhrases.map(p => `"${p}"`).join(", ")}`);
         }
     } else {
-        // All phrases must appear (default "all" mode)
         for (const phrase of brief.requiredPhrases) {
-            if (!caption.toLowerCase().includes(phrase.toLowerCase())) {
+            if (!firstLine.toLowerCase().includes(phrase.toLowerCase())) {
                 warnings.push(`Caption should mention: "${phrase}"`);
             }
         }
@@ -81,19 +86,19 @@ export async function POST(
         parts.push(platformTagEntry.tags.join(" "));
     }
 
-    // 5. Required hashtags
-    if (brief.requiredHashtags.length > 0) {
-        const hashtagLine = brief.requiredHashtags.join(" ");
-        // Add optional hashtags if any
-        const optionals = brief.optionalHashtags.length > 0
-            ? " " + brief.optionalHashtags.join(" ")
-            : "";
-        parts.push(hashtagLine + optionals);
+    // 5. Required hashtags + optional hashtags
+    const allHashtags = [
+        ...brief.requiredHashtags,
+        ...brief.optionalHashtags,
+    ].filter(Boolean);
+    if (allHashtags.length > 0) {
+        parts.push(""); // blank line
+        parts.push(allHashtags.join(" "));
     }
 
     const description = parts.join("\n");
 
-    // Validate the final description
+    // Validate required hashtags are present
     for (const hashtag of brief.requiredHashtags) {
         if (!description.includes(hashtag)) {
             warnings.push(`Missing required hashtag: ${hashtag}`);
@@ -103,6 +108,7 @@ export async function POST(
     return NextResponse.json({
         description,
         warnings,
+        selectedCaption,
         suggestedCaptions: brief.suggestedCaptions,
     });
 }
