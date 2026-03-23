@@ -49,9 +49,20 @@ export async function POST(
     }
 
     // 2. Check required phrases
-    for (const phrase of brief.requiredPhrases) {
-        if (!caption.toLowerCase().includes(phrase.toLowerCase())) {
-            warnings.push(`Caption should mention: "${phrase}"`);
+    if ((brief as any).requiredPhrasesMode === "pick-one") {
+        // At least one phrase must appear
+        const hasAny = brief.requiredPhrases.some(
+            (phrase) => caption.toLowerCase().includes(phrase.toLowerCase())
+        );
+        if (brief.requiredPhrases.length > 0 && !hasAny) {
+            warnings.push(`Caption should mention at least one of: ${brief.requiredPhrases.map(p => `"${p}"`).join(", ")}`);
+        }
+    } else {
+        // All phrases must appear (default "all" mode)
+        for (const phrase of brief.requiredPhrases) {
+            if (!caption.toLowerCase().includes(phrase.toLowerCase())) {
+                warnings.push(`Caption should mention: "${phrase}"`);
+            }
         }
     }
 

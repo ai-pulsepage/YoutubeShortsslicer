@@ -54,6 +54,7 @@ export async function POST(req: Request) {
             captionGuidelines: rest.captionGuidelines || null,
             suggestedCaptions: rest.suggestedCaptions || [],
             requiredPhrases: rest.requiredPhrases || [],
+            requiredPhrasesMode: rest.requiredPhrasesMode || "all",
             // Tags
             platformTags: rest.platformTags || [],
             requiredHashtags: rest.requiredHashtags || [],

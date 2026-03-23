@@ -888,6 +888,7 @@ model CampaignBrief {
   captionGuidelines  String?  @db.Text  // Free-text guidance
   suggestedCaptions  String[]           // List of example captions
   requiredPhrases    String[]           // Must appear in every post
+  requiredPhrasesMode String  @default("all") // "all" = every phrase in every post, "pick-one" = choose one per post
 
   // Tags & Hashtags (per platform)
   platformTags       Json     @default("[]")  // [{platform:"tiktok", tags:["@callofduty"]}]

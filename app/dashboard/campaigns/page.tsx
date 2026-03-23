@@ -44,6 +44,7 @@ interface CampaignBrief {
     captionGuidelines: string | null;
     suggestedCaptions: string[];
     requiredPhrases: string[];
+    requiredPhrasesMode: string; // "all" | "pick-one"
     platformTags: PlatformTag[];
     requiredHashtags: string[];
     optionalHashtags: string[];
@@ -310,12 +311,21 @@ export default function CampaignsPage() {
                                                 <p className="text-xs text-gray-300 mb-2">{brief.captionGuidelines}</p>
                                             )}
                                             {brief.requiredPhrases.length > 0 && (
-                                                <div className="flex flex-wrap gap-1 mb-2">
-                                                    {brief.requiredPhrases.map((p, i) => (
-                                                        <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20">
-                                                            must mention: &quot;{p}&quot;
-                                                        </span>
-                                                    ))}
+                                                <div>
+                                                    <span className="text-[10px] text-gray-500 uppercase font-medium mr-2">
+                                                        {brief.requiredPhrasesMode === "pick-one" ? "Pick one phrase per post:" : "All must appear in every post:"}
+                                                    </span>
+                                                    <div className="flex flex-wrap gap-1 mt-1 mb-2">
+                                                        {brief.requiredPhrases.map((p, i) => (
+                                                            <span key={i} className={`text-[10px] px-2 py-0.5 rounded-full border ${
+                                                                brief.requiredPhrasesMode === "pick-one"
+                                                                    ? "bg-violet-500/15 text-violet-400 border-violet-500/20"
+                                                                    : "bg-amber-500/15 text-amber-400 border-amber-500/20"
+                                                            }`}>
+                                                                {brief.requiredPhrasesMode === "pick-one" ? "" : "must mention: "}&quot;{p}&quot;
+                                                            </span>
+                                                        ))}
+                                                    </div>
                                                 </div>
                                             )}
                                             {brief.suggestedCaptions.length > 0 && (
@@ -513,6 +523,7 @@ function CampaignEditorModal({
     const [captionGuidelines, setCaptionGuidelines] = useState(brief?.captionGuidelines || "");
     const [suggestedCaptions, setSuggestedCaptions] = useState<string[]>(brief?.suggestedCaptions || [""]);
     const [requiredPhrases, setRequiredPhrases] = useState<string[]>(brief?.requiredPhrases || [""]);
+    const [requiredPhrasesMode, setRequiredPhrasesMode] = useState(brief?.requiredPhrasesMode || "all");
 
     // Tags
     const [platformTags, setPlatformTags] = useState<PlatformTag[]>(
@@ -574,6 +585,7 @@ function CampaignEditorModal({
             captionGuidelines: captionGuidelines.trim() || null,
             suggestedCaptions: cleanArray(suggestedCaptions),
             requiredPhrases: cleanArray(requiredPhrases),
+            requiredPhrasesMode,
             platformTags: platformTags.filter((pt) => pt.tags.some((t) => t.trim().length > 0)),
             requiredHashtags: cleanArray(requiredHashtags),
             optionalHashtags: cleanArray(optionalHashtags),
@@ -737,7 +749,34 @@ function CampaignEditorModal({
                                 <textarea value={captionGuidelines} onChange={(e) => setCaptionGuidelines(e.target.value)} placeholder="Free-text guidance about what captions should say..." className={`${inputClass} min-h-[60px] resize-y`} />
                             </div>
                             <div>
-                                <label className={labelClass}>Required Phrases (must appear in every post)</label>
+                                <label className={labelClass}>Key Phrases</label>
+                                <div className="flex items-center gap-3 mb-2">
+                                    <button
+                                        onClick={() => setRequiredPhrasesMode("all")}
+                                        className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                                            requiredPhrasesMode === "all"
+                                                ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                                                : "bg-gray-800/50 text-gray-500 border-gray-700/50 hover:text-gray-300"
+                                        }`}
+                                    >
+                                        All must appear
+                                    </button>
+                                    <button
+                                        onClick={() => setRequiredPhrasesMode("pick-one")}
+                                        className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                                            requiredPhrasesMode === "pick-one"
+                                                ? "bg-violet-500/20 text-violet-400 border-violet-500/30"
+                                                : "bg-gray-800/50 text-gray-500 border-gray-700/50 hover:text-gray-300"
+                                        }`}
+                                    >
+                                        Pick one per post
+                                    </button>
+                                </div>
+                                <p className="text-[10px] text-gray-600 mb-2">
+                                    {requiredPhrasesMode === "all"
+                                        ? "Every phrase below will be required in every post."
+                                        : "Users pick one of these phrases per clip/post."}
+                                </p>
                                 {requiredPhrases.map((phrase, i) => (
                                     <div key={i} className="flex gap-2 mb-1">
                                         <input type="text" value={phrase} onChange={(e) => updateListItem(setRequiredPhrases, i, e.target.value)} placeholder='e.g. "Black Ops Royale"' className={`${inputClass} flex-1`} />
