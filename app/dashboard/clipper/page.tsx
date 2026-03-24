@@ -1234,7 +1234,7 @@ function ClipCard({
                             <button
                                 onClick={async () => {
                                     try {
-                                        const res = await fetch(`/api/shorts/${clip.shortVideo!.id}/stream`);
+                                        const res = await fetch(`/api/shorts/${clip.shortVideo!.id}/stream?t=${Date.now()}`);
                                         if (!res.ok) throw new Error("Download failed");
                                         const blob = await res.blob();
                                         const url = URL.createObjectURL(blob);
@@ -1259,7 +1259,7 @@ function ClipCard({
                                 onClick={async () => {
                                     try {
                                         if (navigator.share) {
-                                            const res = await fetch(`/api/shorts/${clip.shortVideo!.id}/stream`);
+                                            const res = await fetch(`/api/shorts/${clip.shortVideo!.id}/stream?t=${Date.now()}`);
                                             const blob = await res.blob();
                                             const file = new File([blob], `${clip.title || "short"}.mp4`, { type: "video/mp4" });
                                             await navigator.share({ title: clip.title || "Short", files: [file] });

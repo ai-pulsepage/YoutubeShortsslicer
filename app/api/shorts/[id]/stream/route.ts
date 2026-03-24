@@ -70,7 +70,8 @@ export async function GET(
             "Content-Type": response.ContentType || "video/mp4",
             "Content-Disposition": `attachment; filename="${safeFilename}.mp4"`,
             "Accept-Ranges": "bytes",
-            "Cache-Control": "public, max-age=86400",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
         };
 
         if (response.ContentLength) {
