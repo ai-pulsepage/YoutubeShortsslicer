@@ -414,13 +414,13 @@ export default function ClipStudioPage() {
         }
     };
 
-    const handleRenderSegment = async (projectId: string, segmentId: string) => {
+    const handleRenderSegment = async (projectId: string, segmentId: string, opts?: { hookFontSize?: number; hookFont?: string }) => {
         setRendering((prev) => new Set(prev).add(segmentId));
         try {
             const res = await fetch(`/api/clipper/${projectId}/render`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ segmentIds: [segmentId], subtitleStyle: { animation: subAnimation, font: subFont, position: subPosition, color: subColor, fontSize: subFontSize } }),
+                body: JSON.stringify({ segmentIds: [segmentId], subtitleStyle: { animation: subAnimation, font: subFont, position: subPosition, color: subColor, fontSize: subFontSize }, hookFontSize: opts?.hookFontSize, hookFont: opts?.hookFont }),
             });
 
             if (!res.ok) {
@@ -1117,7 +1117,7 @@ function ClipCard({
 }: {
     clip: Segment;
     projectId: string;
-    onRender: (projectId: string, segmentId: string) => void;
+    onRender: (projectId: string, segmentId: string, opts?: { hookFontSize?: number; hookFont?: string }) => void;
     isRendering: boolean;
     isRendered?: boolean;
     subFont?: string;
@@ -1279,7 +1279,7 @@ function ClipCard({
                                 <Share2 className="w-4 h-4" />
                             </button>
                             <button
-                                onClick={() => onRender(projectId, clip.id)}
+                            onClick={() => onRender(projectId, clip.id, { hookFontSize, hookFont })}
                                 disabled={isRendering}
                                 className="p-2 rounded-lg bg-amber-600/20 text-amber-400 hover:bg-amber-600/30 disabled:opacity-50 transition-colors"
                                 title="Re-render with updated settings"
@@ -1298,7 +1298,7 @@ function ClipCard({
                         </span>
                     ) : (
                         <button
-                            onClick={() => onRender(projectId, clip.id)}
+                            onClick={() => onRender(projectId, clip.id, { hookFontSize, hookFont })}
                             disabled={isRendering}
                             className="py-1.5 px-3 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-xs text-white rounded-lg transition-colors flex items-center gap-1.5"
                         >
@@ -1500,7 +1500,7 @@ function ClipCard({
                             </button>
                             {isRendered && (
                                 <button
-                                    onClick={() => onRender(projectId, clip.id)}
+                                    onClick={() => onRender(projectId, clip.id, { hookFontSize, hookFont })}
                                     disabled={isRendering}
                                     className="py-1.5 px-4 rounded-lg text-xs font-medium bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white transition-all flex items-center gap-1.5"
                                 >

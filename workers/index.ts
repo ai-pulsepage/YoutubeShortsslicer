@@ -639,20 +639,14 @@ const renderWorker = new Worker(
             await downloadFileFromR2(segment.video.storagePath, sourceVideo);
             await job.updateProgress(15);
 
-            const cutVideo = path.join(renderDir, "cut.mp4");
             const outputPath = path.join(renderDir, "final.mp4");
             const duration = segment.endTime - segment.startTime;
 
-            // Step 2: Cut segment
+            // Step 2+3: Cut segment AND convert to 9:16 in ONE pass
+            // IMPORTANT: Using re-encode (not -c copy) to get frame-accurate timing.
+            // -c copy seeks to nearest keyframe which offsets subtitle timestamps.
             execSync(
-                `ffmpeg -ss ${segment.startTime} -i "${sourceVideo}" -t ${duration} -c copy -avoid_negative_ts 1 "${cutVideo}" -y`,
-                { timeout: 300000 }
-            );
-            await job.updateProgress(30);
-
-            // Step 3: Convert to 9:16
-            execSync(
-                `ffmpeg -i "${cutVideo}" -vf "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,setsar=1" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k -movflags +faststart "${outputPath}" -y`,
+                `ffmpeg -ss ${segment.startTime} -i "${sourceVideo}" -t ${duration} -vf "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,setsar=1" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k -movflags +faststart "${outputPath}" -y`,
                 { timeout: 600000 }
             );
             await job.updateProgress(50);
@@ -784,9 +778,25 @@ const renderWorker = new Worker(
                     const escapedHook = resolvedHookText
                         .replace(/'/g, "\u2019")
                         .replace(/:/g, "\\:");
+                    // Wrap long text into lines that fit 1080px width
+                    // At fontsize 48, approx 30 chars per line; scale for other sizes
+                    const maxCharsPerLine = Math.max(15, Math.floor(1080 / (hookFontSize * 0.6)));
+                    const words = escapedHook.split(' ');
+                    const lines: string[] = [];
+                    let currentLine = '';
+                    for (const word of words) {
+                        if (currentLine.length + word.length + 1 > maxCharsPerLine && currentLine.length > 0) {
+                            lines.push(currentLine.trim());
+                            currentLine = word;
+                        } else {
+                            currentLine += ' ' + word;
+                        }
+                    }
+                    if (currentLine.trim()) lines.push(currentLine.trim());
+                    const wrappedHook = lines.slice(0, 3).join('\n'); // Max 3 lines
                     const hookOutput = path.join(renderDir, "hooked.mp4");
                     execSync(
-                        `ffmpeg -i "${outputPath}" -vf "drawtext=text='${escapedHook}':fontsize=${hookFontSize}:fontcolor=white:borderw=4:bordercolor=black:shadowcolor=black@0.6:shadowx=2:shadowy=2:x=(w-text_w)/2:y=180" -c:v libx264 -preset fast -crf 23 -c:a copy "${hookOutput}" -y`,
+                        `ffmpeg -i "${outputPath}" -vf "drawtext=text='${wrappedHook}':fontsize=${hookFontSize}:fontcolor=white:borderw=4:bordercolor=black:shadowcolor=black@0.6:shadowx=2:shadowy=2:x=(w-text_w)/2:y=120:line_spacing=8" -c:v libx264 -preset fast -crf 23 -c:a copy "${hookOutput}" -y`,
                         { timeout: 300000 }
                     );
                     fs.renameSync(hookOutput, outputPath);
