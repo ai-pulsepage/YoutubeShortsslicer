@@ -432,8 +432,9 @@ export default function ClipStudioPage() {
 
             // Poll for completion — check every 5s for up to 3 minutes
             const pollInterval = 5000;
-            const maxPolls = 36; // 3 minutes
+            const maxPolls = 36;
             let polls = 0;
+            let sawRendering = false; // Must see RENDERING state first before accepting RENDERED
 
             const poll = async () => {
                 polls++;
@@ -441,12 +442,20 @@ export default function ClipStudioPage() {
                     const detailRes = await fetch(`/api/clipper/${projectId}`);
                     if (detailRes.ok) {
                         const detail = await detailRes.json();
-                        const seg = [...(detail.renderedClips || []), ...(detail.pendingClips || [])].find((c: any) => c.id === segmentId);
-                        if (seg?.shortVideo?.status === "RENDERED" && seg.status === "RENDERED") {
-                            // Render complete! Update UI
-                            setSelectedProject(detail);
+                        const allClips = [...(detail.renderedClips || []), ...(detail.pendingClips || [])];
+                        const seg = allClips.find((c: any) => c.id === segmentId);
+
+                        // Track: must see RENDERING before we accept RENDERED as "done"
+                        if (seg?.status === "RENDERING") {
+                            sawRendering = true;
+                        }
+
+                        if (sawRendering && seg?.status === "RENDERED") {
+                            // Render actually completed (transitioned RENDERING → RENDERED)
                             setRendering((prev) => { const n = new Set(prev); n.delete(segmentId); return n; });
-                            return; // Done polling
+                            // Force clean refresh
+                            await fetchProjectDetail(projectId);
+                            return;
                         }
                     }
                 } catch { }
@@ -454,22 +463,18 @@ export default function ClipStudioPage() {
                 if (polls < maxPolls) {
                     setTimeout(poll, pollInterval);
                 } else {
-                    // Timeout — stop rendering state, refresh anyway
                     setRendering((prev) => { const n = new Set(prev); n.delete(segmentId); return n; });
-                    if (selectedProject?.id === projectId) {
-                        await fetchProjectDetail(projectId);
-                    }
+                    await fetchProjectDetail(projectId);
                 }
             };
 
-            // Start polling after a short initial delay (worker needs time to pick up)
-            setTimeout(poll, 3000);
+            // Start polling after render API returns (segment is already set to RENDERING)
+            setTimeout(poll, pollInterval);
 
         } catch (err) {
             console.error("Render error:", err);
             setRendering((prev) => { const n = new Set(prev); n.delete(segmentId); return n; });
         }
-        // Note: rendering state is NOT removed here — it stays until poll detects completion
     };
 
     const handleAssignCampaign = async (projectId: string, briefId: string) => {

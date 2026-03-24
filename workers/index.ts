@@ -714,12 +714,20 @@ const renderWorker = new Worker(
                             // Already flat format ({word, start, end})
                             wordTimestamps.push(seg);
                         } else if (seg.text && seg.start !== undefined) {
-                            // Segment-level only (no word timestamps) — use full text as one block
-                            wordTimestamps.push({
-                                word: seg.text,
-                                start: seg.start,
-                                end: seg.end,
-                            });
+                            // Segment-level only (no word timestamps) — split text into individual words
+                            // with evenly distributed timing across the segment duration
+                            const segWords = seg.text.trim().split(/\s+/).filter((w: string) => w.length > 0);
+                            if (segWords.length > 0) {
+                                const segDuration = (seg.end || seg.start + 2) - seg.start;
+                                const wordDuration = segDuration / segWords.length;
+                                for (let wi = 0; wi < segWords.length; wi++) {
+                                    wordTimestamps.push({
+                                        word: segWords[wi],
+                                        start: seg.start + wi * wordDuration,
+                                        end: seg.start + (wi + 1) * wordDuration,
+                                    });
+                                }
+                            }
                         }
                     }
 
