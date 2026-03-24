@@ -114,7 +114,7 @@ async function processRender(job: Job<RenderJobData>) {
                         const segments = transcript.segments as any[];
                         // Extract all words from transcript segments that overlap with this clip
                         for (const seg of segments) {
-                            if (seg.words && Array.isArray(seg.words)) {
+                            if (seg.words && Array.isArray(seg.words) && seg.words.length > 0) {
                                 for (const w of seg.words) {
                                     const wordStart = w.start ?? w.startTime;
                                     const wordEnd = w.end ?? w.endTime;

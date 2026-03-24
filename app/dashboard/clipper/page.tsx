@@ -1384,7 +1384,9 @@ function ClipCard({
                             {/* Hook text preview at top */}
                             {hookText && (
                                 <div className="absolute top-4 left-0 right-0 text-center px-4 z-10">
-                                    <span className="text-white text-sm font-bold" style={{
+                                    <span className="text-white font-bold" style={{
+                                        fontFamily: hookFont || "Montserrat",
+                                        fontSize: `${Math.max(8, (hookFontSize || 24) * 0.4)}px`,
                                         textShadow: "2px 2px 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.6)",
                                     }}>
                                         {hookText}

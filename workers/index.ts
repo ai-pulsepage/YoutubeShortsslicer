@@ -701,7 +701,7 @@ const renderWorker = new Worker(
                     // generateASS expects: [{word, start, end}]
                     let wordTimestamps: any[] = [];
                     for (const seg of rawSegments) {
-                        if (seg.words && Array.isArray(seg.words)) {
+                        if (seg.words && Array.isArray(seg.words) && seg.words.length > 0) {
                             // Nested Whisper format — flatten words out
                             for (const w of seg.words) {
                                 wordTimestamps.push({
