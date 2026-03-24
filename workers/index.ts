@@ -704,15 +704,17 @@ const renderWorker = new Worker(
                         if (seg.words && Array.isArray(seg.words) && seg.words.length > 0) {
                             // Nested Whisper format — flatten words out
                             for (const w of seg.words) {
-                                wordTimestamps.push({
-                                    word: w.word || w.text || "",
-                                    start: w.start,
-                                    end: w.end,
-                                });
+                                const wordText = (w.word || w.text || "").toString().trim();
+                                if (wordText) {
+                                    wordTimestamps.push({ word: wordText, start: w.start, end: w.end });
+                                }
                             }
-                        } else if (seg.word !== undefined) {
+                        } else if (seg.word !== undefined || seg.text !== undefined) {
                             // Already flat format ({word, start, end})
-                            wordTimestamps.push(seg);
+                            const wordText = (seg.word || seg.text || "").toString().trim();
+                            if (wordText && seg.start !== undefined) {
+                                wordTimestamps.push({ word: wordText, start: seg.start, end: seg.end });
+                            }
                         } else if (seg.text && seg.start !== undefined) {
                             // Segment-level only (no word timestamps) — split text into individual words
                             // with evenly distributed timing across the segment duration
@@ -784,7 +786,7 @@ const renderWorker = new Worker(
                         .replace(/:/g, "\\:");
                     const hookOutput = path.join(renderDir, "hooked.mp4");
                     execSync(
-                        `ffmpeg -i "${outputPath}" -vf "drawtext=text='${escapedHook}':fontsize=${hookFontSize}:fontcolor=white:borderw=4:bordercolor=black:shadowcolor=black@0.6:shadowx=2:shadowy=2:x=(w-text_w)/2:y=180:enable='between(t,0.5,5)'" -c:v libx264 -preset fast -crf 23 -c:a copy "${hookOutput}" -y`,
+                        `ffmpeg -i "${outputPath}" -vf "drawtext=text='${escapedHook}':fontsize=${hookFontSize}:fontcolor=white:borderw=4:bordercolor=black:shadowcolor=black@0.6:shadowx=2:shadowy=2:x=(w-text_w)/2:y=180" -c:v libx264 -preset fast -crf 23 -c:a copy "${hookOutput}" -y`,
                         { timeout: 300000 }
                     );
                     fs.renameSync(hookOutput, outputPath);
