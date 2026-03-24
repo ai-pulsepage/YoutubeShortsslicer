@@ -1455,15 +1455,14 @@ function ClipCard({
 
                             {/* Subtitle preview at bottom */}
                             <div className="absolute bottom-3 left-0 right-0 text-center px-2 z-10">
-                                <span className="text-white font-bold leading-none inline" style={{
+                                <span className="text-white font-bold leading-tight inline" style={{
                                     fontFamily: subFont || "Montserrat",
-                                    fontSize: `${Math.max(5, Math.round((subFontSize || 48) * 0.15))}px`,
+                                    fontSize: `${Math.max(5, Math.round((subFontSize || 48) * 0.2))}px`,
                                     textShadow: "1px 1px 2px rgba(0,0,0,0.9)",
-                                    letterSpacing: "-0.02em",
                                 }}>
                                     {editedWords.length > 0 ? (
-                                        editedWords.slice(0, 8).map((w, i) => (
-                                            <span key={i} className={i === 2 ? "text-yellow-400" : ""}>
+                                        editedWords.slice(0, (subFontSize || 48) > 48 ? 3 : 5).map((w, i) => (
+                                            <span key={i} className={i === 1 ? "text-yellow-400" : ""}>
                                                 {w.text}{" "}
                                             </span>
                                         ))
