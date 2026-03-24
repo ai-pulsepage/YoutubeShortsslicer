@@ -776,18 +776,15 @@ const renderWorker = new Worker(
             const resolvedHookText = job.data.hookText || (segment as any).hookText;
             if (hookOverlay && resolvedHookText) {
                 try {
-                    const hookFontSize = job.data.hookFontSize || (segment as any).hookFontSize || 24;
+                    const hookFontSize = job.data.hookFontSize || (segment as any).hookFontSize || 48;
                     const hookFont = job.data.hookFont || (segment as any).hookFont || "Montserrat";
-                    // Escape text for FFmpeg drawtext filter
+                    // Simple escaping: curly quote for apostrophes, backslash-colon for colons
                     const escapedHook = resolvedHookText
-                        .replace(/\\/g, "\\\\\\\\")
-                        .replace(/'/g, "'\\''")
-                        .replace(/:/g, "\\\\:")
-                        .replace(/"/g, '\\\\"');
+                        .replace(/'/g, "\u2019")
+                        .replace(/:/g, "\\:");
                     const hookOutput = path.join(renderDir, "hooked.mp4");
-                    const escapedRenderDir = renderDir.replace(/\\/g, "/");
                     execSync(
-                        `ffmpeg -i "${outputPath}" -vf "drawtext=text='${escapedHook}':fontsize=${hookFontSize}:fontfile=/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf:fontcolor=white:borderw=3:bordercolor=black:shadowcolor=black@0.5:shadowx=2:shadowy=2:x=(w-text_w)/2:y=100:enable='between(t,0.5,4)':alpha='if(lt(t\\,1)\\,t-0.5\\,if(gt(t\\,3.5)\\,4-t\\,1))'" -c:v libx264 -preset fast -crf 23 -c:a copy "${hookOutput}" -y`,
+                        `ffmpeg -i "${outputPath}" -vf "drawtext=text='${escapedHook}':fontsize=${hookFontSize}:fontcolor=white:borderw=4:bordercolor=black:shadowcolor=black@0.6:shadowx=2:shadowy=2:x=(w-text_w)/2:y=180:enable='between(t,0.5,5)'" -c:v libx264 -preset fast -crf 23 -c:a copy "${hookOutput}" -y`,
                         { timeout: 300000 }
                     );
                     fs.renameSync(hookOutput, outputPath);

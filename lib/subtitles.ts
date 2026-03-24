@@ -140,10 +140,10 @@ export function generateASS(
 
     // Position: alignment + margin
     let alignment = 2; // bottom center
-    let marginV = 60;
+    let marginV = 200;  // 200px from bottom on 1920px canvas
     if (s.position === "top") {
         alignment = 8; // top center
-        marginV = 40;
+        marginV = 120;  // 120px from top (below hook text area)
     } else if (s.position === "center") {
         alignment = 5; // middle center
         marginV = 0;
