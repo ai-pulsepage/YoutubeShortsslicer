@@ -423,20 +423,53 @@ export default function ClipStudioPage() {
                 body: JSON.stringify({ segmentIds: [segmentId], subtitleStyle: { animation: subAnimation, font: subFont, position: subPosition, color: subColor, fontSize: subFontSize } }),
             });
 
-            if (res.ok) {
-                if (selectedProject) {
-                    await fetchProjectDetail(selectedProject.id);
-                }
+            if (!res.ok) {
+                const err = await res.json();
+                alert(err.error || "Render failed to queue");
+                setRendering((prev) => { const n = new Set(prev); n.delete(segmentId); return n; });
+                return;
             }
+
+            // Poll for completion — check every 5s for up to 3 minutes
+            const pollInterval = 5000;
+            const maxPolls = 36; // 3 minutes
+            let polls = 0;
+
+            const poll = async () => {
+                polls++;
+                try {
+                    const detailRes = await fetch(`/api/clipper/${projectId}`);
+                    if (detailRes.ok) {
+                        const detail = await detailRes.json();
+                        const seg = [...(detail.renderedClips || []), ...(detail.pendingClips || [])].find((c: any) => c.id === segmentId);
+                        if (seg?.shortVideo?.status === "RENDERED" && seg.status === "RENDERED") {
+                            // Render complete! Update UI
+                            setSelectedProject(detail);
+                            setRendering((prev) => { const n = new Set(prev); n.delete(segmentId); return n; });
+                            return; // Done polling
+                        }
+                    }
+                } catch { }
+
+                if (polls < maxPolls) {
+                    setTimeout(poll, pollInterval);
+                } else {
+                    // Timeout — stop rendering state, refresh anyway
+                    setRendering((prev) => { const n = new Set(prev); n.delete(segmentId); return n; });
+                    if (selectedProject?.id === projectId) {
+                        await fetchProjectDetail(projectId);
+                    }
+                }
+            };
+
+            // Start polling after a short initial delay (worker needs time to pick up)
+            setTimeout(poll, 3000);
+
         } catch (err) {
             console.error("Render error:", err);
-        } finally {
-            setRendering((prev) => {
-                const next = new Set(prev);
-                next.delete(segmentId);
-                return next;
-            });
+            setRendering((prev) => { const n = new Set(prev); n.delete(segmentId); return n; });
         }
+        // Note: rendering state is NOT removed here — it stays until poll detects completion
     };
 
     const handleAssignCampaign = async (projectId: string, briefId: string) => {
@@ -1129,11 +1162,20 @@ function ClipCard({
     return (
         <div
             className={`rounded-xl border transition-colors ${
-                isRendered
-                    ? "bg-emerald-900/10 border-emerald-800/30"
-                    : "bg-gray-800/40 border-gray-800 hover:border-gray-700"
+                isRendering
+                    ? "bg-amber-900/10 border-amber-500/50 animate-pulse"
+                    : isRendered
+                        ? "bg-emerald-900/10 border-emerald-800/30"
+                        : "bg-gray-800/40 border-gray-800 hover:border-gray-700"
             }`}
         >
+            {/* Rendering Banner */}
+            {isRendering && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-600/20 border-b border-amber-600/30 rounded-t-xl">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                    <span className="text-xs font-medium text-amber-400">Rendering in progress... This may take 1-2 minutes.</span>
+                </div>
+            )}
             {/* Main Row */}
             <div className="flex items-center gap-4 p-3">
                 {/* Score */}
