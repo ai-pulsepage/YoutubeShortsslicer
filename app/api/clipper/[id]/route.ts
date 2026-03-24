@@ -48,6 +48,38 @@ export async function GET(
         return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
+    // Helper: extract words from transcript for a segment's time range
+    const transcriptSegments = project.video.transcript?.segments as any[] | undefined;
+    function extractWordsForSegment(startTime: number, endTime: number) {
+        if (!transcriptSegments || !Array.isArray(transcriptSegments)) return [];
+        const words: { text: string; start: number; end: number }[] = [];
+        for (const seg of transcriptSegments) {
+            // Skip segments outside this clip's range
+            if (seg.end < startTime - 0.5 || seg.start > endTime + 0.5) continue;
+            if (seg.words && Array.isArray(seg.words) && seg.words.length > 0) {
+                for (const w of seg.words) {
+                    if (w.start >= startTime - 0.5 && w.end <= endTime + 0.5) {
+                        words.push({ text: (w.word || w.text || "").trim(), start: w.start, end: w.end });
+                    }
+                }
+            } else if (seg.text && seg.start !== undefined) {
+                const segWords = seg.text.trim().split(/\s+/).filter((w: string) => w.length > 0);
+                if (segWords.length > 0) {
+                    const segDuration = (seg.end || seg.start + 2) - seg.start;
+                    const wordDuration = segDuration / segWords.length;
+                    for (let i = 0; i < segWords.length; i++) {
+                        const wStart = seg.start + i * wordDuration;
+                        const wEnd = seg.start + (i + 1) * wordDuration;
+                        if (wStart >= startTime - 0.5 && wEnd <= endTime + 0.5) {
+                            words.push({ text: segWords[i], start: wStart, end: wEnd });
+                        }
+                    }
+                }
+            }
+        }
+        return words;
+    }
+
     // Compute estimated earnings for rendered clips
     const renderedClips = project.video.segments
         .filter((s) => s.shortVideo?.status === "RENDERED")
@@ -65,7 +97,9 @@ export async function GET(
             hookText: s.hookText,
             hookFontSize: (s as any).hookFontSize,
             hookFont: (s as any).hookFont,
-            editedWords: s.editedWords,
+            editedWords: (s.editedWords && (s.editedWords as any[]).length > 0)
+                ? s.editedWords
+                : extractWordsForSegment(s.startTime, s.endTime),
             shortVideo: s.shortVideo,
         }));
 
@@ -85,7 +119,9 @@ export async function GET(
             hookText: s.hookText,
             hookFontSize: (s as any).hookFontSize,
             hookFont: (s as any).hookFont,
-            editedWords: s.editedWords,
+            editedWords: (s.editedWords && (s.editedWords as any[]).length > 0)
+                ? s.editedWords
+                : extractWordsForSegment(s.startTime, s.endTime),
             shortVideo: s.shortVideo,
         }));
 

@@ -771,6 +771,32 @@ const renderWorker = new Worker(
             }
             await job.updateProgress(70);
 
+            // Step 3.6: Hook text overlay (on-screen title at top of video)
+            const hookOverlay = job.data.hookOverlay !== false; // default true
+            const resolvedHookText = job.data.hookText || (segment as any).hookText;
+            if (hookOverlay && resolvedHookText) {
+                try {
+                    const hookFontSize = job.data.hookFontSize || (segment as any).hookFontSize || 24;
+                    const hookFont = job.data.hookFont || (segment as any).hookFont || "Montserrat";
+                    // Escape text for FFmpeg drawtext filter
+                    const escapedHook = resolvedHookText
+                        .replace(/\\/g, "\\\\\\\\")
+                        .replace(/'/g, "'\\''")
+                        .replace(/:/g, "\\\\:")
+                        .replace(/"/g, '\\\\"');
+                    const hookOutput = path.join(renderDir, "hooked.mp4");
+                    const escapedRenderDir = renderDir.replace(/\\/g, "/");
+                    execSync(
+                        `ffmpeg -i "${outputPath}" -vf "drawtext=text='${escapedHook}':fontsize=${hookFontSize}:fontfile=/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf:fontcolor=white:borderw=3:bordercolor=black:shadowcolor=black@0.5:shadowx=2:shadowy=2:x=(w-text_w)/2:y=100:enable='between(t,0.5,4)':alpha='if(lt(t\\,1)\\,t-0.5\\,if(gt(t\\,3.5)\\,4-t\\,1))'" -c:v libx264 -preset fast -crf 23 -c:a copy "${hookOutput}" -y`,
+                        { timeout: 300000 }
+                    );
+                    fs.renameSync(hookOutput, outputPath);
+                    console.log(`[Render] ✅ Hook text burned: "${resolvedHookText.substring(0, 50)}..." (font=${hookFont}, size=${hookFontSize})`);
+                } catch (hookErr: any) {
+                    console.warn(`[Render] Hook text burn failed: ${hookErr.message}`);
+                }
+            }
+
             // Step 3.7: Watermark overlay if campaign brief requires it
             const clipProject = (segment.video as any)?.clipProjects?.[0];
             const brief = clipProject?.brief;
