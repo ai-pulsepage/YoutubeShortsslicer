@@ -430,46 +430,41 @@ export default function ClipStudioPage() {
                 return;
             }
 
-            // Poll for completion — check every 5s for up to 3 minutes
-            const pollInterval = 5000;
-            const maxPolls = 36;
+            // Poll for completion using setInterval
             let polls = 0;
-            let sawRendering = false; // Must see RENDERING state first before accepting RENDERED
-
-            const poll = async () => {
+            let sawRendering = false;
+            const intervalId = setInterval(async () => {
                 polls++;
+                console.log(`[Poll #${polls}] Checking render status for ${segmentId}...`);
                 try {
                     const detailRes = await fetch(`/api/clipper/${projectId}`);
-                    if (detailRes.ok) {
-                        const detail = await detailRes.json();
-                        const allClips = [...(detail.renderedClips || []), ...(detail.pendingClips || [])];
-                        const seg = allClips.find((c: any) => c.id === segmentId);
+                    if (!detailRes.ok) return;
+                    const detail = await detailRes.json();
+                    const allClips = [...(detail.renderedClips || []), ...(detail.pendingClips || [])];
+                    const seg = allClips.find((c: any) => c.id === segmentId);
+                    console.log(`[Poll #${polls}] segment status=${seg?.status}, sawRendering=${sawRendering}`);
 
-                        // Track: must see RENDERING before we accept RENDERED as "done"
-                        if (seg?.status === "RENDERING") {
-                            sawRendering = true;
-                        }
+                    if (seg?.status === "RENDERING") sawRendering = true;
 
-                        if (sawRendering && seg?.status === "RENDERED") {
-                            // Render actually completed (transitioned RENDERING → RENDERED)
-                            setRendering((prev) => { const n = new Set(prev); n.delete(segmentId); return n; });
-                            // Force clean refresh
-                            await fetchProjectDetail(projectId);
-                            return;
-                        }
+                    if (sawRendering && seg?.status === "RENDERED") {
+                        clearInterval(intervalId);
+                        setRendering((prev) => { const n = new Set(prev); n.delete(segmentId); return n; });
+                        setSelectedProject(detail);
+                        console.log("[Poll] ✅ Render complete! UI updated.");
+                        return;
                     }
-                } catch { }
-
-                if (polls < maxPolls) {
-                    setTimeout(poll, pollInterval);
-                } else {
-                    setRendering((prev) => { const n = new Set(prev); n.delete(segmentId); return n; });
-                    await fetchProjectDetail(projectId);
+                } catch (e) {
+                    console.warn("[Poll] Error:", e);
                 }
-            };
 
-            // Start polling after render API returns (segment is already set to RENDERING)
-            setTimeout(poll, pollInterval);
+                // Timeout after 3 minutes
+                if (polls >= 36) {
+                    clearInterval(intervalId);
+                    setRendering((prev) => { const n = new Set(prev); n.delete(segmentId); return n; });
+                    fetchProjectDetail(projectId);
+                    console.log("[Poll] Timed out, refreshing anyway.");
+                }
+            }, 5000);
 
         } catch (err) {
             console.error("Render error:", err);
