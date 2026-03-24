@@ -1430,13 +1430,13 @@ function ClipCard({
                         <div className="relative bg-black rounded-lg overflow-hidden" style={{ aspectRatio: "9/16", maxHeight: 200 }}>
                             {/* Hook text preview at top */}
                             {hookText && (
-                                <div className="absolute top-2 left-0 right-0 text-center px-2 z-10">
+                                <div className="absolute top-4 left-0 right-0 text-center px-3 z-10">
                                     <span className="text-white font-bold leading-tight" style={{
                                         fontFamily: hookFont || "Montserrat",
-                                        fontSize: "7px",
+                                        fontSize: `${Math.max(6, Math.round((hookFontSize || 24) * 0.35))}px`,
                                         textShadow: "1px 1px 2px rgba(0,0,0,0.9)",
                                         display: "-webkit-box",
-                                        WebkitLineClamp: 2,
+                                        WebkitLineClamp: 3,
                                         WebkitBoxOrient: "vertical" as any,
                                         overflow: "hidden",
                                     }}>
