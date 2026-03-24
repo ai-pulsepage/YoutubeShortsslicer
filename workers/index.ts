@@ -774,13 +774,15 @@ const renderWorker = new Worker(
                 try {
                     const hookFontSize = job.data.hookFontSize || (segment as any).hookFontSize || 48;
                     const hookFont = job.data.hookFont || (segment as any).hookFont || "Montserrat";
+                    // Scale font for 1080x1920 video canvas (UI values are web-sized)
+                    const scaledHookSize = Math.round(hookFontSize * 2);
                     // Simple escaping: curly quote for apostrophes, backslash-colon for colons
                     const escapedHook = resolvedHookText
                         .replace(/'/g, "\u2019")
                         .replace(/:/g, "\\:");
                     // Wrap long text into lines that fit 1080px width
                     // At fontsize 48, approx 30 chars per line; scale for other sizes
-                    const maxCharsPerLine = Math.max(15, Math.floor(1080 / (hookFontSize * 0.6)));
+                    const maxCharsPerLine = Math.max(15, Math.floor(1080 / (scaledHookSize * 0.6)));
                     const words = escapedHook.split(' ');
                     const lines: string[] = [];
                     let currentLine = '';
@@ -796,7 +798,7 @@ const renderWorker = new Worker(
                     const wrappedHook = lines.slice(0, 3).join('\n'); // Max 3 lines
                     const hookOutput = path.join(renderDir, "hooked.mp4");
                     execSync(
-                        `ffmpeg -i "${outputPath}" -vf "drawtext=text='${wrappedHook}':fontsize=${hookFontSize}:fontcolor=white:borderw=4:bordercolor=black:shadowcolor=black@0.6:shadowx=2:shadowy=2:x=(w-text_w)/2:y=120:line_spacing=8" -c:v libx264 -preset fast -crf 23 -c:a copy "${hookOutput}" -y`,
+                        `ffmpeg -i "${outputPath}" -vf "drawtext=text='${wrappedHook}':fontsize=${scaledHookSize}:fontcolor=white:borderw=4:bordercolor=black:shadowcolor=black@0.6:shadowx=2:shadowy=2:x=(w-text_w)/2:y=260:line_spacing=8" -c:v libx264 -preset fast -crf 23 -c:a copy "${hookOutput}" -y`,
                         { timeout: 300000 }
                     );
                     fs.renameSync(hookOutput, outputPath);

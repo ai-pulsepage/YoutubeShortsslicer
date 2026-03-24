@@ -96,13 +96,15 @@ function generateWordHighlightDialogue(
 ): string[] {
     const events: string[] = [];
 
+    // Show the word group with each word highlighted in turn\r\n    if (line.words.length === 0 || line.words[0].start - segmentOffset < 0) return events;
+
     for (let wi = 0; wi < line.words.length; wi++) {
         const w = line.words[wi];
         const wStart = w.start - segmentOffset;
         const wEnd = w.end - segmentOffset;
         if (wStart < 0) continue;
 
-        // Build line with the current word highlighted
+        // Build line: only the current word is highlighted yellow
         const parts = line.words.map((word, idx) => {
             if (idx === wi) {
                 return `{\\c${highlightColor}}${word.word}{\\c&H00FFFFFF&}`;
@@ -140,7 +142,7 @@ export function generateASS(
 
     // Position: alignment + margin
     let alignment = 2; // bottom center
-    let marginV = 200;  // 200px from bottom on 1920px canvas
+    let marginV = 300;  // 300px from bottom on 1920px canvas
     if (s.position === "top") {
         alignment = 8; // top center
         marginV = 120;  // 120px from top (below hook text area)
