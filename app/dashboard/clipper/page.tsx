@@ -1035,6 +1035,8 @@ export default function ClipStudioPage() {
                                             onRender={handleRenderSegment}
                                             isRendering={rendering.has(clip.id)}
                                             isRendered
+                                            subFont={subFont}
+                                            subFontSize={subFontSize}
                                             hookSuggestions={briefs.find(b => b.name === selectedProject.campaignName)?.onScreenSuggestions || []}
                                             onClipUpdate={(updatedClip) => {
                                                 setSelectedProject(prev => {
@@ -1065,6 +1067,8 @@ export default function ClipStudioPage() {
                                             projectId={selectedProject.id}
                                             onRender={handleRenderSegment}
                                             isRendering={rendering.has(clip.id)}
+                                            subFont={subFont}
+                                            subFontSize={subFontSize}
                                             hookSuggestions={briefs.find(b => b.name === selectedProject.campaignName)?.onScreenSuggestions || []}
                                             onClipUpdate={(updatedClip) => {
                                                 setSelectedProject(prev => {
@@ -1111,6 +1115,8 @@ function ClipCard({
     onRender,
     isRendering,
     isRendered,
+    subFont,
+    subFontSize,
     hookSuggestions = [],
     onClipUpdate,
 }: {
@@ -1119,6 +1125,8 @@ function ClipCard({
     onRender: (projectId: string, segmentId: string) => void;
     isRendering: boolean;
     isRendered?: boolean;
+    subFont?: string;
+    subFontSize?: number;
     hookSuggestions?: string[];
     onClipUpdate?: (updatedClip: Partial<Segment> & { id: string }) => void;
 }) {
@@ -1446,9 +1454,12 @@ function ClipCard({
                             )}
 
                             {/* Subtitle preview at bottom */}
-                            <div className="absolute bottom-6 left-0 right-0 text-center px-3 z-10">
-                                <span className="text-white text-xs font-bold" style={{
-                                    textShadow: "1px 1px 3px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.5)",
+                            <div className="absolute bottom-3 left-0 right-0 text-center px-2 z-10">
+                                <span className="text-white font-bold leading-none inline" style={{
+                                    fontFamily: subFont || "Montserrat",
+                                    fontSize: `${Math.max(5, Math.round((subFontSize || 48) * 0.15))}px`,
+                                    textShadow: "1px 1px 2px rgba(0,0,0,0.9)",
+                                    letterSpacing: "-0.02em",
                                 }}>
                                     {editedWords.length > 0 ? (
                                         editedWords.slice(0, 8).map((w, i) => (
