@@ -156,8 +156,8 @@ export function generateASS(
     const outlineColor = hexToASS(s.outline);
     const shadowColor = s.shadow ? hexToASS(s.shadow) : "&H80000000";
 
-    // Use fontSize as-is — already sized for 1080x1920 canvas
-    const fontSize = s.fontSize;
+    // Scale 1.2x for video canvas — UI values are slightly smaller than ideal for 1080x1920
+    const fontSize = Math.round(s.fontSize * 1.2);
 
     const header = `[Script Info]
 Title: Subtitle
@@ -173,8 +173,8 @@ Style: Default,${s.font},${fontSize},${primaryColor},&H000000FF,${outlineColor},
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`;
 
-    // Dynamic words per line based on font size: larger = fewer words
-    const maxWords = fontSize >= 56 ? 3 : fontSize >= 40 ? 4 : 5;
+    // Dynamic words per line: fewer words at larger sizes to prevent 2-row overflow
+    const maxWords = fontSize >= 67 ? 2 : fontSize >= 48 ? 3 : 4;
     const lines = groupWordsIntoLines(segmentWords, maxWords);
     const events: string[] = [];
 
