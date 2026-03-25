@@ -157,25 +157,25 @@ export function generateASS(
     const outlineColor = hexToASS(s.outline);
     const shadowColor = s.shadow ? hexToASS(s.shadow) : "&H80000000";
 
-    // Scale 1.2x for video canvas — UI values are slightly smaller than ideal for 1080x1920
-    const fontSize = Math.round(s.fontSize * 1.2);
+    // Scale 1.5x for 1080x1920 video canvas
+    const fontSize = Math.round(s.fontSize * 1.5);
 
     const header = `[Script Info]
 Title: Subtitle
 ScriptType: v4.00+
 PlayResX: 1080
 PlayResY: 1920
-WrapStyle: 0
+WrapStyle: 2
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,${s.font},${fontSize},${primaryColor},&H000000FF,${outlineColor},${shadowColor},1,0,0,0,100,100,0,0,1,3,1,${alignment},40,40,${marginV},1
+Style: Default,${s.font},${fontSize},${primaryColor},&H000000FF,${outlineColor},${shadowColor},1,0,0,0,100,100,0,0,1,4,1,${alignment},40,40,${marginV},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`;
 
-    // Dynamic words per line: fewer words at larger sizes to prevent 2-row overflow
-    const maxWords = fontSize >= 67 ? 2 : fontSize >= 48 ? 3 : 4;
+    // One short phrase at a time — fewer words at larger sizes
+    const maxWords = fontSize >= 72 ? 2 : fontSize >= 54 ? 3 : 4;
     const lines = groupWordsIntoLines(segmentWords, maxWords);
     const events: string[] = [];
 
