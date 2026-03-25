@@ -178,7 +178,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
     const lines = groupWordsIntoLines(segmentWords, maxWords);
     const events: string[] = [];
 
-    const highlightColor = "&H0000FFFF"; // Yellow highlight for word-by-word
+    const highlightColor = "&H00FFCC00"; // Bright cyan-blue highlight for active word
 
     if (s.animation === "word-highlight") {
         // Word-by-word highlight: each word lights up as it's spoken

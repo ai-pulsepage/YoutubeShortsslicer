@@ -798,7 +798,7 @@ const renderWorker = new Worker(
                     const wrappedHook = lines.slice(0, 3).join('\n'); // Max 3 lines
                     const hookOutput = path.join(renderDir, "hooked.mp4");
                     execSync(
-                        `ffmpeg -i "${outputPath}" -vf "drawtext=text='${wrappedHook}':fontsize=${scaledHookSize}:fontcolor=white:borderw=4:bordercolor=black:shadowcolor=black@0.6:shadowx=2:shadowy=2:x=(w-text_w)/2:y=260:line_spacing=8" -c:v libx264 -preset fast -crf 23 -c:a copy "${hookOutput}" -y`,
+                        `ffmpeg -i "${outputPath}" -vf "drawtext=text='${wrappedHook}':fontsize=${scaledHookSize}:fontcolor=black:box=1:boxcolor=yellow@0.85:boxborderw=12:x=(w-text_w)/2:y=260:line_spacing=8" -c:v libx264 -preset fast -crf 23 -c:a copy "${hookOutput}" -y`,
                         { timeout: 300000 }
                     );
                     fs.renameSync(hookOutput, outputPath);
