@@ -772,17 +772,16 @@ const renderWorker = new Worker(
             const resolvedHookText = job.data.hookText || (segment as any).hookText;
             if (hookOverlay && resolvedHookText) {
                 try {
-                    const hookFontSize = job.data.hookFontSize || (segment as any).hookFontSize || 48;
+                    const hookFontSize = job.data.hookFontSize || (segment as any).hookFontSize || 80;
                     const hookFont = job.data.hookFont || (segment as any).hookFont || "Montserrat";
-                    // Scale font for 1080x1920 video canvas (UI values are web-sized)
-                    const scaledHookSize = Math.round(hookFontSize * 2);
+                    // NO scaling — fontSize is real pixels for 1080x1920 canvas
                     // Simple escaping: curly quote for apostrophes, backslash-colon for colons
                     const escapedHook = resolvedHookText
                         .replace(/'/g, "\u2019")
                         .replace(/:/g, "\\:");
-                    // Wrap long text into lines that fit 1080px width
-                    // At fontsize 48, approx 30 chars per line; scale for other sizes
-                    const maxCharsPerLine = Math.max(15, Math.floor(1080 / (scaledHookSize * 0.6)));
+                    // Character-width line splitting (same approach as subtitles)
+                    const charWidth = hookFontSize * 0.55;
+                    const maxCharsPerLine = Math.max(15, Math.floor(900 / charWidth));
                     const words = escapedHook.split(' ');
                     const lines: string[] = [];
                     let currentLine = '';
@@ -800,8 +799,9 @@ const renderWorker = new Worker(
                     const hookBoxClr = job.data.hookBoxColor || '#FFFF00';
                     // Convert hex to FFmpeg color format (0xRRGGBB)
                     const ffmpegBoxColor = hookBoxClr.replace('#', '0x');
+                    console.log(`[Render] Hook: fontSize=${hookFontSize}, boxColor=${hookBoxClr}, lines=${lines.length}`);
                     execSync(
-                        `ffmpeg -i "${outputPath}" -vf "drawtext=text='${wrappedHook}':fontsize=${scaledHookSize}:fontcolor=white:borderw=3:bordercolor=black:box=1:boxcolor=${ffmpegBoxColor}@0.85:boxborderw=12:x=(w-text_w)/2:y=260:line_spacing=8" -c:v libx264 -preset fast -crf 23 -c:a copy "${hookOutput}" -y`,
+                        `ffmpeg -i "${outputPath}" -vf "drawtext=text='${wrappedHook}':fontsize=${hookFontSize}:fontcolor=white:borderw=3:bordercolor=black:box=1:boxcolor=${ffmpegBoxColor}@0.85:boxborderw=12:x=(w-text_w)/2:y=260:line_spacing=8" -c:v libx264 -preset fast -crf 23 -c:a copy "${hookOutput}" -y`,
                         { timeout: 300000 }
                     );
                     fs.renameSync(hookOutput, outputPath);

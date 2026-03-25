@@ -192,7 +192,7 @@ export default function ClipStudioPage() {
     const [subFont, setSubFont] = useState("Montserrat");
     const [subPosition, setSubPosition] = useState("bottom");
     const [subColor, setSubColor] = useState("#FFFFFF");
-    const [subFontSize, setSubFontSize] = useState(48);
+    const [subFontSize, setSubFontSize] = useState(80);
     const [highlightColor, setHighlightColor] = useState("#00CCFF");
     const [hookBoxColor, setHookBoxColor] = useState("#FFFF00");
 
@@ -992,11 +992,11 @@ export default function ClipStudioPage() {
                                         onChange={(e) => setSubFontSize(parseInt(e.target.value))}
                                         className="w-full px-2.5 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white focus:border-violet-500 focus:outline-none"
                                     >
-                                        <option value={28}>28 (Small)</option>
-                                        <option value={36}>36 (Medium)</option>
-                                        <option value={48}>48 (Default)</option>
-                                        <option value={56}>56 (Large)</option>
-                                        <option value={64}>64 (XL)</option>
+                                        <option value={48}>48 (Small)</option>
+                                        <option value={64}>64 (Medium)</option>
+                                        <option value={80}>80 (Default)</option>
+                                        <option value={96}>96 (Large)</option>
+                                        <option value={120}>120 (XL)</option>
                                     </select>
                                 </div>
                                 <div>
