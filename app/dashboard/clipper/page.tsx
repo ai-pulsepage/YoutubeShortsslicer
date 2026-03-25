@@ -1166,7 +1166,7 @@ function ClipCard({
 }) {
     const [expanded, setExpanded] = useState(false);
     const [hookText, setHookText] = useState(clip.hookText || "");
-    const [hookFontSize, setHookFontSize] = useState(clip.hookFontSize || 24);
+    const [hookFontSize, setHookFontSize] = useState(clip.hookFontSize || 80);
     const [hookFont, setHookFont] = useState(clip.hookFont || "Montserrat");
     const [editedWords, setEditedWords] = useState<Array<{ text: string; start: number; end: number }>>(clip.editedWords || []);
     const [saving, setSaving] = useState(false);
@@ -1412,12 +1412,11 @@ function ClipCard({
                                     onChange={(e) => setHookFontSize(parseInt(e.target.value))}
                                     className="w-full px-2.5 py-1.5 bg-gray-800/60 border border-gray-700/50 rounded-lg text-xs text-white focus:border-violet-500 focus:outline-none"
                                 >
-                                    <option value={16}>16 (XS)</option>
-                                    <option value={20}>20 (Small)</option>
-                                    <option value={24}>24 (Default)</option>
-                                    <option value={28}>28 (Medium)</option>
-                                    <option value={32}>32 (Large)</option>
-                                    <option value={36}>36 (XL)</option>
+                                    <option value={48}>48 (Small)</option>
+                                    <option value={64}>64 (Medium)</option>
+                                    <option value={80}>80 (Default)</option>
+                                    <option value={96}>96 (Large)</option>
+                                    <option value={120}>120 (XL)</option>
                                 </select>
                             </div>
                         </div>

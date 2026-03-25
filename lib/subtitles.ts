@@ -146,7 +146,7 @@ function generateWordHighlightDialogue(
         // Build line: current word highlighted, others in default color
         const parts = line.words.map((word, idx) => {
             if (idx === wi) {
-                return `{\\c${highlightColor}}${word.word}{\\c&H00FFFFFF&}`;
+                return `{\\c${highlightColor}&}${word.word}{\\c&H00FFFFFF&}`;
             }
             return word.word;
         });
