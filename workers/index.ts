@@ -781,8 +781,9 @@ const renderWorker = new Worker(
                         .replace(/'/g, "\u2019")
                         .replace(/:/g, "\\:");
                     // Character-width line splitting (same approach as subtitles)
-                    const charWidth = hookFontSize * 0.55;
-                    const maxCharsPerLine = Math.max(15, Math.floor(900 / charWidth));
+                    const charWidth = hookFontSize * 0.65;
+                    const maxLineWidth = 800; // 1080 - 280px margin (conservative)
+                    const maxCharsPerLine = Math.max(15, Math.floor(maxLineWidth / charWidth));
                     const words = escapedHook.split(' ');
                     const lines: string[] = [];
                     let currentLine = '';
@@ -803,7 +804,7 @@ const renderWorker = new Worker(
                     const ffmpegFontColor = hookFntClr.replace('#', '0x');
                     console.log(`[Render] Hook: fontSize=${hookFontSize}, boxColor=${hookBoxClr}, lines=${lines.length}`);
                     execSync(
-                        `ffmpeg -i "${outputPath}" -vf "drawtext=text='${wrappedHook}':fontsize=${hookFontSize}:fontcolor=${ffmpegFontColor}:borderw=3:bordercolor=black:box=1:boxcolor=${ffmpegBoxColor}@0.85:boxborderw=12:x=(w-text_w)/2:y=260:line_spacing=8" -c:v libx264 -preset fast -crf 23 -c:a copy "${hookOutput}" -y`,
+                        `ffmpeg -i "${outputPath}" -vf "drawtext=text='${wrappedHook}':font=Montserrat:fontsize=${hookFontSize}:fontcolor=${ffmpegFontColor}:borderw=3:bordercolor=black:box=1:boxcolor=${ffmpegBoxColor}@0.85:boxborderw=12:x=(w-text_w)/2:y=260:line_spacing=8" -c:v libx264 -preset fast -crf 23 -c:a copy "${hookOutput}" -y`,
                         { timeout: 300000 }
                     );
                     fs.renameSync(hookOutput, outputPath);

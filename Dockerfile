@@ -10,7 +10,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fontconfig \
     fonts-liberation \
     fonts-noto-core \
+    wget \
+    unzip \
     && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /usr/share/fonts/google \
+    && wget -q -O /tmp/montserrat.zip 'https://fonts.google.com/download?family=Montserrat' \
+    && unzip -q /tmp/montserrat.zip -d /usr/share/fonts/google/ \
+    && rm /tmp/montserrat.zip \
     && fc-cache -fv
 
 # Install yt-dlp

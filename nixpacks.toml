@@ -5,10 +5,11 @@
 NIXPACKS_NODE_VERSION = "22.12"
 
 [phases.setup]
-aptPkgs = ["ffmpeg", "python3", "python3-pip", "fontconfig", "fonts-liberation", "fonts-noto-core"]
+aptPkgs = ["ffmpeg", "python3", "python3-pip", "fontconfig", "fonts-liberation", "fonts-noto-core", "wget", "unzip"]
 
 [phases.install]
 cmds = [
     "npm ci",
     "pip3 install --break-system-packages yt-dlp",
+    "mkdir -p /usr/share/fonts/google && wget -q -O /tmp/montserrat.zip 'https://fonts.google.com/download?family=Montserrat' && unzip -q /tmp/montserrat.zip -d /usr/share/fonts/google/ && fc-cache -fv",
 ]
