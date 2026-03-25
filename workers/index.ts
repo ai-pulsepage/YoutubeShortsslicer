@@ -680,6 +680,7 @@ const renderWorker = new Worker(
                             }
                         }
                     }
+                    console.log(`[Render] ===== SUBTITLE ENGINE v3 (no-multiplier, char-width) =====`);
                     console.log(`[Render] Subtitle style: ${JSON.stringify(subtitleStyle)}`);
 
                     // Parse transcript segments — Whisper stores as [{start, end, text, words: [{word, start, end}]}]

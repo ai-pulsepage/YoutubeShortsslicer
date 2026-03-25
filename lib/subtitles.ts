@@ -215,6 +215,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
 
     // Character-width-based line splitting — guarantees text fits within frame
     const lines = groupWordsByWidth(segmentWords, fontSize, 900, 4);
+    const charW = fontSize * 0.55;
+    for (let i = 0; i < lines.length; i++) {
+        const estWidth = Math.round(lines[i].text.length * charW);
+        console.log(`[ASS] Group ${i+1}/${lines.length}: "${lines[i].text}" (${lines[i].words.length} words, ~${estWidth}px)`);
+    }
     console.log(`[ASS] ${segmentWords.length} words → ${lines.length} groups (fontSize=${fontSize})`);
     const events: string[] = [];
 
