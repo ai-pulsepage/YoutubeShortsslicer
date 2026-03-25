@@ -11,12 +11,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-liberation \
     fonts-noto-core \
     wget \
-    unzip \
     && rm -rf /var/lib/apt/lists/* \
-    && mkdir -p /usr/share/fonts/google \
-    && wget -q -O /tmp/montserrat.zip 'https://fonts.google.com/download?family=Montserrat' \
-    && unzip -q /tmp/montserrat.zip -d /usr/share/fonts/google/ \
-    && rm /tmp/montserrat.zip \
+    && mkdir -p /usr/share/fonts/montserrat \
+    && wget -q -O /usr/share/fonts/montserrat/Montserrat-Bold.ttf 'https://github.com/JulietaUla/Montserrat/raw/master/fonts/ttf/Montserrat-Bold.ttf' \
+    && wget -q -O /usr/share/fonts/montserrat/Montserrat-Regular.ttf 'https://github.com/JulietaUla/Montserrat/raw/master/fonts/ttf/Montserrat-Regular.ttf' \
+    && wget -q -O /usr/share/fonts/montserrat/Montserrat-SemiBold.ttf 'https://github.com/JulietaUla/Montserrat/raw/master/fonts/ttf/Montserrat-SemiBold.ttf' \
     && fc-cache -fv
 
 # Install yt-dlp
