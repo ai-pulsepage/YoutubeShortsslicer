@@ -195,6 +195,7 @@ export default function ClipStudioPage() {
     const [subFontSize, setSubFontSize] = useState(80);
     const [highlightColor, setHighlightColor] = useState("#00CCFF");
     const [hookBoxColor, setHookBoxColor] = useState("#FFFF00");
+    const [hookFontColor, setHookFontColor] = useState("#FFFFFF");
 
     // ─── Data Fetching ───────────────────────────────────
 
@@ -394,7 +395,7 @@ export default function ClipStudioPage() {
             const res = await fetch(`/api/clipper/${projectId}/render`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ all: true, subtitleStyle: { animation: subAnimation, font: subFont, position: subPosition, color: subColor, fontSize: subFontSize, highlightColor }, hookBoxColor }),
+                body: JSON.stringify({ all: true, subtitleStyle: { animation: subAnimation, font: subFont, position: subPosition, color: subColor, fontSize: subFontSize, highlightColor }, hookBoxColor, hookFontColor }),
             });
 
             if (res.ok) {
@@ -422,7 +423,7 @@ export default function ClipStudioPage() {
             const res = await fetch(`/api/clipper/${projectId}/render`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ segmentIds: [segmentId], subtitleStyle: { animation: subAnimation, font: subFont, position: subPosition, color: subColor, fontSize: subFontSize, highlightColor }, hookFontSize: opts?.hookFontSize, hookFont: opts?.hookFont, hookBoxColor }),
+                body: JSON.stringify({ segmentIds: [segmentId], subtitleStyle: { animation: subAnimation, font: subFont, position: subPosition, color: subColor, fontSize: subFontSize, highlightColor }, hookFontSize: opts?.hookFontSize, hookFont: opts?.hookFont, hookBoxColor, hookFontColor }),
             });
 
             if (!res.ok) {
@@ -1021,6 +1022,18 @@ export default function ClipStudioPage() {
                                             className="w-8 h-8 rounded border border-gray-700 bg-transparent cursor-pointer"
                                         />
                                         <span className="text-xs text-gray-400">{hookBoxColor}</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-500 mb-1">Hook Font Color</label>
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="color"
+                                            value={hookFontColor}
+                                            onChange={(e) => setHookFontColor(e.target.value)}
+                                            className="w-8 h-8 rounded border border-gray-700 bg-transparent cursor-pointer"
+                                        />
+                                        <span className="text-xs text-gray-400">{hookFontColor}</span>
                                     </div>
                                 </div>
                             </div>

@@ -797,11 +797,12 @@ const renderWorker = new Worker(
                     const wrappedHook = lines.slice(0, 3).join('\n'); // Max 3 lines
                     const hookOutput = path.join(renderDir, "hooked.mp4");
                     const hookBoxClr = job.data.hookBoxColor || '#FFFF00';
-                    // Convert hex to FFmpeg color format (0xRRGGBB)
+                    const hookFntClr = job.data.hookFontColor || '#FFFFFF';
                     const ffmpegBoxColor = hookBoxClr.replace('#', '0x');
+                    const ffmpegFontColor = hookFntClr.replace('#', '0x');
                     console.log(`[Render] Hook: fontSize=${hookFontSize}, boxColor=${hookBoxClr}, lines=${lines.length}`);
                     execSync(
-                        `ffmpeg -i "${outputPath}" -vf "drawtext=text='${wrappedHook}':fontsize=${hookFontSize}:fontcolor=white:borderw=3:bordercolor=black:box=1:boxcolor=${ffmpegBoxColor}@0.85:boxborderw=12:x=(w-text_w)/2:y=260:line_spacing=8" -c:v libx264 -preset fast -crf 23 -c:a copy "${hookOutput}" -y`,
+                        `ffmpeg -i "${outputPath}" -vf "drawtext=text='${wrappedHook}':fontsize=${hookFontSize}:fontcolor=${ffmpegFontColor}:borderw=3:bordercolor=black:box=1:boxcolor=${ffmpegBoxColor}@0.85:boxborderw=12:x=(w-text_w)/2:y=260:line_spacing=8" -c:v libx264 -preset fast -crf 23 -c:a copy "${hookOutput}" -y`,
                         { timeout: 300000 }
                     );
                     fs.renameSync(hookOutput, outputPath);
