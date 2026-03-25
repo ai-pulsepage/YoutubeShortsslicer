@@ -12,6 +12,7 @@ export interface SubtitleStyle {
     shadow: string;        // hex like #00000080
     position: "top" | "center" | "bottom";
     animation: string;     // word-highlight, fade, pop, slide-up, typewriter
+    highlightColor?: string; // hex like #00CCFF for karaoke active word
 }
 
 export interface WordTimestamp {
@@ -178,7 +179,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
     const lines = groupWordsIntoLines(segmentWords, maxWords);
     const events: string[] = [];
 
-    const highlightColor = "&H00FFCC00"; // Bright cyan-blue highlight for active word
+    const highlightColor = s.highlightColor ? hexToASS(s.highlightColor) : "&H00FFCC00"; // Default cyan-blue
 
     if (s.animation === "word-highlight") {
         // Word-by-word highlight: each word lights up as it's spoken

@@ -19,7 +19,7 @@ export async function POST(
 
     const { id } = await params;
     const body = await req.json();
-    const { segmentIds, all, subtitleStyle, hookFontSize: bodyHookFontSize, hookFont: bodyHookFont } = body;
+    const { segmentIds, all, subtitleStyle, hookFontSize: bodyHookFontSize, hookFont: bodyHookFont, hookBoxColor } = body;
 
     // Verify project ownership + load campaign brief
     const project = await prisma.clipProject.findUnique({
@@ -100,6 +100,7 @@ export async function POST(
             ctaOverlay: project.ctaOverlay,
             ctaText: project.ctaText,
             editedWords: (segment as any).editedWords || null,
+            hookBoxColor: hookBoxColor || null,
         });
 
         jobs.push({
