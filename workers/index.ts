@@ -775,9 +775,13 @@ const renderWorker = new Worker(
                 try {
                     const hookFontSize = job.data.hookFontSize || (segment as any).hookFontSize || 80;
                     const hookFont = job.data.hookFont || (segment as any).hookFont || "Montserrat";
+                    const hookUpper = job.data.hookUppercase !== false; // default true
                     // NO scaling — fontSize is real pixels for 1080x1920 canvas
+                    // Apply uppercase if enabled
+                    let hookTextToRender = resolvedHookText;
+                    if (hookUpper) hookTextToRender = hookTextToRender.toUpperCase();
                     // Simple escaping: curly quote for apostrophes, backslash-colon for colons
-                    const escapedHook = resolvedHookText
+                    const escapedHook = hookTextToRender
                         .replace(/'/g, "\u2019")
                         .replace(/:/g, "\\:");
                     // Character-width line splitting (same approach as subtitles)
@@ -802,9 +806,9 @@ const renderWorker = new Worker(
                     const hookFntClr = job.data.hookFontColor || '#FFFFFF';
                     const ffmpegBoxColor = hookBoxClr.replace('#', '0x');
                     const ffmpegFontColor = hookFntClr.replace('#', '0x');
-                    console.log(`[Render] Hook: fontSize=${hookFontSize}, boxColor=${hookBoxClr}, lines=${lines.length}`);
+                    console.log(`[Render] Hook: fontSize=${hookFontSize}, boxColor=${hookBoxClr}, upper=${hookUpper}, lines=${lines.length}`);
                     execSync(
-                        `ffmpeg -i "${outputPath}" -vf "drawtext=text='${wrappedHook}':font=Montserrat:fontsize=${hookFontSize}:fontcolor=${ffmpegFontColor}:borderw=3:bordercolor=black:box=1:boxcolor=${ffmpegBoxColor}@0.85:boxborderw=12:x=(w-text_w)/2:y=260:line_spacing=8" -c:v libx264 -preset fast -crf 23 -c:a copy "${hookOutput}" -y`,
+                        `ffmpeg -i "${outputPath}" -vf "drawtext=text='${wrappedHook}':font=${hookFont}:fontsize=${hookFontSize}:fontcolor=${ffmpegFontColor}:borderw=3:bordercolor=black:box=1:boxcolor=${ffmpegBoxColor}@0.85:boxborderw=12:x=(w-text_w)/2:y=260:line_spacing=8" -c:v libx264 -preset fast -crf 23 -c:a copy "${hookOutput}" -y`,
                         { timeout: 300000 }
                     );
                     fs.renameSync(hookOutput, outputPath);

@@ -196,6 +196,7 @@ export default function ClipStudioPage() {
     const [highlightColor, setHighlightColor] = useState("#00CCFF");
     const [hookBoxColor, setHookBoxColor] = useState("#FFFF00");
     const [hookFontColor, setHookFontColor] = useState("#FFFFFF");
+    const [hookUppercase, setHookUppercase] = useState(true);
 
     // ─── Data Fetching ───────────────────────────────────
 
@@ -395,7 +396,7 @@ export default function ClipStudioPage() {
             const res = await fetch(`/api/clipper/${projectId}/render`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ all: true, subtitleStyle: { animation: subAnimation, font: subFont, position: subPosition, color: subColor, fontSize: subFontSize, highlightColor }, hookBoxColor, hookFontColor }),
+                body: JSON.stringify({ all: true, subtitleStyle: { animation: subAnimation, font: subFont, position: subPosition, color: subColor, fontSize: subFontSize, highlightColor }, hookBoxColor, hookFontColor, hookUppercase }),
             });
 
             if (res.ok) {
@@ -423,7 +424,7 @@ export default function ClipStudioPage() {
             const res = await fetch(`/api/clipper/${projectId}/render`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ segmentIds: [segmentId], subtitleStyle: { animation: subAnimation, font: subFont, position: subPosition, color: subColor, fontSize: subFontSize, highlightColor }, hookFontSize: opts?.hookFontSize, hookFont: opts?.hookFont, hookBoxColor, hookFontColor }),
+                body: JSON.stringify({ segmentIds: [segmentId], subtitleStyle: { animation: subAnimation, font: subFont, position: subPosition, color: subColor, fontSize: subFontSize, highlightColor }, hookFontSize: opts?.hookFontSize, hookFont: opts?.hookFont, hookBoxColor, hookFontColor, hookUppercase }),
             });
 
             if (!res.ok) {
@@ -1036,6 +1037,19 @@ export default function ClipStudioPage() {
                                         <span className="text-xs text-gray-400">{hookFontColor}</span>
                                     </div>
                                 </div>
+                                <div className="flex items-center">
+                                    <label className="block text-xs text-gray-500 mb-1 mr-2">Uppercase</label>
+                                    <button
+                                        onClick={() => setHookUppercase(!hookUppercase)}
+                                        className={`px-3 py-1 rounded text-xs font-bold transition-colors ${
+                                            hookUppercase
+                                                ? "bg-violet-600 text-white"
+                                                : "bg-gray-700 text-gray-400"
+                                        }`}
+                                    >
+                                        {hookUppercase ? "ON" : "OFF"}
+                                    </button>
+                                </div>
                             </div>
                             {/* Live preview strip */}
                             <div className="mt-3 bg-black rounded-lg p-3 flex items-center justify-center" style={{ minHeight: 48 }}>
@@ -1413,10 +1427,10 @@ function ClipCard({
                                     className="w-full px-2.5 py-1.5 bg-gray-800/60 border border-gray-700/50 rounded-lg text-xs text-white focus:border-violet-500 focus:outline-none"
                                 >
                                     <option value={48}>48 (Small)</option>
-                                    <option value={64}>64 (Medium)</option>
-                                    <option value={80}>80 (Default)</option>
-                                    <option value={96}>96 (Large)</option>
-                                    <option value={120}>120 (XL)</option>
+                                    <option value={56}>56 (Medium)</option>
+                                    <option value={64}>64 (Default)</option>
+                                    <option value={72}>72 (Large)</option>
+                                    <option value={80}>80 (Max)</option>
                                 </select>
                             </div>
                         </div>
