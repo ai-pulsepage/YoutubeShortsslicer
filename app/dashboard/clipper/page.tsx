@@ -73,6 +73,16 @@ interface Segment {
     hookFontSize: number | null;
     hookFont: string | null;
     editedWords: Array<{ text: string; start: number; end: number }> | null;
+    // Per-clip style settings
+    subAnimation: string | null;
+    subFont: string | null;
+    subPosition: string | null;
+    subColor: string | null;
+    subFontSize: number | null;
+    subHighlightColor: string | null;
+    hookBoxColor: string | null;
+    hookFontColor: string | null;
+    hookUppercase: boolean | null;
     shortVideo: {
         id: string;
         storagePath: string | null;
@@ -187,16 +197,7 @@ export default function ClipStudioPage() {
     // Campaign assignment on existing projects
     const [assigningCampaign, setAssigningCampaign] = useState<string | null>(null);
 
-    // Subtitle settings for render
-    const [subAnimation, setSubAnimation] = useState("word-highlight");
-    const [subFont, setSubFont] = useState("Montserrat");
-    const [subPosition, setSubPosition] = useState("bottom");
-    const [subColor, setSubColor] = useState("#FFFFFF");
-    const [subFontSize, setSubFontSize] = useState(80);
-    const [highlightColor, setHighlightColor] = useState("#00CCFF");
-    const [hookBoxColor, setHookBoxColor] = useState("#FFFF00");
-    const [hookFontColor, setHookFontColor] = useState("#FFFFFF");
-    const [hookUppercase, setHookUppercase] = useState(true);
+
 
     // ─── Data Fetching ───────────────────────────────────
 
@@ -396,7 +397,7 @@ export default function ClipStudioPage() {
             const res = await fetch(`/api/clipper/${projectId}/render`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ all: true, subtitleStyle: { animation: subAnimation, font: subFont, position: subPosition, color: subColor, fontSize: subFontSize, highlightColor }, hookBoxColor, hookFontColor, hookUppercase }),
+                body: JSON.stringify({ all: true }),
             });
 
             if (res.ok) {
@@ -418,13 +419,13 @@ export default function ClipStudioPage() {
         }
     };
 
-    const handleRenderSegment = async (projectId: string, segmentId: string, opts?: { hookFontSize?: number; hookFont?: string }) => {
+    const handleRenderSegment = async (projectId: string, segmentId: string) => {
         setRendering((prev) => new Set(prev).add(segmentId));
         try {
             const res = await fetch(`/api/clipper/${projectId}/render`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ segmentIds: [segmentId], subtitleStyle: { animation: subAnimation, font: subFont, position: subPosition, color: subColor, fontSize: subFontSize, highlightColor }, hookFontSize: opts?.hookFontSize, hookFont: opts?.hookFont, hookBoxColor, hookFontColor, hookUppercase }),
+                body: JSON.stringify({ segmentIds: [segmentId] }),
             });
 
             if (!res.ok) {
@@ -929,145 +930,16 @@ export default function ClipStudioPage() {
                             </button>
                         </div>
 
-                        {/* Subtitle Settings */}
-                        <div className="px-6 py-4 border-b border-gray-800 bg-gray-900/50">
-                            <h3 className="text-sm font-semibold text-violet-400 mb-3 flex items-center gap-2">
-                                <Sparkles className="w-4 h-4" />
-                                Subtitle Settings
-                            </h3>
-                            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                                <div>
-                                    <label className="block text-xs text-gray-500 mb-1">Animation</label>
-                                    <select
-                                        value={subAnimation}
-                                        onChange={(e) => setSubAnimation(e.target.value)}
-                                        className="w-full px-2.5 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white focus:border-violet-500 focus:outline-none"
-                                    >
-                                        <option value="word-highlight">Word Highlight (Karaoke)</option>
-                                        <option value="pop">Pop Animation</option>
-                                        <option value="fade">Fade In/Out</option>
-                                        <option value="slide-up">Slide Up</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-xs text-gray-500 mb-1">Font</label>
-                                    <select
-                                        value={subFont}
-                                        onChange={(e) => setSubFont(e.target.value)}
-                                        className="w-full px-2.5 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white focus:border-violet-500 focus:outline-none"
-                                    >
-                                        <option value="Montserrat">Montserrat</option>
-                                        <option value="Inter">Inter</option>
-                                        <option value="Bebas Neue">Bebas Neue</option>
-                                        <option value="Impact">Impact</option>
-                                        <option value="Arial Black">Arial Black</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-xs text-gray-500 mb-1">Position</label>
-                                    <select
-                                        value={subPosition}
-                                        onChange={(e) => setSubPosition(e.target.value)}
-                                        className="w-full px-2.5 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white focus:border-violet-500 focus:outline-none"
-                                    >
-                                        <option value="bottom">Bottom</option>
-                                        <option value="center">Center</option>
-                                        <option value="top">Top</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-xs text-gray-500 mb-1">Color</label>
-                                    <div className="flex items-center gap-2">
-                                        <input
-                                            type="color"
-                                            value={subColor}
-                                            onChange={(e) => setSubColor(e.target.value)}
-                                            className="w-8 h-8 rounded border border-gray-700 bg-transparent cursor-pointer"
-                                        />
-                                        <span className="text-xs text-gray-400">{subColor}</span>
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="block text-xs text-gray-500 mb-1">Font Size</label>
-                                    <select
-                                        value={subFontSize}
-                                        onChange={(e) => setSubFontSize(parseInt(e.target.value))}
-                                        className="w-full px-2.5 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white focus:border-violet-500 focus:outline-none"
-                                    >
-                                        <option value={48}>48 (Small)</option>
-                                        <option value={64}>64 (Medium)</option>
-                                        <option value={80}>80 (Default)</option>
-                                        <option value={96}>96 (Large)</option>
-                                        <option value={120}>120 (XL)</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-xs text-gray-500 mb-1">Highlight Color</label>
-                                    <div className="flex items-center gap-2">
-                                        <input
-                                            type="color"
-                                            value={highlightColor}
-                                            onChange={(e) => setHighlightColor(e.target.value)}
-                                            className="w-8 h-8 rounded border border-gray-700 bg-transparent cursor-pointer"
-                                        />
-                                        <span className="text-xs text-gray-400">{highlightColor}</span>
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="block text-xs text-gray-500 mb-1">Hook Box Color</label>
-                                    <div className="flex items-center gap-2">
-                                        <input
-                                            type="color"
-                                            value={hookBoxColor}
-                                            onChange={(e) => setHookBoxColor(e.target.value)}
-                                            className="w-8 h-8 rounded border border-gray-700 bg-transparent cursor-pointer"
-                                        />
-                                        <span className="text-xs text-gray-400">{hookBoxColor}</span>
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="block text-xs text-gray-500 mb-1">Hook Font Color</label>
-                                    <div className="flex items-center gap-2">
-                                        <input
-                                            type="color"
-                                            value={hookFontColor}
-                                            onChange={(e) => setHookFontColor(e.target.value)}
-                                            className="w-8 h-8 rounded border border-gray-700 bg-transparent cursor-pointer"
-                                        />
-                                        <span className="text-xs text-gray-400">{hookFontColor}</span>
-                                    </div>
-                                </div>
-                                <div className="flex items-center">
-                                    <label className="block text-xs text-gray-500 mb-1 mr-2">Uppercase</label>
-                                    <button
-                                        onClick={() => setHookUppercase(!hookUppercase)}
-                                        className={`px-3 py-1 rounded text-xs font-bold transition-colors ${
-                                            hookUppercase
-                                                ? "bg-violet-600 text-white"
-                                                : "bg-gray-700 text-gray-400"
-                                        }`}
-                                    >
-                                        {hookUppercase ? "ON" : "OFF"}
-                                    </button>
-                                </div>
-                            </div>
-                            {/* Live preview strip */}
-                            <div className="mt-3 bg-black rounded-lg p-3 flex items-center justify-center" style={{ minHeight: 48 }}>
-                                <span
-                                    className="text-lg font-bold tracking-wide"
-                                    style={{
-                                        fontFamily: subFont,
-                                        color: subColor,
-                                        textShadow: "2px 2px 4px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.5)",
-                                    }}
-                                >
-                                    Sample subtitle text
-                                </span>
-                            </div>
+                        {/* Per-clip Settings Info */}
+                        <div className="px-6 py-3 border-b border-gray-800 bg-gray-900/50">
+                            <p className="text-xs text-gray-500 flex items-center gap-2">
+                                <Sparkles className="w-3.5 h-3.5 text-violet-400" />
+                                Expand any clip below to configure its subtitle & hook text style before rendering.
+                            </p>
                         </div>
 
                         {/* Clips List */}
-                        <div className="p-6 space-y-3 max-h-[60vh] overflow-y-auto">
+                        <div className="p-6 space-y-3 max-h-[70vh] overflow-y-auto">
                             {/* Rendered Clips */}
                             {selectedProject.renderedClips.length > 0 && (
                                 <>
@@ -1083,8 +955,6 @@ export default function ClipStudioPage() {
                                             onRender={handleRenderSegment}
                                             isRendering={rendering.has(clip.id)}
                                             isRendered
-                                            subFont={subFont}
-                                            subFontSize={subFontSize}
                                             hookSuggestions={briefs.find(b => b.name === selectedProject.campaignName)?.onScreenSuggestions || []}
                                             onClipUpdate={(updatedClip) => {
                                                 setSelectedProject(prev => {
@@ -1097,7 +967,7 @@ export default function ClipStudioPage() {
                                                 });
                                             }}
                                         />
-                                    ))}  
+                                    ))}
                                 </>
                             )}
 
@@ -1115,8 +985,6 @@ export default function ClipStudioPage() {
                                             projectId={selectedProject.id}
                                             onRender={handleRenderSegment}
                                             isRendering={rendering.has(clip.id)}
-                                            subFont={subFont}
-                                            subFontSize={subFontSize}
                                             hookSuggestions={briefs.find(b => b.name === selectedProject.campaignName)?.onScreenSuggestions || []}
                                             onClipUpdate={(updatedClip) => {
                                                 setSelectedProject(prev => {
@@ -1163,25 +1031,39 @@ function ClipCard({
     onRender,
     isRendering,
     isRendered,
-    subFont,
-    subFontSize,
     hookSuggestions = [],
     onClipUpdate,
 }: {
     clip: Segment;
     projectId: string;
-    onRender: (projectId: string, segmentId: string, opts?: { hookFontSize?: number; hookFont?: string }) => void;
+    onRender: (projectId: string, segmentId: string) => void;
     isRendering: boolean;
     isRendered?: boolean;
-    subFont?: string;
-    subFontSize?: number;
     hookSuggestions?: string[];
     onClipUpdate?: (updatedClip: Partial<Segment> & { id: string }) => void;
 }) {
     const [expanded, setExpanded] = useState(false);
+    const [settingsOpen, setSettingsOpen] = useState(false);
+
+    // Hook text
     const [hookText, setHookText] = useState(clip.hookText || "");
-    const [hookFontSize, setHookFontSize] = useState(clip.hookFontSize || 80);
+    const [hookFontSize, setHookFontSize] = useState(clip.hookFontSize || 64);
     const [hookFont, setHookFont] = useState(clip.hookFont || "Montserrat");
+
+    // Per-clip subtitle style
+    const [subAnimation, setSubAnimation] = useState(clip.subAnimation || "word-highlight");
+    const [subFont, setSubFont] = useState(clip.subFont || "Montserrat");
+    const [subPosition, setSubPosition] = useState(clip.subPosition || "bottom");
+    const [subColor, setSubColor] = useState(clip.subColor || "#FFFFFF");
+    const [subFontSize, setSubFontSize] = useState(clip.subFontSize || 64);
+    const [subHighlightColor, setSubHighlightColor] = useState(clip.subHighlightColor || "#00CCFF");
+
+    // Per-clip hook style
+    const [hookBoxColor, setHookBoxColor] = useState(clip.hookBoxColor || "#FFFF00");
+    const [hookFontColor, setHookFontColor] = useState(clip.hookFontColor || "#FFFFFF");
+    const [hookUppercase, setHookUppercase] = useState(clip.hookUppercase !== false);
+
+    // Transcript words
     const [editedWords, setEditedWords] = useState<Array<{ text: string; start: number; end: number }>>(clip.editedWords || []);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
@@ -1195,15 +1077,21 @@ function ClipCard({
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     hookText: hookText || null,
-                    hookFontSize: hookFontSize || 24,
-                    hookFont: hookFont || "Montserrat",
+                    hookFontSize,
+                    hookFont,
                     editedWords: editedWords.length > 0 ? editedWords : null,
+                    subAnimation, subFont, subPosition, subColor, subFontSize, subHighlightColor,
+                    hookBoxColor, hookFontColor, hookUppercase,
                 }),
             });
             if (res.ok) {
                 setSaved(true);
                 setTimeout(() => setSaved(false), 2000);
-                onClipUpdate?.({ id: clip.id, hookText, hookFontSize, hookFont, editedWords });
+                onClipUpdate?.({
+                    id: clip.id, hookText, hookFontSize, hookFont, editedWords,
+                    subAnimation, subFont, subPosition, subColor, subFontSize, subHighlightColor,
+                    hookBoxColor, hookFontColor, hookUppercase,
+                });
             }
         } catch (err) {
             console.error("Save error:", err);
@@ -1221,146 +1109,77 @@ function ClipCard({
     };
 
     return (
-        <div
-            className={`rounded-xl border transition-colors ${
-                isRendering
-                    ? "bg-amber-900/10 border-amber-500/50 animate-pulse"
-                    : isRendered
-                        ? "bg-emerald-900/10 border-emerald-800/30"
-                        : "bg-gray-800/40 border-gray-800 hover:border-gray-700"
-            }`}
-        >
-            {/* Rendering Banner */}
+        <div className={`rounded-xl border transition-colors ${
+            isRendering ? "bg-amber-900/10 border-amber-500/50 animate-pulse"
+                : isRendered ? "bg-emerald-900/10 border-emerald-800/30"
+                : "bg-gray-800/40 border-gray-800 hover:border-gray-700"
+        }`}>
             {isRendering && (
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-600/20 border-b border-amber-600/30 rounded-t-xl">
                     <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
-                    <span className="text-xs font-medium text-amber-400">Rendering in progress... This may take 1-2 minutes.</span>
+                    <span className="text-xs font-medium text-amber-400">Rendering in progress...</span>
                 </div>
             )}
+
             {/* Main Row */}
             <div className="flex items-center gap-4 p-3">
-                {/* Score */}
-                <div className="flex-shrink-0">
-                    <ViralScoreBadge score={clip.viralScore} />
-                </div>
-
-                {/* Info */}
+                <div className="flex-shrink-0"><ViralScoreBadge score={clip.viralScore} /></div>
                 <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white truncate">
-                        {clip.title || "Untitled Clip"}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-0.5 truncate">
-                        {clip.description}
-                    </p>
+                    <p className="text-sm font-medium text-white truncate">{clip.title || "Untitled Clip"}</p>
+                    <p className="text-xs text-gray-500 mt-0.5 truncate">{clip.description}</p>
                     <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
-                        <span>
-                            {formatDuration(clip.startTime)} → {formatDuration(clip.endTime)}
-                        </span>
+                        <span>{formatDuration(clip.startTime)} → {formatDuration(clip.endTime)}</span>
                         <span>{formatDuration(clip.duration)}</span>
-                        {clip.hookStrength && (
-                            <span className="text-orange-400">
-                                Hook: {clip.hookStrength}/10
-                            </span>
-                        )}
-                        {clip.hookText && (
-                            <span className="text-violet-400 flex items-center gap-0.5">
-                                <Type className="w-3 h-3" />
-                                Hook set
-                            </span>
-                        )}
+                        {clip.hookStrength && <span className="text-orange-400">Hook: {clip.hookStrength}/10</span>}
+                        {clip.hookText && <span className="text-violet-400 flex items-center gap-0.5"><Type className="w-3 h-3" /> Hook set</span>}
                     </div>
                 </div>
-
-                {/* Actions */}
                 <div className="flex-shrink-0 flex items-center gap-2">
-                    {/* Expand toggle */}
-                    <button
-                        onClick={() => setExpanded(!expanded)}
-                        className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
-                        title="Edit hook text & words"
-                    >
+                    <button onClick={() => setExpanded(!expanded)} className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors" title="Edit clip settings">
                         {expanded ? <ChevronUp className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
                     </button>
-
                     {isRendered && clip.shortVideo?.storagePath ? (
                         <>
-                            <button
-                                onClick={async () => {
-                                    try {
-                                        const res = await fetch(`/api/shorts/${clip.shortVideo!.id}/stream?t=${Date.now()}`);
-                                        if (!res.ok) throw new Error("Download failed");
-                                        const blob = await res.blob();
-                                        const url = URL.createObjectURL(blob);
-                                        const a = document.createElement("a");
-                                        a.href = url;
-                                        a.download = `${clip.title || "short"}.mp4`;
-                                        document.body.appendChild(a);
-                                        a.click();
-                                        document.body.removeChild(a);
-                                        URL.revokeObjectURL(url);
-                                    } catch (err) {
-                                        console.error("Download error:", err);
-                                        alert("Download failed. Please try again.");
-                                    }
-                                }}
-                                className="p-2 rounded-lg bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 transition-colors"
-                                title="Download"
-                            >
+                            <button onClick={async () => {
+                                try {
+                                    const res = await fetch(`/api/shorts/${clip.shortVideo!.id}/stream?t=${Date.now()}`);
+                                    if (!res.ok) throw new Error("Download failed");
+                                    const blob = await res.blob();
+                                    const url = URL.createObjectURL(blob);
+                                    const a = document.createElement("a");
+                                    a.href = url; a.download = `${clip.title || "short"}.mp4`;
+                                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                                    URL.revokeObjectURL(url);
+                                } catch { alert("Download failed."); }
+                            }} className="p-2 rounded-lg bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 transition-colors" title="Download">
                                 <Download className="w-4 h-4" />
                             </button>
-                            <button
-                                onClick={async () => {
-                                    try {
-                                        if (navigator.share) {
-                                            const res = await fetch(`/api/shorts/${clip.shortVideo!.id}/stream?t=${Date.now()}`);
-                                            const blob = await res.blob();
-                                            const file = new File([blob], `${clip.title || "short"}.mp4`, { type: "video/mp4" });
-                                            await navigator.share({ title: clip.title || "Short", files: [file] });
-                                        } else {
-                                            await navigator.clipboard.writeText(clip.title || "Short clip");
-                                            alert("Title copied! Download the video and share it on your preferred platform.");
-                                        }
-                                    } catch (err: any) {
-                                        if (err.name !== "AbortError") {
-                                            console.error("Share error:", err);
-                                        }
+                            <button onClick={async () => {
+                                try {
+                                    if (navigator.share) {
+                                        const res = await fetch(`/api/shorts/${clip.shortVideo!.id}/stream?t=${Date.now()}`);
+                                        const blob = await res.blob();
+                                        const file = new File([blob], `${clip.title || "short"}.mp4`, { type: "video/mp4" });
+                                        await navigator.share({ title: clip.title || "Short", files: [file] });
+                                    } else {
+                                        await navigator.clipboard.writeText(clip.title || "Short clip");
+                                        alert("Title copied!");
                                     }
-                                }}
-                                className="p-2 rounded-lg bg-violet-600/20 text-violet-400 hover:bg-violet-600/30 transition-colors"
-                                title="Share to social"
-                            >
+                                } catch (err: any) { if (err.name !== "AbortError") console.error("Share error:", err); }
+                            }} className="p-2 rounded-lg bg-violet-600/20 text-violet-400 hover:bg-violet-600/30 transition-colors" title="Share">
                                 <Share2 className="w-4 h-4" />
                             </button>
-                            <button
-                            onClick={() => onRender(projectId, clip.id, { hookFontSize, hookFont })}
-                                disabled={isRendering}
-                                className="p-2 rounded-lg bg-amber-600/20 text-amber-400 hover:bg-amber-600/30 disabled:opacity-50 transition-colors"
-                                title="Re-render with updated settings"
-                            >
-                                {isRendering ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                    <RefreshCw className="w-4 h-4" />
-                                )}
+                            <button onClick={() => onRender(projectId, clip.id)} disabled={isRendering}
+                                className="p-2 rounded-lg bg-amber-600/20 text-amber-400 hover:bg-amber-600/30 disabled:opacity-50 transition-colors" title="Re-render">
+                                {isRendering ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
                             </button>
                         </>
                     ) : clip.status === "RENDERING" ? (
-                        <span className="text-xs text-yellow-400 flex items-center gap-1">
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                            Rendering...
-                        </span>
+                        <span className="text-xs text-yellow-400 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Rendering...</span>
                     ) : (
-                        <button
-                            onClick={() => onRender(projectId, clip.id, { hookFontSize, hookFont })}
-                            disabled={isRendering}
-                            className="py-1.5 px-3 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-xs text-white rounded-lg transition-colors flex items-center gap-1.5"
-                        >
-                            {isRendering ? (
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                            ) : (
-                                <Play className="w-3 h-3" />
-                            )}
-                            Render
+                        <button onClick={() => onRender(projectId, clip.id)} disabled={isRendering}
+                            className="py-1.5 px-3 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-xs text-white rounded-lg transition-colors flex items-center gap-1.5">
+                            {isRendering ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />} Render
                         </button>
                     )}
                 </div>
@@ -1369,113 +1188,184 @@ function ClipCard({
             {/* Expanded Edit Panel */}
             {expanded && (
                 <div className="border-t border-gray-800/50 p-4 space-y-4">
-                    {/* Hook Text Picker */}
+                    {/* Hook Text */}
                     <div>
                         <label className="block text-xs font-semibold text-violet-400 mb-2 flex items-center gap-1.5">
-                            <Type className="w-3.5 h-3.5" />
-                            Hook Text (on-screen title)
+                            <Type className="w-3.5 h-3.5" /> Hook Text (on-screen title)
                         </label>
-
-                        {/* Campaign Suggestions */}
                         {hookSuggestions.length > 0 && (
                             <div className="flex flex-wrap gap-1.5 mb-2">
-                                {hookSuggestions.map((suggestion, i) => (
-                                    <button
-                                        key={i}
-                                        onClick={() => setHookText(suggestion)}
+                                {hookSuggestions.map((s, i) => (
+                                    <button key={i} onClick={() => setHookText(s)}
                                         className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${
-                                            hookText === suggestion
-                                                ? "bg-violet-600/30 border-violet-500 text-violet-300"
-                                                : "bg-gray-800/60 border-gray-700/50 text-gray-400 hover:border-violet-500/50 hover:text-violet-400"
-                                        }`}
-                                    >
-                                        {suggestion}
-                                    </button>
+                                            hookText === s ? "bg-violet-600/30 border-violet-500 text-violet-300"
+                                                : "bg-gray-800/60 border-gray-700/50 text-gray-400 hover:border-violet-500/50"
+                                        }`}>{s}</button>
                                 ))}
                             </div>
                         )}
-
-                        <input
-                            type="text"
-                            value={hookText}
-                            onChange={(e) => setHookText(e.target.value)}
+                        <input type="text" value={hookText} onChange={(e) => setHookText(e.target.value)}
                             placeholder="e.g. JoeWo Shreds in Black Ops Royale First Look"
-                            className="w-full px-3 py-2 bg-gray-800/60 border border-gray-700/50 rounded-lg text-white placeholder-gray-600 focus:border-violet-500 focus:outline-none text-sm"
-                        />
+                            className="w-full px-3 py-2 bg-gray-800/60 border border-gray-700/50 rounded-lg text-white placeholder-gray-600 focus:border-violet-500 focus:outline-none text-sm" />
+                    </div>
 
-                        {/* Hook Font Controls */}
-                        <div className="flex gap-3 mt-2">
-                            <div className="flex-1">
-                                <label className="block text-[10px] text-gray-500 mb-1">Hook Font</label>
-                                <select
-                                    value={hookFont}
-                                    onChange={(e) => setHookFont(e.target.value)}
-                                    className="w-full px-2.5 py-1.5 bg-gray-800/60 border border-gray-700/50 rounded-lg text-xs text-white focus:border-violet-500 focus:outline-none"
-                                >
-                                    <option value="Montserrat">Montserrat</option>
-                                    <option value="Inter">Inter</option>
-                                    <option value="Bebas Neue">Bebas Neue</option>
-                                    <option value="Impact">Impact</option>
-                                    <option value="Arial Black">Arial Black</option>
-                                </select>
+                    {/* Render Settings (collapsible) */}
+                    <div className="border border-gray-700/40 rounded-lg overflow-hidden">
+                        <button onClick={() => setSettingsOpen(!settingsOpen)}
+                            className="w-full flex items-center justify-between px-3 py-2 bg-gray-800/40 hover:bg-gray-800/60 transition-colors">
+                            <span className="text-xs font-semibold text-violet-400 flex items-center gap-1.5">
+                                <Sparkles className="w-3.5 h-3.5" /> Render Settings
+                            </span>
+                            <ChevronUp className={`w-3.5 h-3.5 text-gray-500 transition-transform ${settingsOpen ? "" : "rotate-180"}`} />
+                        </button>
+                        {settingsOpen && (
+                            <div className="p-3 space-y-3 bg-gray-900/30">
+                                {/* Hook Style */}
+                                <div>
+                                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">Hook Text Style</p>
+                                    <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                                        <div>
+                                            <label className="block text-[10px] text-gray-500 mb-1">Font</label>
+                                            <select value={hookFont} onChange={(e) => setHookFont(e.target.value)}
+                                                className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-xs text-white focus:border-violet-500 focus:outline-none">
+                                                <option value="Montserrat">Montserrat</option>
+                                                <option value="Inter">Inter</option>
+                                                <option value="Bebas Neue">Bebas Neue</option>
+                                                <option value="Impact">Impact</option>
+                                                <option value="Arial Black">Arial Black</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] text-gray-500 mb-1">Size</label>
+                                            <select value={hookFontSize} onChange={(e) => setHookFontSize(parseInt(e.target.value))}
+                                                className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-xs text-white focus:border-violet-500 focus:outline-none">
+                                                <option value={48}>48 (Small)</option>
+                                                <option value={64}>64 (Medium)</option>
+                                                <option value={80}>80 (Large)</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] text-gray-500 mb-1">Font Color</label>
+                                            <div className="flex items-center gap-1.5">
+                                                <input type="color" value={hookFontColor} onChange={(e) => setHookFontColor(e.target.value)}
+                                                    className="w-7 h-7 rounded border border-gray-700 bg-transparent cursor-pointer" />
+                                                <span className="text-[10px] text-gray-500">{hookFontColor}</span>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] text-gray-500 mb-1">Box Color</label>
+                                            <div className="flex items-center gap-1.5">
+                                                <input type="color" value={hookBoxColor} onChange={(e) => setHookBoxColor(e.target.value)}
+                                                    className="w-7 h-7 rounded border border-gray-700 bg-transparent cursor-pointer" />
+                                                <span className="text-[10px] text-gray-500">{hookBoxColor}</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2 pt-3">
+                                            <label className="text-[10px] text-gray-500">UPPERCASE</label>
+                                            <button onClick={() => setHookUppercase(!hookUppercase)}
+                                                className={`px-2.5 py-1 rounded text-[10px] font-bold transition-colors ${hookUppercase ? "bg-violet-600 text-white" : "bg-gray-700 text-gray-400"}`}>
+                                                {hookUppercase ? "ON" : "OFF"}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <hr className="border-gray-700/40" />
+                                {/* Subtitle Style */}
+                                <div>
+                                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">Subtitle Style</p>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                        <div>
+                                            <label className="block text-[10px] text-gray-500 mb-1">Animation</label>
+                                            <select value={subAnimation} onChange={(e) => setSubAnimation(e.target.value)}
+                                                className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-xs text-white focus:border-violet-500 focus:outline-none">
+                                                <option value="word-highlight">Karaoke</option>
+                                                <option value="pop">Pop</option>
+                                                <option value="fade">Fade</option>
+                                                <option value="slide-up">Slide Up</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] text-gray-500 mb-1">Font</label>
+                                            <select value={subFont} onChange={(e) => setSubFont(e.target.value)}
+                                                className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-xs text-white focus:border-violet-500 focus:outline-none">
+                                                <option value="Montserrat">Montserrat</option>
+                                                <option value="Inter">Inter</option>
+                                                <option value="Bebas Neue">Bebas Neue</option>
+                                                <option value="Impact">Impact</option>
+                                                <option value="Arial Black">Arial Black</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] text-gray-500 mb-1">Size</label>
+                                            <select value={subFontSize} onChange={(e) => setSubFontSize(parseInt(e.target.value))}
+                                                className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-xs text-white focus:border-violet-500 focus:outline-none">
+                                                <option value={48}>48 (Small)</option>
+                                                <option value={64}>64 (Medium)</option>
+                                                <option value={80}>80 (Large)</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] text-gray-500 mb-1">Position</label>
+                                            <select value={subPosition} onChange={(e) => setSubPosition(e.target.value)}
+                                                className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-xs text-white focus:border-violet-500 focus:outline-none">
+                                                <option value="bottom">Bottom</option>
+                                                <option value="center">Center</option>
+                                                <option value="top">Top</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] text-gray-500 mb-1">Color</label>
+                                            <div className="flex items-center gap-1.5">
+                                                <input type="color" value={subColor} onChange={(e) => setSubColor(e.target.value)}
+                                                    className="w-7 h-7 rounded border border-gray-700 bg-transparent cursor-pointer" />
+                                                <span className="text-[10px] text-gray-500">{subColor}</span>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] text-gray-500 mb-1">Highlight</label>
+                                            <div className="flex items-center gap-1.5">
+                                                <input type="color" value={subHighlightColor} onChange={(e) => setSubHighlightColor(e.target.value)}
+                                                    className="w-7 h-7 rounded border border-gray-700 bg-transparent cursor-pointer" />
+                                                <span className="text-[10px] text-gray-500">{subHighlightColor}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <div className="flex-1">
-                                <label className="block text-[10px] text-gray-500 mb-1">Hook Size</label>
-                                <select
-                                    value={hookFontSize}
-                                    onChange={(e) => setHookFontSize(parseInt(e.target.value))}
-                                    className="w-full px-2.5 py-1.5 bg-gray-800/60 border border-gray-700/50 rounded-lg text-xs text-white focus:border-violet-500 focus:outline-none"
-                                >
-                                    <option value={48}>48 (Small)</option>
-                                    <option value={56}>56 (Medium)</option>
-                                    <option value={64}>64 (Default)</option>
-                                    <option value={72}>72 (Large)</option>
-                                    <option value={80}>80 (Max)</option>
-                                </select>
-                            </div>
-                        </div>
+                        )}
                     </div>
 
                     {/* Editable Transcript Words */}
                     {editedWords.length > 0 && (
                         <div>
                             <label className="block text-xs font-semibold text-amber-400 mb-2 flex items-center gap-1.5">
-                                <Pencil className="w-3.5 h-3.5" />
-                                Editable Transcript ({editedWords.length} words)
+                                <Pencil className="w-3.5 h-3.5" /> Editable Transcript ({editedWords.length} words)
                             </label>
                             <div className="flex flex-wrap gap-1 bg-gray-900/50 rounded-lg p-3 max-h-40 overflow-y-auto">
                                 {editedWords.map((word, i) => (
                                     <span key={i} className="inline-block">
                                         {editingWordIdx === i ? (
-                                            <input
-                                                type="text"
-                                                value={word.text}
+                                            <input type="text" value={word.text}
                                                 onChange={(e) => handleWordEdit(i, e.target.value)}
                                                 onBlur={() => setEditingWordIdx(null)}
                                                 onKeyDown={(e) => {
                                                     if (e.key === "Enter") setEditingWordIdx(null);
-                                                    if (e.key === "Tab") {
-                                                        e.preventDefault();
-                                                        setEditingWordIdx(i + 1 < editedWords.length ? i + 1 : null);
-                                                    }
+                                                    if (e.key === "Tab") { e.preventDefault(); setEditingWordIdx(i + 1 < editedWords.length ? i + 1 : null); }
                                                 }}
                                                 autoFocus
                                                 className="px-1.5 py-0.5 bg-violet-600/30 border border-violet-500 rounded text-xs text-white focus:outline-none w-auto"
-                                                style={{ width: Math.max(30, word.text.length * 8) }}
-                                            />
+                                                style={{ width: Math.max(30, word.text.length * 8) }} />
                                         ) : (
-                                            <button
-                                                onClick={() => setEditingWordIdx(i)}
+                                            <button onClick={() => setEditingWordIdx(i)}
                                                 className="px-1.5 py-0.5 rounded text-xs text-gray-300 hover:bg-gray-700/50 hover:text-white transition-colors cursor-text"
-                                                title={`${word.start.toFixed(1)}s → ${word.end.toFixed(1)}s · click to edit`}
-                                            >
+                                                title={`${word.start.toFixed(1)}s → ${word.end.toFixed(1)}s`}>
                                                 {word.text}
                                             </button>
                                         )}
                                     </span>
                                 ))}
                             </div>
-                            <p className="text-[10px] text-gray-600 mt-1">Click any word to edit it. Changes affect rendered subtitles.</p>
+                            <p className="text-[10px] text-gray-600 mt-1">Click any word to edit. Changes affect rendered subtitles.</p>
                         </div>
                     )}
 
@@ -1483,84 +1373,48 @@ function ClipCard({
                     <div>
                         <label className="block text-xs font-semibold text-gray-500 mb-2">Preview</label>
                         <div className="relative bg-black rounded-lg overflow-hidden" style={{ aspectRatio: "9/16", maxHeight: 200 }}>
-                            {/* Hook text preview at top */}
                             {hookText && (
                                 <div className="absolute top-4 left-0 right-0 text-center px-3 z-10">
                                     <span className="text-white font-bold leading-tight" style={{
-                                        fontFamily: hookFont || "Montserrat",
-                                        fontSize: `${Math.max(6, Math.round((hookFontSize || 24) * 0.35))}px`,
+                                        fontFamily: hookFont,
+                                        fontSize: `${Math.max(6, Math.round(hookFontSize * 0.35))}px`,
                                         textShadow: "1px 1px 2px rgba(0,0,0,0.9)",
-                                        display: "-webkit-box",
-                                        WebkitLineClamp: 3,
-                                        WebkitBoxOrient: "vertical" as any,
-                                        overflow: "hidden",
-                                    }}>
-                                        {hookText}
-                                    </span>
+                                        textTransform: hookUppercase ? "uppercase" : "none",
+                                    }}>{hookText}</span>
                                 </div>
                             )}
-
-                            {/* Subtitle preview at bottom */}
                             <div className="absolute bottom-3 left-0 right-0 text-center px-2 z-10">
                                 <span className="text-white font-bold leading-tight inline" style={{
-                                    fontFamily: subFont || "Montserrat",
-                                    fontSize: `${Math.max(5, Math.round((subFontSize || 48) * 0.2))}px`,
+                                    fontFamily: subFont,
+                                    fontSize: `${Math.max(5, Math.round(subFontSize * 0.2))}px`,
                                     textShadow: "1px 1px 2px rgba(0,0,0,0.9)",
                                 }}>
-                                    {editedWords.length > 0 ? (
-                                        editedWords.slice(0, (subFontSize || 48) > 48 ? 3 : 5).map((w, i) => (
-                                            <span key={i} className={i === 1 ? "text-yellow-400" : ""}>
-                                                {w.text}{" "}
-                                            </span>
-                                        ))
-                                    ) : (
-                                        <span className="text-gray-500 italic">No transcript words loaded</span>
-                                    )}
+                                    {editedWords.length > 0 ? editedWords.slice(0, 5).map((w, i) => (
+                                        <span key={i} className={i === 1 ? "text-yellow-400" : ""}>{w.text}{" "}</span>
+                                    )) : <span className="text-gray-500 italic">No transcript words loaded</span>}
                                 </span>
                             </div>
-
-                            {/* Dark placeholder */}
                             <div className="w-full h-full bg-gradient-to-b from-gray-800/50 to-gray-900/80 flex items-center justify-center">
                                 <Film className="w-8 h-8 text-gray-700" />
                             </div>
                         </div>
                     </div>
 
-                    {/* Save + Re-render Buttons */}
+                    {/* Save + Re-render */}
                     <div className="flex items-center justify-between">
-                        <p className="text-[10px] text-gray-600">
-                            Hook text and word edits are saved per clip and used in rendering
-                        </p>
+                        <p className="text-[10px] text-gray-600">All settings saved per clip</p>
                         <div className="flex items-center gap-2">
-                            <button
-                                onClick={handleSave}
-                                disabled={saving}
+                            <button onClick={handleSave} disabled={saving}
                                 className={`py-1.5 px-4 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
-                                    saved
-                                        ? "bg-emerald-600/20 text-emerald-400 border border-emerald-600/30"
-                                        : "bg-violet-600 hover:bg-violet-500 text-white"
-                                }`}
-                            >
-                                {saving ? (
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                ) : saved ? (
-                                    <CheckCircle2 className="w-3 h-3" />
-                                ) : (
-                                    <Save className="w-3 h-3" />
-                                )}
+                                    saved ? "bg-emerald-600/20 text-emerald-400 border border-emerald-600/30" : "bg-violet-600 hover:bg-violet-500 text-white"
+                                }`}>
+                                {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : saved ? <CheckCircle2 className="w-3 h-3" /> : <Save className="w-3 h-3" />}
                                 {saved ? "Saved!" : "Save Changes"}
                             </button>
                             {isRendered && (
-                                <button
-                                    onClick={() => onRender(projectId, clip.id, { hookFontSize, hookFont })}
-                                    disabled={isRendering}
-                                    className="py-1.5 px-4 rounded-lg text-xs font-medium bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white transition-all flex items-center gap-1.5"
-                                >
-                                    {isRendering ? (
-                                        <Loader2 className="w-3 h-3 animate-spin" />
-                                    ) : (
-                                        <RefreshCw className="w-3 h-3" />
-                                    )}
+                                <button onClick={() => onRender(projectId, clip.id)} disabled={isRendering}
+                                    className="py-1.5 px-4 rounded-lg text-xs font-medium bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white transition-all flex items-center gap-1.5">
+                                    {isRendering ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
                                     Re-render
                                 </button>
                             )}
@@ -1571,3 +1425,4 @@ function ClipCard({
         </div>
     );
 }
+

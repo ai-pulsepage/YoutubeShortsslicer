@@ -5,7 +5,9 @@ import { getQueue, QUEUE_NAMES } from "@/lib/queue";
 
 /**
  * POST /api/clipper/[id]/render — Render specific segments as polished clips
- * Body: { segmentIds: string[] } or { all: true } for all ≥7 score segments
+ * Body: { segmentIds: string[] } or { all: true }
+ *
+ * Subtitle and hook styles are read from each segment's DB record (per-clip settings).
  */
 
 export async function POST(
@@ -19,7 +21,7 @@ export async function POST(
 
     const { id } = await params;
     const body = await req.json();
-    const { segmentIds, all, subtitleStyle, hookFontSize: bodyHookFontSize, hookFont: bodyHookFont, hookBoxColor, hookFontColor, hookUppercase } = body;
+    const { segmentIds, all } = body;
 
     // Verify project ownership + load campaign brief
     const project = await prisma.clipProject.findUnique({
@@ -37,7 +39,6 @@ export async function POST(
     // Get segments to render
     let segments;
     if (all) {
-        // Render all segments with viral score ≥ 7 (including already rendered for re-render)
         segments = await prisma.segment.findMany({
             where: {
                 videoId: project.videoId,
@@ -66,43 +67,51 @@ export async function POST(
         );
     }
 
-    // Queue render jobs with clip studio options
+    // Queue render jobs — styles come from each segment's DB record
     const renderQueue = getQueue(QUEUE_NAMES.RENDER);
     const jobs = [];
 
     for (const segment of segments) {
-        // Mark segment as rendering
         await prisma.segment.update({
             where: { id: segment.id },
             data: { status: "RENDERING" },
         });
 
         // Auto-generate hookText: user edit > campaign suggestion + clip title
-        let resolvedHookText = (segment as any).hookText || null;
+        let resolvedHookText = segment.hookText || null;
         if (!resolvedHookText && onScreenSuggestions.length > 0) {
             const suggestion = onScreenSuggestions[Math.floor(Math.random() * onScreenSuggestions.length)];
             resolvedHookText = [suggestion, segment.title].filter(Boolean).join(" ");
         }
 
+        // Build subtitle style from segment's per-clip fields
+        const subtitleStyle = {
+            animation: segment.subAnimation || "word-highlight",
+            font: segment.subFont || "Montserrat",
+            position: segment.subPosition || "bottom",
+            color: segment.subColor || "#FFFFFF",
+            fontSize: segment.subFontSize || 64,
+            highlightColor: segment.subHighlightColor || "#00CCFF",
+        };
+
         const job = await renderQueue.add("render-clip", {
             segmentId: segment.id,
             userId: session.user.id,
             videoId: project.videoId,
-            // Clip Studio options
             clipMode: true,
             faceTrack: project.faceTrack,
             captionStyle: project.captionStyle,
-            subtitleStyle: subtitleStyle || null,
+            subtitleStyle,
             hookOverlay: project.hookOverlay,
             hookText: resolvedHookText,
-            hookFontSize: bodyHookFontSize || (segment as any).hookFontSize || null,
-            hookFont: bodyHookFont || (segment as any).hookFont || null,
+            hookFontSize: segment.hookFontSize || 64,
+            hookFont: segment.hookFont || "Montserrat",
             ctaOverlay: project.ctaOverlay,
             ctaText: project.ctaText,
-            editedWords: (segment as any).editedWords || null,
-            hookBoxColor: hookBoxColor || null,
-            hookFontColor: hookFontColor || null,
-            hookUppercase: hookUppercase !== undefined ? hookUppercase : true,
+            editedWords: segment.editedWords || null,
+            hookBoxColor: segment.hookBoxColor || "#FFFF00",
+            hookFontColor: segment.hookFontColor || "#FFFFFF",
+            hookUppercase: segment.hookUppercase !== false,
         });
 
         jobs.push({
@@ -112,7 +121,6 @@ export async function POST(
         });
     }
 
-    // Update clip count
     await prisma.clipProject.update({
         where: { id },
         data: { clipCount: segments.length },

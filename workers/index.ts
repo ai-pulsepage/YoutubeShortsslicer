@@ -773,7 +773,7 @@ const renderWorker = new Worker(
             const resolvedHookText = job.data.hookText || (segment as any).hookText;
             if (hookOverlay && resolvedHookText) {
                 try {
-                    const hookFontSize = job.data.hookFontSize || (segment as any).hookFontSize || 80;
+                    const hookFontSize = job.data.hookFontSize || (segment as any).hookFontSize || 64;
                     const hookFont = job.data.hookFont || (segment as any).hookFont || "Montserrat";
                     const hookUpper = job.data.hookUppercase !== false; // default true
                     // NO scaling — fontSize is real pixels for 1080x1920 canvas
@@ -784,10 +784,10 @@ const renderWorker = new Worker(
                     const escapedHook = hookTextToRender
                         .replace(/'/g, "\u2019")
                         .replace(/:/g, "\\:");
-                    // Character-width line splitting (same approach as subtitles)
-                    const charWidth = hookFontSize * 0.65;
-                    const maxLineWidth = 800; // 1080 - 280px margin (conservative)
-                    const maxCharsPerLine = Math.max(15, Math.floor(maxLineWidth / charWidth));
+                    // Character-width line splitting — RELAXED to prevent truncation
+                    const charWidth = hookFontSize * 0.5;
+                    const maxLineWidth = 1000; // 1080 - 80px margin
+                    const maxCharsPerLine = Math.max(12, Math.floor(maxLineWidth / charWidth));
                     const words = escapedHook.split(' ');
                     const lines: string[] = [];
                     let currentLine = '';
@@ -800,19 +800,27 @@ const renderWorker = new Worker(
                         }
                     }
                     if (currentLine.trim()) lines.push(currentLine.trim());
-                    const wrappedHook = lines.slice(0, 3).join('\n'); // Max 3 lines
-                    const hookOutput = path.join(renderDir, "hooked.mp4");
+                    // Up to 5 lines — no aggressive truncation
+                    const finalLines = lines.slice(0, 5);
                     const hookBoxClr = job.data.hookBoxColor || '#FFFF00';
                     const hookFntClr = job.data.hookFontColor || '#FFFFFF';
                     const ffmpegBoxColor = hookBoxClr.replace('#', '0x');
                     const ffmpegFontColor = hookFntClr.replace('#', '0x');
-                    console.log(`[Render] Hook: fontSize=${hookFontSize}, boxColor=${hookBoxClr}, upper=${hookUpper}, lines=${lines.length}`);
+                    // Per-line drawtext for TRUE center alignment
+                    const lineHeight = Math.round(hookFontSize * 1.4);
+                    const startY = 200;
+                    const drawFilters = finalLines.map((line: string, idx: number) => {
+                        const yPos = startY + (idx * lineHeight);
+                        return `drawtext=text='${line}':font=${hookFont}:fontsize=${hookFontSize}:fontcolor=${ffmpegFontColor}:borderw=3:bordercolor=black:box=1:boxcolor=${ffmpegBoxColor}@0.85:boxborderw=12:x=(w-text_w)/2:y=${yPos}`;
+                    }).join(',');
+                    console.log(`[Render] Hook: fontSize=${hookFontSize}, upper=${hookUpper}, lines=${finalLines.length}, maxChars=${maxCharsPerLine}`);
+                    const hookOutput = path.join(renderDir, "hooked.mp4");
                     execSync(
-                        `ffmpeg -i "${outputPath}" -vf "drawtext=text='${wrappedHook}':font=${hookFont}:fontsize=${hookFontSize}:fontcolor=${ffmpegFontColor}:borderw=3:bordercolor=black:box=1:boxcolor=${ffmpegBoxColor}@0.85:boxborderw=12:x=(w-text_w)/2:y=260:line_spacing=8" -c:v libx264 -preset fast -crf 23 -c:a copy "${hookOutput}" -y`,
+                        `ffmpeg -i "${outputPath}" -vf "${drawFilters}" -c:v libx264 -preset fast -crf 23 -c:a copy "${hookOutput}" -y`,
                         { timeout: 300000 }
                     );
                     fs.renameSync(hookOutput, outputPath);
-                    console.log(`[Render] ✅ Hook text burned: "${resolvedHookText.substring(0, 50)}..." (font=${hookFont}, size=${hookFontSize})`);
+                    console.log(`[Render] ✅ Hook: ${finalLines.length} lines, font=${hookFont}, size=${hookFontSize}`);
                 } catch (hookErr: any) {
                     console.warn(`[Render] Hook text burn failed: ${hookErr.message}`);
                 }

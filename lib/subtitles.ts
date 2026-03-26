@@ -82,10 +82,10 @@ interface LineGroup {
 function groupWordsByWidth(
     words: WordTimestamp[],
     fontSize: number,
-    maxWidth: number = 800,     // 1080 - 280px total margin (very conservative)
-    maxWordsPerGroup: number = 4
+    maxWidth: number = 1000,     // 1080 - 80px margin (relaxed)
+    maxWordsPerGroup: number = 6
 ): LineGroup[] {
-    const charWidth = fontSize * 0.65; // conservative avg char width (handles bold/wide fonts)
+    const charWidth = fontSize * 0.5; // realistic avg char width
     const lines: LineGroup[] = [];
     let current: WordTimestamp[] = [];
     let currentWidth = 0;
