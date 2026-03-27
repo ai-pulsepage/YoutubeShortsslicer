@@ -12,7 +12,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 import IORedis from "ioredis";
 
-// ─── Shared Setup ────────────────────────────────
+// â”€â”€â”€ Shared Setup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
@@ -28,14 +28,14 @@ const QUEUE_NAMES = {
     RENDER: "render",
 } as const;
 
-console.log("═══════════════════════════════════════════");
-console.log("  YouTube Shorts Slicer — Worker Runner");
-console.log("═══════════════════════════════════════════");
+console.log("â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•");
+console.log("  YouTube Shorts Slicer â€” Worker Runner");
+console.log("â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•");
 console.log(`  Redis: ${process.env.REDIS_URL ? "Connected" : "localhost"}`);
 console.log(`  DB:    ${process.env.DATABASE_URL ? "Connected" : "missing!"}`);
-console.log("═══════════════════════════════════════════\n");
+console.log("â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n");
 
-// ─── Download Worker ─────────────────────────────
+// â”€â”€â”€ Download Worker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import { execSync } from "child_process";
 import path from "path";
 import fs from "fs";
@@ -48,7 +48,7 @@ if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 const COOKIES_PATH = path.join(TEMP_DIR, "cookies.txt");
 if (process.env.YOUTUBE_COOKIES) {
     fs.writeFileSync(COOKIES_PATH, process.env.YOUTUBE_COOKIES);
-    console.log("  🍪 YouTube cookies loaded");
+    console.log("  ðŸª YouTube cookies loaded");
 }
 
 function ytdlpCookieFlag(): string {
@@ -85,7 +85,7 @@ function parseVTT(vttContent: string): { start: number; end: number; text: strin
 
             const text = textLines.join(" ").trim();
             if (text && text.length > 0) {
-                // Deduplicate — YouTube auto-captions often repeat content
+                // Deduplicate â€” YouTube auto-captions often repeat content
                 const lastSeg = segments[segments.length - 1];
                 if (!lastSeg || lastSeg.text !== text) {
                     segments.push({ start, end, text });
@@ -153,7 +153,7 @@ const downloadWorker = new Worker(
             }
             await job.updateProgress(70);
 
-            // Transcription: Whisper (precise timestamps) → VTT fallback
+            // Transcription: Whisper (precise timestamps) â†’ VTT fallback
             let transcriptId: string | null = null;
             if (autoTranscribe) {
                 try {
@@ -282,17 +282,17 @@ const downloadWorker = new Worker(
                     { videoId, userId, transcriptId },
                     { priority: 1 }
                 );
-                console.log(`[Download] → Chained to segmentation queue`);
+                console.log(`[Download] â†’ Chained to segmentation queue`);
             }
 
-            console.log(`[Download] ✅ Complete: ${videoId}`);
+            console.log(`[Download] âœ… Complete: ${videoId}`);
             await job.updateProgress(100);
 
             // Cleanup
             fs.rmSync(videoDir, { recursive: true, force: true });
             return { videoId, storagePath, title: metadata.title, hasTranscript: !!transcriptId };
         } catch (error: any) {
-            console.error(`[Download] ❌ Failed: ${videoId}`, error.message);
+            console.error(`[Download] âŒ Failed: ${videoId}`, error.message);
             await prisma.video.update({
                 where: { id: videoId },
                 data: { status: "FAILED", errorMsg: error.message },
@@ -304,8 +304,8 @@ const downloadWorker = new Worker(
     {
         connection: redis as any,
         concurrency: 1,
-        lockDuration: 600000,      // 10 minutes — long videos take time
-        stalledInterval: 300000,   // 5 minutes — don't mark as stalled too early
+        lockDuration: 600000,      // 10 minutes â€” long videos take time
+        stalledInterval: 300000,   // 5 minutes â€” don't mark as stalled too early
         maxStalledCount: 2,        // Only retry stalled jobs twice
         settings: {
             backoffStrategy: (attemptsMade: number) => {
@@ -316,7 +316,7 @@ const downloadWorker = new Worker(
     }
 );
 
-// ─── Transcription Worker (Whisper re-transcription) ─
+// â”€â”€â”€ Transcription Worker (Whisper re-transcription) â”€
 const transcriptionWorker = new Worker(
     QUEUE_NAMES.TRANSCRIPTION,
     async (job: Job) => {
@@ -332,7 +332,7 @@ const transcriptionWorker = new Worker(
             } catch { }
         }
         if (!togetherKey) {
-            console.error("[Transcription] TOGETHER_API_KEY not set — skipping");
+            console.error("[Transcription] TOGETHER_API_KEY not set â€” skipping");
             await prisma.video.update({ where: { id: videoId }, data: { status: "READY" } });
             return { videoId, status: "skipped" };
         }
@@ -385,7 +385,7 @@ const transcriptionWorker = new Worker(
             const totalDuration = parseFloat(durationOutput) || 0;
             const CHUNK_SECONDS = 600; // 10 minutes per chunk
             const numChunks = Math.ceil(totalDuration / CHUNK_SECONDS);
-            console.log(`[Transcription] Duration: ${(totalDuration / 60).toFixed(1)}min → ${numChunks} chunk(s)`);
+            console.log(`[Transcription] Duration: ${(totalDuration / 60).toFixed(1)}min â†’ ${numChunks} chunk(s)`);
 
             const FormData = (await import("form-data")).default;
             const allSegments: any[] = [];
@@ -401,7 +401,7 @@ const transcriptionWorker = new Worker(
                         { encoding: "utf8", timeout: 60000 }
                     );
                 } else {
-                    // Single chunk — just use the original
+                    // Single chunk â€” just use the original
                     fs.copyFileSync(audioPath, chunkPath);
                 }
 
@@ -447,11 +447,11 @@ const transcriptionWorker = new Worker(
                             });
 
                             if (whisperRes.ok) {
-                                console.log(`[Transcription] ✅ ${provider.name} succeeded for chunk ${i + 1}`);
+                                console.log(`[Transcription] âœ… ${provider.name} succeeded for chunk ${i + 1}`);
                                 break;
                             }
                             lastErr = await whisperRes.text();
-                            console.warn(`[Transcription] ${provider.name} chunk ${i + 1} attempt ${attempt + 1} failed: ${whisperRes.status} — ${lastErr.substring(0, 300)}`);
+                            console.warn(`[Transcription] ${provider.name} chunk ${i + 1} attempt ${attempt + 1} failed: ${whisperRes.status} â€” ${lastErr.substring(0, 300)}`);
                             if (attempt < 1) await new Promise(r => setTimeout(r, 3000));
                         } catch (e: any) {
                             lastErr = e.message;
@@ -459,7 +459,7 @@ const transcriptionWorker = new Worker(
                             if (attempt < 1) await new Promise(r => setTimeout(r, 3000));
                         }
                     }
-                    if (whisperRes?.ok) break; // Success — stop trying providers
+                    if (whisperRes?.ok) break; // Success â€” stop trying providers
                     console.log(`[Transcription] ${provider.name} failed, trying next provider...`);
                 }
 
@@ -503,7 +503,7 @@ const transcriptionWorker = new Worker(
             const transcript = await prisma.transcript.create({
                 data: { videoId, content: fullText, segments: segments as any },
             });
-            console.log(`[Transcription] ✅ Whisper transcript saved: ${segments.length} segments (word-level)`);
+            console.log(`[Transcription] âœ… Whisper transcript saved: ${segments.length} segments (word-level)`);
             await job.updateProgress(85);
 
             // Step 6: Clear old segments + chain to segmentation
@@ -518,13 +518,13 @@ const transcriptionWorker = new Worker(
             const { Queue } = await import("bullmq");
             const segQueue = new Queue(QUEUE_NAMES.SEGMENTATION, { connection: redis as any });
             await segQueue.add(`segment-${videoId}`, { videoId, userId, transcriptId: transcript.id }, { priority: 1 });
-            console.log("[Transcription] → Chained to segmentation queue");
+            console.log("[Transcription] â†’ Chained to segmentation queue");
 
             await job.updateProgress(100);
             fs.rmSync(workDir, { recursive: true, force: true });
             return { videoId, transcriptId: transcript.id, segmentCount: segments.length };
         } catch (error: any) {
-            console.error(`[Transcription] ❌ Failed: ${videoId}`, error.message);
+            console.error(`[Transcription] âŒ Failed: ${videoId}`, error.message);
             await prisma.video.update({ where: { id: videoId }, data: { status: "FAILED", errorMsg: error.message } });
             if (fs.existsSync(workDir)) fs.rmSync(workDir, { recursive: true, force: true });
             throw error;
@@ -533,7 +533,7 @@ const transcriptionWorker = new Worker(
     { connection: redis as any, concurrency: 1, maxStalledCount: 2 }
 );
 
-// ─── Segmentation Worker ─────────────────────────
+// â”€â”€â”€ Segmentation Worker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const segmentationWorker = new Worker(
     QUEUE_NAMES.SEGMENTATION,
     async (job: Job) => {
@@ -580,11 +580,11 @@ const segmentationWorker = new Worker(
                 data: { status: "READY" },
             });
 
-            console.log(`[Segmentation] ✅ Complete: ${suggestions.length} segments`);
+            console.log(`[Segmentation] âœ… Complete: ${suggestions.length} segments`);
             await job.updateProgress(100);
             return { videoId, segmentCount: suggestions.length };
         } catch (error: any) {
-            console.error(`[Segmentation] ❌ Failed: ${videoId}`, error.message);
+            console.error(`[Segmentation] âŒ Failed: ${videoId}`, error.message);
             await prisma.video.update({
                 where: { id: videoId },
                 data: { status: "FAILED", errorMsg: error.message },
@@ -595,7 +595,7 @@ const segmentationWorker = new Worker(
     { connection: redis as any, concurrency: 3, maxStalledCount: 2 }
 );
 
-// ─── Render Worker ───────────────────────────────
+// â”€â”€â”€ Render Worker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const renderWorker = new Worker(
     QUEUE_NAMES.RENDER,
     async (job: Job) => {
@@ -683,7 +683,7 @@ const renderWorker = new Worker(
                     console.log(`[Render] ===== SUBTITLE ENGINE v3 (no-multiplier, char-width) =====`);
                     console.log(`[Render] Subtitle style: ${JSON.stringify(subtitleStyle)}`);
 
-                    // Parse transcript segments — Whisper stores as [{start, end, text, words: [{word, start, end}]}]
+                    // Parse transcript segments â€” Whisper stores as [{start, end, text, words: [{word, start, end}]}]
                     let rawSegments: any[] = [];
                     try {
                         rawSegments = typeof transcript.segments === "string"
@@ -697,7 +697,7 @@ const renderWorker = new Worker(
                     let wordTimestamps: any[] = [];
                     for (const seg of rawSegments) {
                         if (seg.words && Array.isArray(seg.words) && seg.words.length > 0) {
-                            // Nested Whisper format — flatten words out
+                            // Nested Whisper format â€” flatten words out
                             for (const w of seg.words) {
                                 const wordText = (w.word || w.text || "").toString().trim();
                                 if (wordText) {
@@ -711,7 +711,7 @@ const renderWorker = new Worker(
                                 wordTimestamps.push({ word: wordText, start: seg.start, end: seg.end });
                             }
                         } else if (seg.text && seg.start !== undefined) {
-                            // Segment-level only (no word timestamps) — split text into individual words
+                            // Segment-level only (no word timestamps) â€” split text into individual words
                             // with evenly distributed timing across the segment duration
                             const segWords = seg.text.trim().split(/\s+/).filter((w: string) => w.length > 0);
                             if (segWords.length > 0) {
@@ -743,7 +743,7 @@ const renderWorker = new Worker(
                             fs.writeFileSync(assPath, assContent, "utf8");
                             console.log(`[Render] ASS file written: ${assContent.split("\n").length} lines`);
 
-                            // Burn subtitles — re-encode with ASS filter
+                            // Burn subtitles â€” re-encode with ASS filter
                             const subtitledOutput = path.join(renderDir, "subtitled.mp4");
                             // Escape path for ffmpeg filter (Windows backslashes)
                             const escapedAssPath = assPath.replace(/\\/g, "/").replace(/:/g, "\\:");
@@ -752,9 +752,9 @@ const renderWorker = new Worker(
                                 { timeout: 600000 }
                             );
                             fs.renameSync(subtitledOutput, outputPath);
-                            console.log(`[Render] ✅ Subtitles burned successfully (${wordTimestamps.length} words, style=${subtitleStyle.animation || "word-highlight"})`);
+                            console.log(`[Render] âœ… Subtitles burned successfully (${wordTimestamps.length} words, style=${subtitleStyle.animation || "word-highlight"})`);
                         } else {
-                            console.log(`[Render] generateASS returned empty — no words matched segment time range ${segment.startTime}-${segment.endTime}`);
+                            console.log(`[Render] generateASS returned empty â€” no words matched segment time range ${segment.startTime}-${segment.endTime}`);
                         }
                     } else {
                         console.log(`[Render] No word timestamps found in transcript`);
@@ -776,53 +776,69 @@ const renderWorker = new Worker(
                     const hookFontSize = job.data.hookFontSize || (segment as any).hookFontSize || 64;
                     const hookFont = job.data.hookFont || (segment as any).hookFont || "Montserrat";
                     const hookUpper = job.data.hookUppercase !== false; // default true
-                    // NO scaling — fontSize is real pixels for 1080x1920 canvas
                     // Apply uppercase if enabled
                     let hookTextToRender = resolvedHookText;
                     if (hookUpper) hookTextToRender = hookTextToRender.toUpperCase();
-                    // Simple escaping: curly quote for apostrophes, backslash-colon for colons
+                    // Simple escaping
                     const escapedHook = hookTextToRender
                         .replace(/'/g, "\u2019")
                         .replace(/:/g, "\\:");
-                    // Character-width line splitting — CONSERVATIVE to prevent overflow
-                    // Uppercase bold chars are wider (~0.7×fontSize), mixed case ~0.6×
-                    const charWidth = hookFontSize * (hookUpper ? 0.7 : 0.6);
-                    const maxLineWidth = 920; // 1080 - 80px padding per side for box
-                    const maxCharsPerLine = Math.max(8, Math.floor(maxLineWidth / charWidth));
-                    const words = escapedHook.split(' ');
-                    const lines: string[] = [];
-                    let currentLine = '';
-                    for (const word of words) {
-                        if (currentLine.length + word.length + 1 > maxCharsPerLine && currentLine.length > 0) {
-                            lines.push(currentLine.trim());
-                            currentLine = word;
-                        } else {
-                            currentLine += ' ' + word;
+
+                    // Auto-scale: shrink font if text would exceed max lines
+                    const MAX_LINES = 5;
+                    const MIN_FONT = 48;
+                    let effectiveFontSize = hookFontSize;
+
+                    const calcLines = (text: string, fontSize: number): string[] => {
+                        const cw = fontSize * (hookUpper ? 0.7 : 0.6);
+                        const maxChars = Math.max(8, Math.floor(920 / cw));
+                        const wds = text.split(' ');
+                        const lns: string[] = [];
+                        let cur = '';
+                        for (const w of wds) {
+                            if (cur.length + w.length + 1 > maxChars && cur.length > 0) {
+                                lns.push(cur.trim());
+                                cur = w;
+                            } else {
+                                cur += ' ' + w;
+                            }
                         }
+                        if (cur.trim()) lns.push(cur.trim());
+                        return lns;
+                    };
+
+                    // Step down font size until text fits in MAX_LINES
+                    let finalLines = calcLines(escapedHook, effectiveFontSize);
+                    while (finalLines.length > MAX_LINES && effectiveFontSize > MIN_FONT) {
+                        effectiveFontSize -= 8;
+                        finalLines = calcLines(escapedHook, effectiveFontSize);
                     }
-                    if (currentLine.trim()) lines.push(currentLine.trim());
-                    // Up to 5 lines — no aggressive truncation
-                    const finalLines = lines.slice(0, 5);
+                    finalLines = finalLines.slice(0, MAX_LINES); // safety cap
+
+                    if (effectiveFontSize !== hookFontSize) {
+                        console.log(`[Render] Hook auto-scaled: ${hookFontSize}px -> ${effectiveFontSize}px (${finalLines.length} lines)`);
+                    }
+
                     const hookBoxClr = job.data.hookBoxColor || '#FFFF00';
                     const hookFntClr = job.data.hookFontColor || '#FFFFFF';
                     const ffmpegBoxColor = hookBoxClr.replace('#', '0x');
                     const ffmpegFontColor = hookFntClr.replace('#', '0x');
                     // Per-line drawtext for TRUE center alignment
-                    const lineHeight = Math.round(hookFontSize * 1.4);
+                    const lineHeight = Math.round(effectiveFontSize * 1.4);
                     const startY = 200;
-                    const borderW = Math.max(4, Math.round(hookFontSize * 0.08)); // Scale border with font
+                    const borderW = Math.max(4, Math.round(effectiveFontSize * 0.08));
                     const drawFilters = finalLines.map((line: string, idx: number) => {
                         const yPos = startY + (idx * lineHeight);
-                        return `drawtext=text='${line}':font='${hookFont}\:style=Bold':fontsize=${hookFontSize}:fontcolor=${ffmpegFontColor}:borderw=${borderW}:bordercolor=black:box=1:boxcolor=${ffmpegBoxColor}@0.85:boxborderw=20:x=(w-text_w)/2:y=${yPos}`;
+                        return `drawtext=text='${line}':font='${hookFont}\:style=Bold':fontsize=${effectiveFontSize}:fontcolor=${ffmpegFontColor}:borderw=${borderW}:bordercolor=black:box=1:boxcolor=${ffmpegBoxColor}@0.85:boxborderw=20:x=(w-text_w)/2:y=${yPos}`;
                     }).join(',');
-                    console.log(`[Render] Hook: fontSize=${hookFontSize}, upper=${hookUpper}, lines=${finalLines.length}, maxChars=${maxCharsPerLine}`);
+                    console.log(`[Render] Hook: fontSize=${effectiveFontSize}, upper=${hookUpper}, lines=${finalLines.length}`);
                     const hookOutput = path.join(renderDir, "hooked.mp4");
                     execSync(
                         `ffmpeg -i "${outputPath}" -vf "${drawFilters}" -c:v libx264 -preset fast -crf 23 -c:a copy "${hookOutput}" -y`,
                         { timeout: 300000 }
                     );
                     fs.renameSync(hookOutput, outputPath);
-                    console.log(`[Render] ✅ Hook: ${finalLines.length} lines, font=${hookFont}, size=${hookFontSize}`);
+                    console.log(`[Render] Hook: ${finalLines.length} lines, font=${hookFont}, size=${effectiveFontSize}`);
                 } catch (hookErr: any) {
                     console.warn(`[Render] Hook text burn failed: ${hookErr.message}`);
                 }
@@ -842,14 +858,14 @@ const renderWorker = new Worker(
                         const wmBuffer = Buffer.from(await wmRes.arrayBuffer());
                         fs.writeFileSync(watermarkPath, wmBuffer);
                         
-                        // Overlay watermark: ¼ of screen width, top-right corner with padding
+                        // Overlay watermark: Â¼ of screen width, top-right corner with padding
                         const watermarkedOutput = path.join(renderDir, "watermarked.mp4");
                         execSync(
                             `ffmpeg -i "${outputPath}" -i "${watermarkPath}" -filter_complex "[1:v]scale=270:-1[wm];[0:v][wm]overlay=W-w-30:30" -c:v libx264 -preset fast -crf 23 -c:a copy "${watermarkedOutput}" -y`,
                             { timeout: 300000 }
                         );
                         fs.renameSync(watermarkedOutput, outputPath);
-                        console.log(`[Render] ✅ Watermark burned (¼ screen, top-right)`);
+                        console.log(`[Render] âœ… Watermark burned (Â¼ screen, top-right)`);
                     } else {
                         console.warn(`[Render] Watermark download failed: ${wmRes.status}`);
                     }
@@ -914,18 +930,18 @@ const renderWorker = new Worker(
             });
 
             fs.rmSync(renderDir, { recursive: true, force: true });
-            console.log(`[Render] ✅ Complete: ${segmentId}`);
+            console.log(`[Render] âœ… Complete: ${segmentId}`);
             await job.updateProgress(100);
             return { segmentId, r2Key, duration };
         } catch (error: any) {
-            console.error(`[Render] ❌ Failed: ${segmentId}`, error.message);
+            console.error(`[Render] âŒ Failed: ${segmentId}`, error.message);
             throw error;
         }
     },
     { connection: redis as any, concurrency: 2, maxStalledCount: 2 }
 );
 
-// ─── Event Handlers ──────────────────────────────
+// â”€â”€â”€ Event Handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const workers = [
     { name: "Download", worker: downloadWorker },
     { name: "Transcription", worker: transcriptionWorker },
@@ -934,20 +950,20 @@ const workers = [
 ];
 
 for (const { name, worker } of workers) {
-    worker.on("completed", (job) => console.log(`  ✅ ${name} completed: ${job.id}`));
-    worker.on("failed", (job, err) => console.error(`  ❌ ${name} failed: ${job?.id}`, err.message));
+    worker.on("completed", (job) => console.log(`  âœ… ${name} completed: ${job.id}`));
+    worker.on("failed", (job, err) => console.error(`  âŒ ${name} failed: ${job?.id}`, err.message));
 }
 
-console.log("🚀 All workers started:");
-console.log("   📥 Download worker (concurrency: 1)");
-console.log("   🎤 Transcription worker (concurrency: 1)");
-console.log("   🧠 Segmentation worker (concurrency: 3)");
-console.log("   🎬 Render worker (concurrency: 2)");
+console.log("ðŸš€ All workers started:");
+console.log("   ðŸ“¥ Download worker (concurrency: 1)");
+console.log("   ðŸŽ¤ Transcription worker (concurrency: 1)");
+console.log("   ðŸ§  Segmentation worker (concurrency: 3)");
+console.log("   ðŸŽ¬ Render worker (concurrency: 2)");
 console.log("\nWaiting for jobs...\n");
 
 // Keep alive
 process.on("SIGTERM", async () => {
-    console.log("\n⏹ Shutting down workers...");
+    console.log("\nâ¹ Shutting down workers...");
     await Promise.all(workers.map(({ worker }) => worker.close()));
     await pool.end();
     process.exit(0);
