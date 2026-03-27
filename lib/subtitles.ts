@@ -83,9 +83,9 @@ function groupWordsByWidth(
     words: WordTimestamp[],
     fontSize: number,
     maxWidth: number = 840,      // 1080 - 120px margin per side
-    maxWordsPerGroup: number = 4
+    maxWordsPerGroup: number = 3
 ): LineGroup[] {
-    const charWidth = fontSize * 0.6; // conservative avg char width (bold text)
+    const charWidth = fontSize * 0.65; // conservative avg char width (bold + outline)
     const lines: LineGroup[] = [];
     let current: WordTimestamp[] = [];
     let currentWidth = 0;
@@ -208,14 +208,15 @@ WrapStyle: 2
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,${s.font},${fontSize},${primaryColor},&H000000FF,${outlineColor},${shadowColor},1,0,0,0,100,100,0,0,1,7,2,${alignment},80,80,${marginV},1
+Style: Default,${s.font},${fontSize},${primaryColor},&H000000FF,${outlineColor},${shadowColor},1,0,0,0,100,100,0,0,1,7,2,${alignment},120,120,${marginV},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`;
 
-    // Character-width-based line splitting — guarantees text fits within frame
-    const lines = groupWordsByWidth(segmentWords, fontSize, 840, 3);
-    const charW = fontSize * 0.55;
+    // Adaptive word grouping: fewer words at larger sizes for karaoke pacing
+    const maxWords = fontSize >= 96 ? 2 : 3;
+    const lines = groupWordsByWidth(segmentWords, fontSize, 840, maxWords);
+    const charW = fontSize * 0.65;
     for (let i = 0; i < lines.length; i++) {
         const estWidth = Math.round(lines[i].text.length * charW);
         console.log(`[ASS] Group ${i+1}/${lines.length}: "${lines[i].text}" (${lines[i].words.length} words, ~${estWidth}px)`);
