@@ -100,6 +100,16 @@ export async function GET(
             editedWords: (s.editedWords && (s.editedWords as any[]).length > 0)
                 ? s.editedWords
                 : extractWordsForSegment(s.startTime, s.endTime),
+            // Per-clip style settings
+            subAnimation: (s as any).subAnimation,
+            subFont: (s as any).subFont,
+            subPosition: (s as any).subPosition,
+            subColor: (s as any).subColor,
+            subFontSize: (s as any).subFontSize,
+            subHighlightColor: (s as any).subHighlightColor,
+            hookBoxColor: (s as any).hookBoxColor,
+            hookFontColor: (s as any).hookFontColor,
+            hookUppercase: (s as any).hookUppercase,
             shortVideo: s.shortVideo,
         }));
 
@@ -122,6 +132,16 @@ export async function GET(
             editedWords: (s.editedWords && (s.editedWords as any[]).length > 0)
                 ? s.editedWords
                 : extractWordsForSegment(s.startTime, s.endTime),
+            // Per-clip style settings
+            subAnimation: (s as any).subAnimation,
+            subFont: (s as any).subFont,
+            subPosition: (s as any).subPosition,
+            subColor: (s as any).subColor,
+            subFontSize: (s as any).subFontSize,
+            subHighlightColor: (s as any).subHighlightColor,
+            hookBoxColor: (s as any).hookBoxColor,
+            hookFontColor: (s as any).hookFontColor,
+            hookUppercase: (s as any).hookUppercase,
             shortVideo: s.shortVideo,
         }));
 

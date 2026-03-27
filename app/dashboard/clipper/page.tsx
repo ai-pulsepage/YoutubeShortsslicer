@@ -197,6 +197,23 @@ export default function ClipStudioPage() {
     // Campaign assignment on existing projects
     const [assigningCampaign, setAssigningCampaign] = useState<string | null>(null);
 
+    // Clip selection for bulk-apply
+    const [selectedClips, setSelectedClips] = useState<Set<string>>(new Set());
+    const [bulkSettingsOpen, setBulkSettingsOpen] = useState(false);
+    const [applyingDefaults, setApplyingDefaults] = useState(false);
+    // Bulk-apply default settings
+    const [bulkSubFont, setBulkSubFont] = useState("Montserrat");
+    const [bulkSubFontSize, setBulkSubFontSize] = useState(64);
+    const [bulkSubAnimation, setBulkSubAnimation] = useState("word-highlight");
+    const [bulkSubPosition, setBulkSubPosition] = useState("bottom");
+    const [bulkSubColor, setBulkSubColor] = useState("#FFFFFF");
+    const [bulkSubHighlightColor, setBulkSubHighlightColor] = useState("#00CCFF");
+    const [bulkHookFont, setBulkHookFont] = useState("Montserrat");
+    const [bulkHookFontSize, setBulkHookFontSize] = useState(64);
+    const [bulkHookFontColor, setBulkHookFontColor] = useState("#FFFFFF");
+    const [bulkHookBoxColor, setBulkHookBoxColor] = useState("#FFFF00");
+    const [bulkHookUppercase, setBulkHookUppercase] = useState(true);
+
 
 
     // ─── Data Fetching ───────────────────────────────────
@@ -930,12 +947,146 @@ export default function ClipStudioPage() {
                             </button>
                         </div>
 
-                        {/* Per-clip Settings Info */}
-                        <div className="px-6 py-3 border-b border-gray-800 bg-gray-900/50">
-                            <p className="text-xs text-gray-500 flex items-center gap-2">
-                                <Sparkles className="w-3.5 h-3.5 text-violet-400" />
-                                Expand any clip below to configure its subtitle & hook text style before rendering.
-                            </p>
+                        {/* Selection Toolbar + Bulk-Apply */}
+                        <div className="px-6 py-3 border-b border-gray-800 bg-gray-900/50 space-y-2">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <button
+                                        onClick={() => {
+                                            const allIds = [...selectedProject.renderedClips, ...selectedProject.pendingClips].map(c => c.id);
+                                            setSelectedClips(prev => prev.size === allIds.length ? new Set() : new Set(allIds));
+                                        }}
+                                        className="text-xs px-3 py-1.5 rounded-lg border border-gray-700 text-gray-400 hover:text-white hover:border-violet-500 transition-colors"
+                                    >
+                                        {selectedClips.size === [...selectedProject.renderedClips, ...selectedProject.pendingClips].length ? "Deselect All" : "Select All"}
+                                    </button>
+                                    {selectedClips.size > 0 && (
+                                        <span className="text-xs text-violet-400 font-medium">{selectedClips.size} clip{selectedClips.size !== 1 ? "s" : ""} selected</span>
+                                    )}
+                                </div>
+                                {selectedClips.size > 0 && (
+                                    <button
+                                        onClick={() => setBulkSettingsOpen(!bulkSettingsOpen)}
+                                        className="text-xs px-3 py-1.5 rounded-lg bg-violet-600/20 border border-violet-500/30 text-violet-400 hover:bg-violet-600/30 transition-colors flex items-center gap-1.5"
+                                    >
+                                        <Sparkles className="w-3 h-3" />
+                                        Apply Settings to Selected
+                                        <ChevronUp className={`w-3 h-3 transition-transform ${bulkSettingsOpen ? "" : "rotate-180"}`} />
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Bulk-Apply Panel */}
+                            {bulkSettingsOpen && selectedClips.size > 0 && (
+                                <div className="p-3 bg-gray-800/40 border border-gray-700/40 rounded-lg space-y-3">
+                                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Hook Text Style</p>
+                                    <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                                        <div>
+                                            <label className="block text-[10px] text-gray-500 mb-1">Font</label>
+                                            <select value={bulkHookFont} onChange={(e) => setBulkHookFont(e.target.value)} className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-xs text-white focus:border-violet-500 focus:outline-none">
+                                                <option value="Montserrat">Montserrat</option><option value="Inter">Inter</option><option value="Bebas Neue">Bebas Neue</option><option value="Impact">Impact</option><option value="Arial Black">Arial Black</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] text-gray-500 mb-1">Size</label>
+                                            <select value={bulkHookFontSize} onChange={(e) => setBulkHookFontSize(parseInt(e.target.value))} className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-xs text-white focus:border-violet-500 focus:outline-none">
+                                                <option value={48}>48 (Small)</option><option value={64}>64 (Medium)</option><option value={80}>80 (Large)</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] text-gray-500 mb-1">Font Color</label>
+                                            <div className="flex items-center gap-1.5"><input type="color" value={bulkHookFontColor} onChange={(e) => setBulkHookFontColor(e.target.value)} className="w-7 h-7 rounded border border-gray-700 bg-transparent cursor-pointer" /><span className="text-[10px] text-gray-500">{bulkHookFontColor}</span></div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] text-gray-500 mb-1">Box Color</label>
+                                            <div className="flex items-center gap-1.5"><input type="color" value={bulkHookBoxColor} onChange={(e) => setBulkHookBoxColor(e.target.value)} className="w-7 h-7 rounded border border-gray-700 bg-transparent cursor-pointer" /><span className="text-[10px] text-gray-500">{bulkHookBoxColor}</span></div>
+                                        </div>
+                                        <div className="flex items-center gap-2 pt-3">
+                                            <label className="text-[10px] text-gray-500">UPPERCASE</label>
+                                            <button onClick={() => setBulkHookUppercase(!bulkHookUppercase)} className={`px-2.5 py-1 rounded text-[10px] font-bold transition-colors ${bulkHookUppercase ? "bg-violet-600 text-white" : "bg-gray-700 text-gray-400"}`}>{bulkHookUppercase ? "ON" : "OFF"}</button>
+                                        </div>
+                                    </div>
+                                    <hr className="border-gray-700/40" />
+                                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Subtitle Style</p>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                        <div>
+                                            <label className="block text-[10px] text-gray-500 mb-1">Animation</label>
+                                            <select value={bulkSubAnimation} onChange={(e) => setBulkSubAnimation(e.target.value)} className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-xs text-white focus:border-violet-500 focus:outline-none">
+                                                <option value="word-highlight">Karaoke</option><option value="pop">Pop</option><option value="fade">Fade</option><option value="slide-up">Slide Up</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] text-gray-500 mb-1">Font</label>
+                                            <select value={bulkSubFont} onChange={(e) => setBulkSubFont(e.target.value)} className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-xs text-white focus:border-violet-500 focus:outline-none">
+                                                <option value="Montserrat">Montserrat</option><option value="Inter">Inter</option><option value="Bebas Neue">Bebas Neue</option><option value="Impact">Impact</option><option value="Arial Black">Arial Black</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] text-gray-500 mb-1">Size</label>
+                                            <select value={bulkSubFontSize} onChange={(e) => setBulkSubFontSize(parseInt(e.target.value))} className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-xs text-white focus:border-violet-500 focus:outline-none">
+                                                <option value={48}>48 (Small)</option><option value={64}>64 (Medium)</option><option value={80}>80 (Large)</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] text-gray-500 mb-1">Position</label>
+                                            <select value={bulkSubPosition} onChange={(e) => setBulkSubPosition(e.target.value)} className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-xs text-white focus:border-violet-500 focus:outline-none">
+                                                <option value="bottom">Bottom</option><option value="center">Center</option><option value="top">Top</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] text-gray-500 mb-1">Color</label>
+                                            <div className="flex items-center gap-1.5"><input type="color" value={bulkSubColor} onChange={(e) => setBulkSubColor(e.target.value)} className="w-7 h-7 rounded border border-gray-700 bg-transparent cursor-pointer" /><span className="text-[10px] text-gray-500">{bulkSubColor}</span></div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] text-gray-500 mb-1">Highlight</label>
+                                            <div className="flex items-center gap-1.5"><input type="color" value={bulkSubHighlightColor} onChange={(e) => setBulkSubHighlightColor(e.target.value)} className="w-7 h-7 rounded border border-gray-700 bg-transparent cursor-pointer" /><span className="text-[10px] text-gray-500">{bulkSubHighlightColor}</span></div>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={async () => {
+                                            setApplyingDefaults(true);
+                                            try {
+                                                const res = await fetch(`/api/clipper/${selectedProject.id}/apply-defaults`, {
+                                                    method: "POST",
+                                                    headers: { "Content-Type": "application/json" },
+                                                    body: JSON.stringify({
+                                                        segmentIds: Array.from(selectedClips),
+                                                        settings: {
+                                                            subAnimation: bulkSubAnimation, subFont: bulkSubFont, subPosition: bulkSubPosition,
+                                                            subColor: bulkSubColor, subFontSize: bulkSubFontSize, subHighlightColor: bulkSubHighlightColor,
+                                                            hookFont: bulkHookFont, hookFontSize: bulkHookFontSize,
+                                                            hookFontColor: bulkHookFontColor, hookBoxColor: bulkHookBoxColor, hookUppercase: bulkHookUppercase,
+                                                        },
+                                                    }),
+                                                });
+                                                if (res.ok) {
+                                                    const data = await res.json();
+                                                    // Update local state to reflect changes
+                                                    setSelectedProject(prev => {
+                                                        if (!prev) return prev;
+                                                        const applySettings = (c: Segment) => selectedClips.has(c.id) ? {
+                                                            ...c, subAnimation: bulkSubAnimation, subFont: bulkSubFont, subPosition: bulkSubPosition,
+                                                            subColor: bulkSubColor, subFontSize: bulkSubFontSize, subHighlightColor: bulkSubHighlightColor,
+                                                            hookFont: bulkHookFont, hookFontSize: bulkHookFontSize,
+                                                            hookFontColor: bulkHookFontColor, hookBoxColor: bulkHookBoxColor, hookUppercase: bulkHookUppercase,
+                                                        } : c;
+                                                        return { ...prev, renderedClips: prev.renderedClips.map(applySettings), pendingClips: prev.pendingClips.map(applySettings) };
+                                                    });
+                                                    alert(`Settings applied to ${data.updated} clips!`);
+                                                    setSelectedClips(new Set());
+                                                    setBulkSettingsOpen(false);
+                                                }
+                                            } catch (err) { console.error("Bulk apply error:", err); }
+                                            finally { setApplyingDefaults(false); }
+                                        }}
+                                        disabled={applyingDefaults}
+                                        className="w-full py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        {applyingDefaults ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                                        Apply to {selectedClips.size} Selected Clip{selectedClips.size !== 1 ? "s" : ""}
+                                    </button>
+                                </div>
+                            )}
                         </div>
 
                         {/* Clips List */}
@@ -956,6 +1107,8 @@ export default function ClipStudioPage() {
                                             isRendering={rendering.has(clip.id)}
                                             isRendered
                                             hookSuggestions={briefs.find(b => b.name === selectedProject.campaignName)?.onScreenSuggestions || []}
+                                            selected={selectedClips.has(clip.id)}
+                                            onSelect={(id) => setSelectedClips(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; })}
                                             onClipUpdate={(updatedClip) => {
                                                 setSelectedProject(prev => {
                                                     if (!prev) return prev;
@@ -986,6 +1139,8 @@ export default function ClipStudioPage() {
                                             onRender={handleRenderSegment}
                                             isRendering={rendering.has(clip.id)}
                                             hookSuggestions={briefs.find(b => b.name === selectedProject.campaignName)?.onScreenSuggestions || []}
+                                            selected={selectedClips.has(clip.id)}
+                                            onSelect={(id) => setSelectedClips(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; })}
                                             onClipUpdate={(updatedClip) => {
                                                 setSelectedProject(prev => {
                                                     if (!prev) return prev;
@@ -1033,6 +1188,8 @@ function ClipCard({
     isRendered,
     hookSuggestions = [],
     onClipUpdate,
+    selected = false,
+    onSelect,
 }: {
     clip: Segment;
     projectId: string;
@@ -1041,6 +1198,8 @@ function ClipCard({
     isRendered?: boolean;
     hookSuggestions?: string[];
     onClipUpdate?: (updatedClip: Partial<Segment> & { id: string }) => void;
+    selected?: boolean;
+    onSelect?: (id: string) => void;
 }) {
     const [expanded, setExpanded] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
@@ -1369,33 +1528,52 @@ function ClipCard({
                         </div>
                     )}
 
-                    {/* Visual Preview */}
+                    {/* Properly Scaled 9:16 Preview */}
                     <div>
-                        <label className="block text-xs font-semibold text-gray-500 mb-2">Preview</label>
-                        <div className="relative bg-black rounded-lg overflow-hidden" style={{ aspectRatio: "9/16", maxHeight: 200 }}>
-                            {hookText && (
-                                <div className="absolute top-4 left-0 right-0 text-center px-3 z-10">
-                                    <span className="text-white font-bold leading-tight" style={{
-                                        fontFamily: hookFont,
-                                        fontSize: `${Math.max(6, Math.round(hookFontSize * 0.35))}px`,
-                                        textShadow: "1px 1px 2px rgba(0,0,0,0.9)",
-                                        textTransform: hookUppercase ? "uppercase" : "none",
-                                    }}>{hookText}</span>
+                        <label className="block text-xs font-semibold text-gray-500 mb-2">Preview (1080×1920)</label>
+                        <div className="relative rounded-lg overflow-hidden bg-black" style={{ width: 135, height: 240 }}>
+                            {/* Virtual 1080x1920 canvas, CSS-scaled down */}
+                            <div style={{ width: 1080, height: 1920, transform: 'scale(0.125)', transformOrigin: 'top left', position: 'absolute', top: 0, left: 0 }}>
+                                {/* Background */}
+                                <div style={{ width: 1080, height: 1920, background: 'linear-gradient(to bottom, #1f2937, #111827)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <Film style={{ width: 120, height: 120, color: '#374151' }} />
                                 </div>
-                            )}
-                            <div className="absolute bottom-3 left-0 right-0 text-center px-2 z-10">
-                                <span className="text-white font-bold leading-tight inline" style={{
-                                    fontFamily: subFont,
-                                    fontSize: `${Math.max(5, Math.round(subFontSize * 0.2))}px`,
-                                    textShadow: "1px 1px 2px rgba(0,0,0,0.9)",
+                                {/* Hook text at top — uses real pixel sizes */}
+                                {hookText && (
+                                    <div style={{
+                                        position: 'absolute', top: 160, left: 80, right: 80,
+                                        textAlign: 'center', zIndex: 10,
+                                    }}>
+                                        <span style={{
+                                            fontFamily: hookFont, fontSize: hookFontSize,
+                                            fontWeight: 'bold', color: hookFontColor,
+                                            textTransform: hookUppercase ? 'uppercase' : 'none',
+                                            background: `${hookBoxColor}d9`, padding: '16px 24px',
+                                            display: 'inline-block', lineHeight: 1.3,
+                                            textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
+                                            wordBreak: 'break-word', maxWidth: 920,
+                                        }}>{hookText}</span>
+                                    </div>
+                                )}
+                                {/* Subtitle preview at bottom — uses real pixel sizes */}
+                                <div style={{
+                                    position: 'absolute',
+                                    bottom: subPosition === 'top' ? undefined : subPosition === 'center' ? 860 : 300,
+                                    top: subPosition === 'top' ? 200 : undefined,
+                                    left: 80, right: 80,
+                                    textAlign: 'center', zIndex: 10,
                                 }}>
-                                    {editedWords.length > 0 ? editedWords.slice(0, 5).map((w, i) => (
-                                        <span key={i} className={i === 1 ? "text-yellow-400" : ""}>{w.text}{" "}</span>
-                                    )) : <span className="text-gray-500 italic">No transcript words loaded</span>}
-                                </span>
-                            </div>
-                            <div className="w-full h-full bg-gradient-to-b from-gray-800/50 to-gray-900/80 flex items-center justify-center">
-                                <Film className="w-8 h-8 text-gray-700" />
+                                    <span style={{
+                                        fontFamily: subFont, fontSize: subFontSize,
+                                        fontWeight: 'bold', color: subColor,
+                                        textShadow: '3px 3px 6px rgba(0,0,0,0.9)',
+                                        lineHeight: 1.3, wordBreak: 'break-word',
+                                    }}>
+                                        {editedWords.length > 0 ? editedWords.slice(0, 4).map((w, i) => (
+                                            <span key={i} style={{ color: i === 1 ? subHighlightColor : subColor }}>{w.text} </span>
+                                        )) : <span style={{ color: '#6b7280', fontStyle: 'italic', fontSize: subFontSize * 0.7 }}>Sample subtitle text</span>}
+                                    </span>
+                                </div>
                             </div>
                         </div>
                     </div>
