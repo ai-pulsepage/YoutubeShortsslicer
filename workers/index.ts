@@ -12,7 +12,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 import IORedis from "ioredis";
 
-// â”€â”€â”€ Shared Setup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Shared Setup Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
@@ -28,14 +28,14 @@ const QUEUE_NAMES = {
     RENDER: "render",
 } as const;
 
-console.log("â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•");
-console.log("  YouTube Shorts Slicer â€” Worker Runner");
-console.log("â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•");
+console.log("Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â");
+console.log("  YouTube Shorts Slicer Ã¢â‚¬â€ Worker Runner");
+console.log("Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â");
 console.log(`  Redis: ${process.env.REDIS_URL ? "Connected" : "localhost"}`);
 console.log(`  DB:    ${process.env.DATABASE_URL ? "Connected" : "missing!"}`);
-console.log("â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n");
+console.log("Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â\n");
 
-// â”€â”€â”€ Download Worker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Download Worker Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 import { execSync } from "child_process";
 import path from "path";
 import fs from "fs";
@@ -48,7 +48,7 @@ if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 const COOKIES_PATH = path.join(TEMP_DIR, "cookies.txt");
 if (process.env.YOUTUBE_COOKIES) {
     fs.writeFileSync(COOKIES_PATH, process.env.YOUTUBE_COOKIES);
-    console.log("  ðŸª YouTube cookies loaded");
+    console.log("  Ã°Å¸ÂÂª YouTube cookies loaded");
 }
 
 function ytdlpCookieFlag(): string {
@@ -85,7 +85,7 @@ function parseVTT(vttContent: string): { start: number; end: number; text: strin
 
             const text = textLines.join(" ").trim();
             if (text && text.length > 0) {
-                // Deduplicate â€” YouTube auto-captions often repeat content
+                // Deduplicate Ã¢â‚¬â€ YouTube auto-captions often repeat content
                 const lastSeg = segments[segments.length - 1];
                 if (!lastSeg || lastSeg.text !== text) {
                     segments.push({ start, end, text });
@@ -153,7 +153,7 @@ const downloadWorker = new Worker(
             }
             await job.updateProgress(70);
 
-            // Transcription: Whisper (precise timestamps) â†’ VTT fallback
+            // Transcription: Whisper (precise timestamps) Ã¢â€ â€™ VTT fallback
             let transcriptId: string | null = null;
             if (autoTranscribe) {
                 try {
@@ -282,17 +282,17 @@ const downloadWorker = new Worker(
                     { videoId, userId, transcriptId },
                     { priority: 1 }
                 );
-                console.log(`[Download] â†’ Chained to segmentation queue`);
+                console.log(`[Download] Ã¢â€ â€™ Chained to segmentation queue`);
             }
 
-            console.log(`[Download] âœ… Complete: ${videoId}`);
+            console.log(`[Download] Ã¢Å“â€¦ Complete: ${videoId}`);
             await job.updateProgress(100);
 
             // Cleanup
             fs.rmSync(videoDir, { recursive: true, force: true });
             return { videoId, storagePath, title: metadata.title, hasTranscript: !!transcriptId };
         } catch (error: any) {
-            console.error(`[Download] âŒ Failed: ${videoId}`, error.message);
+            console.error(`[Download] Ã¢ÂÅ’ Failed: ${videoId}`, error.message);
             await prisma.video.update({
                 where: { id: videoId },
                 data: { status: "FAILED", errorMsg: error.message },
@@ -304,8 +304,8 @@ const downloadWorker = new Worker(
     {
         connection: redis as any,
         concurrency: 1,
-        lockDuration: 600000,      // 10 minutes â€” long videos take time
-        stalledInterval: 300000,   // 5 minutes â€” don't mark as stalled too early
+        lockDuration: 600000,      // 10 minutes Ã¢â‚¬â€ long videos take time
+        stalledInterval: 300000,   // 5 minutes Ã¢â‚¬â€ don't mark as stalled too early
         maxStalledCount: 2,        // Only retry stalled jobs twice
         settings: {
             backoffStrategy: (attemptsMade: number) => {
@@ -316,7 +316,7 @@ const downloadWorker = new Worker(
     }
 );
 
-// â”€â”€â”€ Transcription Worker (Whisper re-transcription) â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Transcription Worker (Whisper re-transcription) Ã¢â€â‚¬
 const transcriptionWorker = new Worker(
     QUEUE_NAMES.TRANSCRIPTION,
     async (job: Job) => {
@@ -332,7 +332,7 @@ const transcriptionWorker = new Worker(
             } catch { }
         }
         if (!togetherKey) {
-            console.error("[Transcription] TOGETHER_API_KEY not set â€” skipping");
+            console.error("[Transcription] TOGETHER_API_KEY not set Ã¢â‚¬â€ skipping");
             await prisma.video.update({ where: { id: videoId }, data: { status: "READY" } });
             return { videoId, status: "skipped" };
         }
@@ -385,7 +385,7 @@ const transcriptionWorker = new Worker(
             const totalDuration = parseFloat(durationOutput) || 0;
             const CHUNK_SECONDS = 600; // 10 minutes per chunk
             const numChunks = Math.ceil(totalDuration / CHUNK_SECONDS);
-            console.log(`[Transcription] Duration: ${(totalDuration / 60).toFixed(1)}min â†’ ${numChunks} chunk(s)`);
+            console.log(`[Transcription] Duration: ${(totalDuration / 60).toFixed(1)}min Ã¢â€ â€™ ${numChunks} chunk(s)`);
 
             const FormData = (await import("form-data")).default;
             const allSegments: any[] = [];
@@ -401,7 +401,7 @@ const transcriptionWorker = new Worker(
                         { encoding: "utf8", timeout: 60000 }
                     );
                 } else {
-                    // Single chunk â€” just use the original
+                    // Single chunk Ã¢â‚¬â€ just use the original
                     fs.copyFileSync(audioPath, chunkPath);
                 }
 
@@ -447,11 +447,11 @@ const transcriptionWorker = new Worker(
                             });
 
                             if (whisperRes.ok) {
-                                console.log(`[Transcription] âœ… ${provider.name} succeeded for chunk ${i + 1}`);
+                                console.log(`[Transcription] Ã¢Å“â€¦ ${provider.name} succeeded for chunk ${i + 1}`);
                                 break;
                             }
                             lastErr = await whisperRes.text();
-                            console.warn(`[Transcription] ${provider.name} chunk ${i + 1} attempt ${attempt + 1} failed: ${whisperRes.status} â€” ${lastErr.substring(0, 300)}`);
+                            console.warn(`[Transcription] ${provider.name} chunk ${i + 1} attempt ${attempt + 1} failed: ${whisperRes.status} Ã¢â‚¬â€ ${lastErr.substring(0, 300)}`);
                             if (attempt < 1) await new Promise(r => setTimeout(r, 3000));
                         } catch (e: any) {
                             lastErr = e.message;
@@ -459,7 +459,7 @@ const transcriptionWorker = new Worker(
                             if (attempt < 1) await new Promise(r => setTimeout(r, 3000));
                         }
                     }
-                    if (whisperRes?.ok) break; // Success â€” stop trying providers
+                    if (whisperRes?.ok) break; // Success Ã¢â‚¬â€ stop trying providers
                     console.log(`[Transcription] ${provider.name} failed, trying next provider...`);
                 }
 
@@ -503,7 +503,7 @@ const transcriptionWorker = new Worker(
             const transcript = await prisma.transcript.create({
                 data: { videoId, content: fullText, segments: segments as any },
             });
-            console.log(`[Transcription] âœ… Whisper transcript saved: ${segments.length} segments (word-level)`);
+            console.log(`[Transcription] Ã¢Å“â€¦ Whisper transcript saved: ${segments.length} segments (word-level)`);
             await job.updateProgress(85);
 
             // Step 6: Clear old segments + chain to segmentation
@@ -518,13 +518,13 @@ const transcriptionWorker = new Worker(
             const { Queue } = await import("bullmq");
             const segQueue = new Queue(QUEUE_NAMES.SEGMENTATION, { connection: redis as any });
             await segQueue.add(`segment-${videoId}`, { videoId, userId, transcriptId: transcript.id }, { priority: 1 });
-            console.log("[Transcription] â†’ Chained to segmentation queue");
+            console.log("[Transcription] Ã¢â€ â€™ Chained to segmentation queue");
 
             await job.updateProgress(100);
             fs.rmSync(workDir, { recursive: true, force: true });
             return { videoId, transcriptId: transcript.id, segmentCount: segments.length };
         } catch (error: any) {
-            console.error(`[Transcription] âŒ Failed: ${videoId}`, error.message);
+            console.error(`[Transcription] Ã¢ÂÅ’ Failed: ${videoId}`, error.message);
             await prisma.video.update({ where: { id: videoId }, data: { status: "FAILED", errorMsg: error.message } });
             if (fs.existsSync(workDir)) fs.rmSync(workDir, { recursive: true, force: true });
             throw error;
@@ -533,7 +533,7 @@ const transcriptionWorker = new Worker(
     { connection: redis as any, concurrency: 1, maxStalledCount: 2 }
 );
 
-// â”€â”€â”€ Segmentation Worker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Segmentation Worker Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const segmentationWorker = new Worker(
     QUEUE_NAMES.SEGMENTATION,
     async (job: Job) => {
@@ -580,11 +580,11 @@ const segmentationWorker = new Worker(
                 data: { status: "READY" },
             });
 
-            console.log(`[Segmentation] âœ… Complete: ${suggestions.length} segments`);
+            console.log(`[Segmentation] Ã¢Å“â€¦ Complete: ${suggestions.length} segments`);
             await job.updateProgress(100);
             return { videoId, segmentCount: suggestions.length };
         } catch (error: any) {
-            console.error(`[Segmentation] âŒ Failed: ${videoId}`, error.message);
+            console.error(`[Segmentation] Ã¢ÂÅ’ Failed: ${videoId}`, error.message);
             await prisma.video.update({
                 where: { id: videoId },
                 data: { status: "FAILED", errorMsg: error.message },
@@ -595,7 +595,7 @@ const segmentationWorker = new Worker(
     { connection: redis as any, concurrency: 3, maxStalledCount: 2 }
 );
 
-// â”€â”€â”€ Render Worker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Render Worker Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const renderWorker = new Worker(
     QUEUE_NAMES.RENDER,
     async (job: Job) => {
@@ -683,7 +683,7 @@ const renderWorker = new Worker(
                     console.log(`[Render] ===== SUBTITLE ENGINE v3 (no-multiplier, char-width) =====`);
                     console.log(`[Render] Subtitle style: ${JSON.stringify(subtitleStyle)}`);
 
-                    // Parse transcript segments â€” Whisper stores as [{start, end, text, words: [{word, start, end}]}]
+                    // Parse transcript segments Ã¢â‚¬â€ Whisper stores as [{start, end, text, words: [{word, start, end}]}]
                     let rawSegments: any[] = [];
                     try {
                         rawSegments = typeof transcript.segments === "string"
@@ -697,7 +697,7 @@ const renderWorker = new Worker(
                     let wordTimestamps: any[] = [];
                     for (const seg of rawSegments) {
                         if (seg.words && Array.isArray(seg.words) && seg.words.length > 0) {
-                            // Nested Whisper format â€” flatten words out
+                            // Nested Whisper format Ã¢â‚¬â€ flatten words out
                             for (const w of seg.words) {
                                 const wordText = (w.word || w.text || "").toString().trim();
                                 if (wordText) {
@@ -705,13 +705,22 @@ const renderWorker = new Worker(
                                 }
                             }
                         } else if (seg.word !== undefined || seg.text !== undefined) {
-                            // Already flat format ({word, start, end})
+                            // Flat format — but text may contain multiple words
                             const wordText = (seg.word || seg.text || "").toString().trim();
                             if (wordText && seg.start !== undefined) {
-                                wordTimestamps.push({ word: wordText, start: seg.start, end: seg.end });
+                                const splitWords = wordText.split(/\s+/).filter((w: string) => w.length > 0);
+                                if (splitWords.length > 1) {
+                                    // Multi-word text: distribute timing evenly
+                                    const dur = ((seg.end || seg.start + 2) - seg.start) / splitWords.length;
+                                    for (let si = 0; si < splitWords.length; si++) {
+                                        wordTimestamps.push({ word: splitWords[si], start: seg.start + si * dur, end: seg.start + (si + 1) * dur });
+                                    }
+                                } else {
+                                    wordTimestamps.push({ word: wordText, start: seg.start, end: seg.end });
+                                }
                             }
                         } else if (seg.text && seg.start !== undefined) {
-                            // Segment-level only (no word timestamps) â€” split text into individual words
+                            // Segment-level only (no word timestamps) Ã¢â‚¬â€ split text into individual words
                             // with evenly distributed timing across the segment duration
                             const segWords = seg.text.trim().split(/\s+/).filter((w: string) => w.length > 0);
                             if (segWords.length > 0) {
@@ -743,7 +752,7 @@ const renderWorker = new Worker(
                             fs.writeFileSync(assPath, assContent, "utf8");
                             console.log(`[Render] ASS file written: ${assContent.split("\n").length} lines`);
 
-                            // Burn subtitles â€” re-encode with ASS filter
+                            // Burn subtitles Ã¢â‚¬â€ re-encode with ASS filter
                             const subtitledOutput = path.join(renderDir, "subtitled.mp4");
                             // Escape path for ffmpeg filter (Windows backslashes)
                             const escapedAssPath = assPath.replace(/\\/g, "/").replace(/:/g, "\\:");
@@ -752,9 +761,9 @@ const renderWorker = new Worker(
                                 { timeout: 600000 }
                             );
                             fs.renameSync(subtitledOutput, outputPath);
-                            console.log(`[Render] âœ… Subtitles burned successfully (${wordTimestamps.length} words, style=${subtitleStyle.animation || "word-highlight"})`);
+                            console.log(`[Render] Ã¢Å“â€¦ Subtitles burned successfully (${wordTimestamps.length} words, style=${subtitleStyle.animation || "word-highlight"})`);
                         } else {
-                            console.log(`[Render] generateASS returned empty â€” no words matched segment time range ${segment.startTime}-${segment.endTime}`);
+                            console.log(`[Render] generateASS returned empty Ã¢â‚¬â€ no words matched segment time range ${segment.startTime}-${segment.endTime}`);
                         }
                     } else {
                         console.log(`[Render] No word timestamps found in transcript`);
@@ -829,7 +838,7 @@ const renderWorker = new Worker(
                     const borderW = Math.max(4, Math.round(effectiveFontSize * 0.08));
                     const drawFilters = finalLines.map((line: string, idx: number) => {
                         const yPos = startY + (idx * lineHeight);
-                        return `drawtext=text='${line}':font='${hookFont}\:style=Bold':fontsize=${effectiveFontSize}:fontcolor=${ffmpegFontColor}:borderw=${borderW}:bordercolor=black:box=1:boxcolor=${ffmpegBoxColor}@0.85:boxborderw=20:x=(w-text_w)/2:y=${yPos}`;
+                        return `drawtext=text='${line}':font=${hookFont}:bold=1:fontsize=${effectiveFontSize}:fontcolor=${ffmpegFontColor}:borderw=${borderW}:bordercolor=black:box=1:boxcolor=${ffmpegBoxColor}@0.85:boxborderw=20:x=(w-text_w)/2:y=${yPos}`;
                     }).join(',');
                     console.log(`[Render] Hook: fontSize=${effectiveFontSize}, upper=${hookUpper}, lines=${finalLines.length}`);
                     const hookOutput = path.join(renderDir, "hooked.mp4");
@@ -858,14 +867,14 @@ const renderWorker = new Worker(
                         const wmBuffer = Buffer.from(await wmRes.arrayBuffer());
                         fs.writeFileSync(watermarkPath, wmBuffer);
                         
-                        // Overlay watermark: Â¼ of screen width, top-right corner with padding
+                        // Overlay watermark: Ã‚Â¼ of screen width, top-right corner with padding
                         const watermarkedOutput = path.join(renderDir, "watermarked.mp4");
                         execSync(
                             `ffmpeg -i "${outputPath}" -i "${watermarkPath}" -filter_complex "[1:v]scale=270:-1[wm];[0:v][wm]overlay=W-w-30:30" -c:v libx264 -preset fast -crf 23 -c:a copy "${watermarkedOutput}" -y`,
                             { timeout: 300000 }
                         );
                         fs.renameSync(watermarkedOutput, outputPath);
-                        console.log(`[Render] âœ… Watermark burned (Â¼ screen, top-right)`);
+                        console.log(`[Render] Ã¢Å“â€¦ Watermark burned (Ã‚Â¼ screen, top-right)`);
                     } else {
                         console.warn(`[Render] Watermark download failed: ${wmRes.status}`);
                     }
@@ -930,18 +939,18 @@ const renderWorker = new Worker(
             });
 
             fs.rmSync(renderDir, { recursive: true, force: true });
-            console.log(`[Render] âœ… Complete: ${segmentId}`);
+            console.log(`[Render] Ã¢Å“â€¦ Complete: ${segmentId}`);
             await job.updateProgress(100);
             return { segmentId, r2Key, duration };
         } catch (error: any) {
-            console.error(`[Render] âŒ Failed: ${segmentId}`, error.message);
+            console.error(`[Render] Ã¢ÂÅ’ Failed: ${segmentId}`, error.message);
             throw error;
         }
     },
     { connection: redis as any, concurrency: 2, maxStalledCount: 2 }
 );
 
-// â”€â”€â”€ Event Handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Event Handlers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const workers = [
     { name: "Download", worker: downloadWorker },
     { name: "Transcription", worker: transcriptionWorker },
@@ -950,20 +959,20 @@ const workers = [
 ];
 
 for (const { name, worker } of workers) {
-    worker.on("completed", (job) => console.log(`  âœ… ${name} completed: ${job.id}`));
-    worker.on("failed", (job, err) => console.error(`  âŒ ${name} failed: ${job?.id}`, err.message));
+    worker.on("completed", (job) => console.log(`  Ã¢Å“â€¦ ${name} completed: ${job.id}`));
+    worker.on("failed", (job, err) => console.error(`  Ã¢ÂÅ’ ${name} failed: ${job?.id}`, err.message));
 }
 
-console.log("ðŸš€ All workers started:");
-console.log("   ðŸ“¥ Download worker (concurrency: 1)");
-console.log("   ðŸŽ¤ Transcription worker (concurrency: 1)");
-console.log("   ðŸ§  Segmentation worker (concurrency: 3)");
-console.log("   ðŸŽ¬ Render worker (concurrency: 2)");
+console.log("Ã°Å¸Å¡â‚¬ All workers started:");
+console.log("   Ã°Å¸â€œÂ¥ Download worker (concurrency: 1)");
+console.log("   Ã°Å¸Å½Â¤ Transcription worker (concurrency: 1)");
+console.log("   Ã°Å¸Â§Â  Segmentation worker (concurrency: 3)");
+console.log("   Ã°Å¸Å½Â¬ Render worker (concurrency: 2)");
 console.log("\nWaiting for jobs...\n");
 
 // Keep alive
 process.on("SIGTERM", async () => {
-    console.log("\nâ¹ Shutting down workers...");
+    console.log("\nÃ¢ÂÂ¹ Shutting down workers...");
     await Promise.all(workers.map(({ worker }) => worker.close()));
     await pool.end();
     process.exit(0);
