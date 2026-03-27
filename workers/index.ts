@@ -784,10 +784,11 @@ const renderWorker = new Worker(
                     const escapedHook = hookTextToRender
                         .replace(/'/g, "\u2019")
                         .replace(/:/g, "\\:");
-                    // Character-width line splitting — RELAXED to prevent truncation
-                    const charWidth = hookFontSize * 0.5;
-                    const maxLineWidth = 1000; // 1080 - 80px margin
-                    const maxCharsPerLine = Math.max(12, Math.floor(maxLineWidth / charWidth));
+                    // Character-width line splitting — CONSERVATIVE to prevent overflow
+                    // Uppercase bold chars are wider (~0.7×fontSize), mixed case ~0.6×
+                    const charWidth = hookFontSize * (hookUpper ? 0.7 : 0.6);
+                    const maxLineWidth = 920; // 1080 - 80px padding per side for box
+                    const maxCharsPerLine = Math.max(8, Math.floor(maxLineWidth / charWidth));
                     const words = escapedHook.split(' ');
                     const lines: string[] = [];
                     let currentLine = '';
