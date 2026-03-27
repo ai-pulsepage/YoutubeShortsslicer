@@ -990,7 +990,7 @@ export default function ClipStudioPage() {
                                         <div>
                                             <label className="block text-[10px] text-gray-500 mb-1">Size</label>
                                             <select value={bulkHookFontSize} onChange={(e) => setBulkHookFontSize(parseInt(e.target.value))} className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-xs text-white focus:border-violet-500 focus:outline-none">
-                                                <option value={48}>48 (Small)</option><option value={64}>64 (Medium)</option><option value={80}>80 (Large)</option>
+                                                <option value={64}>64 (Small)</option><option value={96}>96 (Medium)</option><option value={120}>120 (Large)</option><option value={150}>150 (XL)</option>
                                             </select>
                                         </div>
                                         <div>
@@ -1024,7 +1024,7 @@ export default function ClipStudioPage() {
                                         <div>
                                             <label className="block text-[10px] text-gray-500 mb-1">Size</label>
                                             <select value={bulkSubFontSize} onChange={(e) => setBulkSubFontSize(parseInt(e.target.value))} className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-xs text-white focus:border-violet-500 focus:outline-none">
-                                                <option value={48}>48 (Small)</option><option value={64}>64 (Medium)</option><option value={80}>80 (Large)</option>
+                                                <option value={64}>64 (Small)</option><option value={96}>96 (Medium)</option><option value={120}>120 (Large)</option><option value={150}>150 (XL)</option>
                                             </select>
                                         </div>
                                         <div>
@@ -1398,9 +1398,10 @@ function ClipCard({
                                             <label className="block text-[10px] text-gray-500 mb-1">Size</label>
                                             <select value={hookFontSize} onChange={(e) => setHookFontSize(parseInt(e.target.value))}
                                                 className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-xs text-white focus:border-violet-500 focus:outline-none">
-                                                <option value={48}>48 (Small)</option>
-                                                <option value={64}>64 (Medium)</option>
-                                                <option value={80}>80 (Large)</option>
+                                                <option value={64}>64 (Small)</option>
+                                                <option value={96}>96 (Medium)</option>
+                                                <option value={120}>120 (Large)</option>
+                                                <option value={150}>150 (XL)</option>
                                             </select>
                                         </div>
                                         <div>
@@ -1458,9 +1459,10 @@ function ClipCard({
                                             <label className="block text-[10px] text-gray-500 mb-1">Size</label>
                                             <select value={subFontSize} onChange={(e) => setSubFontSize(parseInt(e.target.value))}
                                                 className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-xs text-white focus:border-violet-500 focus:outline-none">
-                                                <option value={48}>48 (Small)</option>
-                                                <option value={64}>64 (Medium)</option>
-                                                <option value={80}>80 (Large)</option>
+                                                <option value={64}>64 (Small)</option>
+                                                <option value={96}>96 (Medium)</option>
+                                                <option value={120}>120 (Large)</option>
+                                                <option value={150}>150 (XL)</option>
                                             </select>
                                         </div>
                                         <div>

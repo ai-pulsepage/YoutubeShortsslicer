@@ -810,9 +810,10 @@ const renderWorker = new Worker(
                     // Per-line drawtext for TRUE center alignment
                     const lineHeight = Math.round(hookFontSize * 1.4);
                     const startY = 200;
+                    const borderW = Math.max(4, Math.round(hookFontSize * 0.08)); // Scale border with font
                     const drawFilters = finalLines.map((line: string, idx: number) => {
                         const yPos = startY + (idx * lineHeight);
-                        return `drawtext=text='${line}':font=${hookFont}:fontsize=${hookFontSize}:fontcolor=${ffmpegFontColor}:borderw=3:bordercolor=black:box=1:boxcolor=${ffmpegBoxColor}@0.85:boxborderw=12:x=(w-text_w)/2:y=${yPos}`;
+                        return `drawtext=text='${line}':font='${hookFont}\:style=Bold':fontsize=${hookFontSize}:fontcolor=${ffmpegFontColor}:borderw=${borderW}:bordercolor=black:box=1:boxcolor=${ffmpegBoxColor}@0.85:boxborderw=20:x=(w-text_w)/2:y=${yPos}`;
                     }).join(',');
                     console.log(`[Render] Hook: fontSize=${hookFontSize}, upper=${hookUpper}, lines=${finalLines.length}, maxChars=${maxCharsPerLine}`);
                     const hookOutput = path.join(renderDir, "hooked.mp4");
