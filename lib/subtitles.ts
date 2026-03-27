@@ -83,7 +83,7 @@ function groupWordsByWidth(
     words: WordTimestamp[],
     fontSize: number,
     maxWidth: number = 840,      // 1080 - 120px margin per side
-    maxWordsPerGroup: number = 2  // Short bursts for karaoke pacing
+    maxWordsPerGroup: number = 3  // 3-4 words for natural karaoke pacing
 ): LineGroup[] {
     const charWidth = fontSize * 0.75; // conservative for bold + outline
     const lines: LineGroup[] = [];
@@ -213,8 +213,8 @@ Style: Default,${s.font},${fontSize},${primaryColor},&H000000FF,${outlineColor},
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`;
 
-    // Word grouping: max 2 words per group for true karaoke pacing
-    const lines = groupWordsByWidth(segmentWords, fontSize, 840, 2);
+    // Word grouping: max 3 words per group for natural karaoke pacing
+    const lines = groupWordsByWidth(segmentWords, fontSize, 840, 3);
     const charW = fontSize * 0.75;
     for (let i = 0; i < lines.length; i++) {
         const estWidth = Math.round(lines[i].text.length * charW);

@@ -832,22 +832,37 @@ const renderWorker = new Worker(
                     const hookFntClr = job.data.hookFontColor || '#FFFFFF';
                     const ffmpegBoxColor = hookBoxClr.replace('#', '0x');
                     const ffmpegFontColor = hookFntClr.replace('#', '0x');
+                    // Use fontfile for guaranteed rendering on Linux
+                    const fontPath = '/usr/share/fonts/montserrat/Montserrat-Bold.ttf';
+                    const useFontFile = fs.existsSync(fontPath);
+                    const fontSpec = useFontFile
+                        ? `fontfile=${fontPath.replace(/:/g, '\\:')}`
+                        : `font=${hookFont}`;
+                    console.log(`[Render] Hook font: ${useFontFile ? 'fontfile' : 'fontname'}=${useFontFile ? fontPath : hookFont}`);
                     // Per-line drawtext for TRUE center alignment
                     const lineHeight = Math.round(effectiveFontSize * 1.4);
                     const startY = 200;
                     const borderW = Math.max(4, Math.round(effectiveFontSize * 0.08));
                     const drawFilters = finalLines.map((line: string, idx: number) => {
                         const yPos = startY + (idx * lineHeight);
-                        return `drawtext=text='${line}':font=${hookFont}:bold=1:fontsize=${effectiveFontSize}:fontcolor=${ffmpegFontColor}:borderw=${borderW}:bordercolor=black:box=1:boxcolor=${ffmpegBoxColor}@0.85:boxborderw=20:x=(w-text_w)/2:y=${yPos}`;
+                        return `drawtext=text='${line}':${fontSpec}:fontsize=${effectiveFontSize}:fontcolor=${ffmpegFontColor}:borderw=${borderW}:bordercolor=black:box=1:boxcolor=${ffmpegBoxColor}@0.85:boxborderw=20:x=(w-text_w)/2:y=${yPos}`;
                     }).join(',');
                     console.log(`[Render] Hook: fontSize=${effectiveFontSize}, upper=${hookUpper}, lines=${finalLines.length}`);
+                    console.log(`[Render] Hook drawtext: ${drawFilters.substring(0, 200)}...`);
                     const hookOutput = path.join(renderDir, "hooked.mp4");
-                    execSync(
-                        `ffmpeg -i "${outputPath}" -vf "${drawFilters}" -c:v libx264 -preset fast -crf 23 -c:a copy "${hookOutput}" -y`,
-                        { timeout: 300000 }
-                    );
-                    fs.renameSync(hookOutput, outputPath);
-                    console.log(`[Render] Hook: ${finalLines.length} lines, font=${hookFont}, size=${effectiveFontSize}`);
+                    try {
+                        execSync(
+                            `ffmpeg -i "${outputPath}" -vf "${drawFilters}" -c:v libx264 -preset fast -crf 23 -c:a copy "${hookOutput}" -y`,
+                            { timeout: 300000, stdio: ['pipe', 'pipe', 'pipe'] }
+                        );
+                        fs.renameSync(hookOutput, outputPath);
+                        console.log(`[Render] Hook: ${finalLines.length} lines, size=${effectiveFontSize}`);
+                    } catch (ffErr: any) {
+                        console.error(`[Render] Hook FFmpeg FAILED: ${ffErr.message}`);
+                        if (ffErr.stderr) console.error(`[Render] Hook FFmpeg stderr: ${ffErr.stderr.toString().slice(-500)}`);
+                        // Cleanup partial output
+                        if (fs.existsSync(hookOutput)) fs.unlinkSync(hookOutput);
+                    }
                 } catch (hookErr: any) {
                     console.warn(`[Render] Hook text burn failed: ${hookErr.message}`);
                 }
