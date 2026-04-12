@@ -124,10 +124,10 @@ export default async function DashboardPage() {
                 <h2 className="text-lg font-semibold text-white mb-4">Quick Actions</h2>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <QuickAction
-                        href="/dashboard/ingest"
+                        href="/dashboard/library"
                         icon={<Upload className="w-6 h-6" />}
-                        label="Ingest Video"
-                        description="Paste a URL to start processing"
+                        label="Add Video"
+                        description="Import a new video to process"
                         gradient="from-violet-500 to-purple-600"
                     />
                     <QuickAction
@@ -172,7 +172,7 @@ export default async function DashboardPage() {
                         {recentVideos.map((video: any) => (
                             <Link
                                 key={video.id}
-                                href={`/dashboard/editor?video=${video.id}`}
+                                href={`/dashboard/studio?video=${video.id}`}
                                 className="flex items-center gap-4 bg-gray-900/50 border border-gray-800 rounded-xl px-4 py-3 hover:border-gray-700 transition-colors group"
                             >
                                 <div className="w-16 h-10 bg-gray-800 rounded-lg flex-shrink-0 overflow-hidden">

@@ -200,6 +200,8 @@ model Segment {
   hookBoxColor     String?  @default("#FFFF00")
   hookFontColor    String?  @default("#FFFFFF")
   hookUppercase    Boolean? @default(true)
+  // ── Video effects ──
+  effects          Json?    // [{type: "blur_background", params: {blur: 25}}, ...]
 
   video       Video         @relation(fields: [videoId], references: [id], onDelete: Cascade)
   shortVideo  ShortVideo?

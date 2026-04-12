@@ -19,27 +19,54 @@ export async function DELETE(
 
     const video = await prisma.video.findFirst({
         where: { id, userId: session.user.id },
+        include: {
+            segments: {
+                include: {
+                    shortVideo: { select: { storagePath: true, thumbnailPath: true } },
+                },
+            },
+        },
     });
 
     if (!video) {
         return NextResponse.json({ error: "Video not found" }, { status: 404 });
     }
 
-    // Delete from R2 if storage path exists
-    if (video.storagePath) {
+    try {
+        // Clean R2 storage — source video + audio
+        if (video.storagePath || video.audioPath) {
+            try {
+                const { deleteFromR2 } = await import("@/lib/storage");
+                if (video.storagePath) await deleteFromR2(video.storagePath);
+                if (video.audioPath) await deleteFromR2(video.audioPath);
+            } catch (e) {
+                console.warn("[Delete] R2 source cleanup failed, continuing:", e);
+            }
+        }
+
+        // Clean R2 storage — rendered shorts
         try {
             const { deleteFromR2 } = await import("@/lib/storage");
-            await deleteFromR2(video.storagePath);
-            if (video.audioPath) await deleteFromR2(video.audioPath);
+            for (const segment of video.segments) {
+                const sv = segment.shortVideo;
+                if (sv?.storagePath) await deleteFromR2(sv.storagePath).catch(() => {});
+                if (sv?.thumbnailPath) await deleteFromR2(sv.thumbnailPath).catch(() => {});
+            }
         } catch (e) {
-            console.warn("[Delete] R2 cleanup failed, continuing:", e);
+            console.warn("[Delete] R2 shorts cleanup failed, continuing:", e);
         }
+
+        // Cascade delete handles segments, transcript, tags, shorts, publish jobs, etc.
+        await prisma.video.delete({ where: { id } });
+
+        return NextResponse.json({ deleted: true });
+    } catch (err: any) {
+        console.error("[Delete] Failed to delete video:", err);
+        return NextResponse.json(
+            { error: err.message || "Failed to delete video" },
+            { status: 500 }
+        );
     }
-
-    // Cascade delete handles segments, transcript, tags, etc.
-    await prisma.video.delete({ where: { id } });
-
-    return NextResponse.json({ deleted: true });
 }
 
 /**

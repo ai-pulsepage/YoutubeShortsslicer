@@ -15,6 +15,8 @@ import {
     Shield,
     Trash2,
     HardDrive,
+    AlertTriangle,
+    Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -238,6 +240,7 @@ export default function AdminPage() {
                             <InfoRow label="Database" value="Railway PostgreSQL" />
                         </div>
                     </div>
+                    <StuckJobsCleaner />
                     <QueueManager />
                 </div>
             )}
@@ -577,6 +580,93 @@ function StorageManager() {
                     <p className="text-sm text-gray-500">Unable to load storage stats</p>
                 )}
             </div>
+        </div>
+    );
+}
+
+function StuckJobsCleaner() {
+    const [cleaning, setCleaning] = useState(false);
+    const [result, setResult] = useState<{
+        cleaned: number;
+        details: { videos: number; segments: number; shorts: number; documentaries: number; genJobs: number };
+    } | null>(null);
+    const [error, setError] = useState<string | null>(null);
+
+    const runCleanup = async () => {
+        setCleaning(true);
+        setResult(null);
+        setError(null);
+        try {
+            const res = await fetch("/api/admin/jobs/cleanup", { method: "POST" });
+            const data = await res.json();
+            if (!res.ok) {
+                setError(data.error || "Cleanup failed");
+            } else {
+                setResult(data);
+            }
+        } catch (err: any) {
+            setError(err.message || "Network error");
+        } finally {
+            setCleaning(false);
+        }
+    };
+
+    return (
+        <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-5">
+            <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-400" />
+                    <h3 className="text-sm font-semibold text-white">Stuck Jobs Cleanup</h3>
+                </div>
+                <button
+                    onClick={runCleanup}
+                    disabled={cleaning}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 transition-colors disabled:opacity-50"
+                >
+                    {cleaning ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                        <RefreshCw className="w-3 h-3" />
+                    )}
+                    {cleaning ? "Cleaning..." : "Cleanup Stuck Jobs"}
+                </button>
+            </div>
+            <p className="text-xs text-gray-500 mb-3">
+                Resets all videos, segments, shorts, documentaries, and gen jobs stuck in processing state for over 30 minutes to FAILED.
+            </p>
+
+            {error && (
+                <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400">
+                    {error}
+                </div>
+            )}
+
+            {result && (
+                <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                    <p className="text-sm font-medium text-emerald-400 mb-2">
+                        {result.cleaned === 0 ? "No stuck jobs found ✓" : `Cleaned ${result.cleaned} stuck job${result.cleaned === 1 ? "" : "s"}`}
+                    </p>
+                    {result.cleaned > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                            {result.details.videos > 0 && (
+                                <span className="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-300">{result.details.videos} videos</span>
+                            )}
+                            {result.details.segments > 0 && (
+                                <span className="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-300">{result.details.segments} segments</span>
+                            )}
+                            {result.details.shorts > 0 && (
+                                <span className="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-300">{result.details.shorts} shorts</span>
+                            )}
+                            {result.details.documentaries > 0 && (
+                                <span className="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-300">{result.details.documentaries} docs</span>
+                            )}
+                            {result.details.genJobs > 0 && (
+                                <span className="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-300">{result.details.genJobs} gen jobs</span>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 }

@@ -56,6 +56,22 @@ export async function PATCH(
     if (typeof body.subtitlePresetId === "string" || body.subtitlePresetId === null) {
         allowedFields.subtitlePresetId = body.subtitlePresetId;
     }
+    // ── Subtitle style fields ──
+    if (typeof body.subFont === "string") allowedFields.subFont = body.subFont;
+    if (typeof body.subFontSize === "number") allowedFields.subFontSize = body.subFontSize;
+    if (typeof body.subColor === "string") allowedFields.subColor = body.subColor;
+    if (typeof body.subHighlightColor === "string") allowedFields.subHighlightColor = body.subHighlightColor;
+    if (typeof body.subAnimation === "string") allowedFields.subAnimation = body.subAnimation;
+    if (typeof body.subPosition === "string") allowedFields.subPosition = body.subPosition;
+    // ── Hook text fields ──
+    if (typeof body.hookText === "string" || body.hookText === null) allowedFields.hookText = body.hookText;
+    if (typeof body.hookFontSize === "number") allowedFields.hookFontSize = body.hookFontSize;
+    if (typeof body.hookFont === "string") allowedFields.hookFont = body.hookFont;
+    if (typeof body.hookBoxColor === "string") allowedFields.hookBoxColor = body.hookBoxColor;
+    if (typeof body.hookFontColor === "string") allowedFields.hookFontColor = body.hookFontColor;
+    if (typeof body.hookUppercase === "boolean") allowedFields.hookUppercase = body.hookUppercase;
+    // ── Effects ──
+    if (body.effects !== undefined) allowedFields.effects = body.effects;
 
     if (Object.keys(allowedFields).length === 0) {
         return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });

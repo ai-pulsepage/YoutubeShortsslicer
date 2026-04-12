@@ -116,9 +116,18 @@ export default function LibraryPage() {
 
     const deleteVideo = async (videoId: string) => {
         if (!confirm("Delete this video and all its segments? This cannot be undone.")) return;
-        await fetch(`/api/videos/${videoId}`, { method: "DELETE" });
-        setVideos((prev) => prev.filter((v) => v.id !== videoId));
-        setTotal((prev) => prev - 1);
+        try {
+            const res = await fetch(`/api/videos/${videoId}`, { method: "DELETE" });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                alert(`Delete failed: ${err.error || res.statusText}`);
+                return;
+            }
+            setVideos((prev) => prev.filter((v) => v.id !== videoId));
+            setTotal((prev) => prev - 1);
+        } catch (err: any) {
+            alert(`Delete failed: ${err.message || "Network error"}`);
+        }
     };
 
     const createTag = async () => {
@@ -536,7 +545,7 @@ function VideoRow({ video, onDelete }: { video: Video; onDelete: (id: string) =>
 
             {/* Actions */}
             <a
-                href={`/dashboard/editor?video=${video.id}`}
+                href={`/dashboard/studio?video=${video.id}`}
                 className="p-2 text-gray-500 hover:text-white hover:bg-gray-800 rounded-lg transition-colors flex-shrink-0"
             >
                 <ExternalLink className="w-4 h-4" />

@@ -898,6 +898,73 @@ const renderWorker = new Worker(
                 }
             }
 
+            // Step 3.8: Apply video effects if any are configured
+            const segmentEffects = (segment as any).effects;
+            if (segmentEffects && Array.isArray(segmentEffects) && segmentEffects.length > 0) {
+                try {
+                    const { buildEffectChain, buildAudioSpeedFilter } = await import("../lib/effects");
+
+                    // Probe video for dimensions
+                    let vWidth = 1080, vHeight = 1920, vFps = 30;
+                    try {
+                        const probeResult = execSync(
+                            `ffprobe -v quiet -select_streams v:0 -show_entries stream=width,height,r_frame_rate -of csv=p=0 "${outputPath}"`,
+                            { timeout: 10000 }
+                        ).toString().trim();
+                        const parts = probeResult.split(",");
+                        if (parts.length >= 2) {
+                            vWidth = parseInt(parts[0]) || 1080;
+                            vHeight = parseInt(parts[1]) || 1920;
+                            if (parts[2]) {
+                                const fpsParts = parts[2].split("/");
+                                vFps = Math.round(parseInt(fpsParts[0]) / (parseInt(fpsParts[1]) || 1)) || 30;
+                            }
+                        }
+                    } catch {} // Use defaults if probe fails
+
+                    const effectChain = buildEffectChain(segmentEffects, {
+                        width: vWidth,
+                        height: vHeight,
+                        duration,
+                        fps: vFps,
+                    });
+
+                    if (effectChain) {
+                        console.log(`[Render] Applying ${segmentEffects.length} effect(s): ${segmentEffects.map((e: any) => e.type).join(", ")}`);
+                        console.log(`[Render] Effect filter_complex: ${effectChain.substring(0, 300)}`);
+
+                        const effectOutput = path.join(renderDir, "effected.mp4");
+                        const audioFilter = buildAudioSpeedFilter(segmentEffects);
+
+                        // Build FFmpeg command based on whether we need audio filter too
+                        let ffCmd: string;
+                        if (audioFilter) {
+                            ffCmd = `ffmpeg -i "${outputPath}" -filter_complex "${effectChain}[vout];${audioFilter}" -map "[vout]" -map "[aout]" -c:v libx264 -preset fast -crf 23 -c:a aac "${effectOutput}" -y`;
+                        } else {
+                            // Check if effect chain already has a tagged output
+                            const hasTag = effectChain.includes("[layoutout]") || effectChain.includes("[vout]");
+                            if (hasTag) {
+                                // Tagged output — use filter_complex with map
+                                const outLabel = effectChain.includes("[vout]") ? "[vout]" : "[vfinal]";
+                                const fc = effectChain.includes("[vout]") ? effectChain : effectChain + `[vfinal]`;
+                                ffCmd = `ffmpeg -i "${outputPath}" -filter_complex "${fc}" -map "${outLabel}" -map 0:a -c:v libx264 -preset fast -crf 23 -c:a copy "${effectOutput}" -y`;
+                            } else {
+                                // Simple -vf chain
+                                const simpleFilter = effectChain.replace(/^\[0:v\]/, "");
+                                ffCmd = `ffmpeg -i "${outputPath}" -vf "${simpleFilter}" -c:v libx264 -preset fast -crf 23 -c:a copy "${effectOutput}" -y`;
+                            }
+                        }
+
+                        execSync(ffCmd, { timeout: 600000, stdio: ['pipe', 'pipe', 'pipe'] });
+                        fs.renameSync(effectOutput, outputPath);
+                        console.log(`[Render] ✓ Effects applied successfully`);
+                    }
+                } catch (fxErr: any) {
+                    console.warn(`[Render] Effects application failed: ${fxErr.message}`);
+                    if (fxErr.stderr) console.warn(`[Render] FFmpeg stderr: ${fxErr.stderr.toString().slice(-500)}`);
+                }
+            }
+
             // Step 4: Generate and mix voiceover if enabled
             const mixMode = (segment as any).voiceoverMixMode || "mix";
             if (segment.voiceoverEnabled && segment.voiceoverText && mixMode !== "original") {

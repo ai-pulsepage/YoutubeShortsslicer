@@ -28,19 +28,17 @@ import {
     Sparkles,
     Users,
     Briefcase,
+    PackageOpen,
+    Wand2,
 } from "lucide-react";
 import { useState } from "react";
 
 const topNavItems = [
     { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-    { label: "Campaigns", href: "/dashboard/campaigns", icon: Briefcase },
-    { label: "Clip Studio", href: "/dashboard/clipper", icon: Scissors },
     { label: "Library", href: "/dashboard/library", icon: Library },
-    { label: "Ingest", href: "/dashboard/ingest", icon: Download },
-    { label: "Editor", href: "/dashboard/editor", icon: Film },
-    { label: "Render", href: "/dashboard/render", icon: Clapperboard },
-    { label: "Subtitles", href: "/dashboard/style", icon: Type },
-    { label: "Voiceover", href: "/dashboard/voiceover", icon: Mic },
+    { label: "Campaigns", href: "/dashboard/campaigns", icon: Briefcase },
+    { label: "Studio", href: "/dashboard/studio", icon: Wand2 },
+    { label: "Export", href: "/dashboard/export", icon: PackageOpen },
     { label: "Channels", href: "/dashboard/channels", icon: Share2 },
     { label: "Scheduler", href: "/dashboard/scheduler", icon: Calendar },
 ];
