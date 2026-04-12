@@ -4,7 +4,11 @@ import { NextResponse } from "next/server";
 
 /**
  * POST /api/videos/[id]/render
- * Queue rendering for all APPROVED segments of a video
+ *
+ * Queue rendering for segments. Supports two modes:
+ * 1. Send { segmentIds: [...] } → renders only those specific segments
+ *    (must be APPROVED or RENDERED — allows re-render after style/effects changes)
+ * 2. Send {} or no body → renders ALL APPROVED segments for the video
  */
 export async function POST(
     req: Request,
@@ -16,33 +20,50 @@ export async function POST(
     }
 
     const { id } = await params;
+    const body = await req.json().catch(() => ({}));
+    const requestedIds: string[] | undefined = body.segmentIds;
 
+    // Verify video ownership
     const video = await prisma.video.findFirst({
         where: { id, userId: session.user.id },
-        include: {
-            segments: {
-                where: { status: "APPROVED" },
-                orderBy: { startTime: "asc" },
-            },
-        },
     });
 
     if (!video) {
         return NextResponse.json({ error: "Video not found" }, { status: 404 });
     }
 
-    if (video.segments.length === 0) {
+    // Get segments to render
+    let segments;
+    if (requestedIds && requestedIds.length > 0) {
+        // Specific segments requested — allow APPROVED or RENDERED (re-render)
+        segments = await prisma.segment.findMany({
+            where: {
+                id: { in: requestedIds },
+                videoId: id,
+                status: { in: ["APPROVED", "RENDERED"] },
+            },
+            orderBy: { startTime: "asc" },
+        });
+    } else {
+        // No specific IDs — render all APPROVED
+        segments = await prisma.segment.findMany({
+            where: { videoId: id, status: "APPROVED" },
+            orderBy: { startTime: "asc" },
+        });
+    }
+
+    if (segments.length === 0) {
         return NextResponse.json(
-            { error: "No approved segments to render" },
+            { error: "No eligible segments to render (must be APPROVED or RENDERED)" },
             { status: 400 }
         );
     }
 
+    const segmentIds = segments.map((s) => s.id);
+
     // Mark segments as queued for rendering
     await prisma.segment.updateMany({
-        where: {
-            id: { in: video.segments.map((s) => s.id) },
-        },
+        where: { id: { in: segmentIds } },
         data: { status: "RENDERING" },
     });
 
@@ -53,7 +74,7 @@ export async function POST(
         const redis = new IORedis(process.env.REDIS_URL || "", { maxRetriesPerRequest: null });
         const renderQueue = new Queue("render", { connection: redis as any });
 
-        for (const segment of video.segments) {
+        for (const segment of segments) {
             await renderQueue.add(
                 `render-${segment.id}`,
                 {
@@ -71,15 +92,13 @@ export async function POST(
         await redis.quit();
 
         return NextResponse.json({
-            queued: video.segments.length,
-            segments: video.segments.map((s) => s.id),
+            queued: segments.length,
+            segments: segmentIds,
         });
     } catch (err: any) {
         // Revert status on failure
         await prisma.segment.updateMany({
-            where: {
-                id: { in: video.segments.map((s) => s.id) },
-            },
+            where: { id: { in: segmentIds } },
             data: { status: "APPROVED" },
         });
 

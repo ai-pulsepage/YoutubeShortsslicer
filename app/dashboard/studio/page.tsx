@@ -359,7 +359,7 @@ function StudioContent() {
                             <div className="flex items-center gap-2 flex-shrink-0">
                                 {saving && <Loader2 className="w-3.5 h-3.5 text-violet-400 animate-spin" />}
                                 {statusBadge(selectedSegment.status)}
-                                {/* Approve / Reject */}
+                                {/* Approve / Reject — AI_SUGGESTED */}
                                 {selectedSegment.status === "AI_SUGGESTED" && (
                                     <div className="flex gap-1">
                                         <button onClick={() => setSegmentStatus(selectedSegment.id, "APPROVED")}
@@ -372,13 +372,28 @@ function StudioContent() {
                                         </button>
                                     </div>
                                 )}
-                                {selectedSegment.status === "APPROVED" && (
-                                    <button onClick={() => renderSegment(selectedSegment.id)} disabled={renderingIds.has(selectedSegment.id)}
-                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-violet-600 hover:bg-violet-500 text-white transition-colors disabled:opacity-50">
-                                        {renderingIds.has(selectedSegment.id) ? <Loader2 className="w-3 h-3 animate-spin" /> : <Film className="w-3 h-3" />}
-                                        Render
+                                {/* REJECTED — allow reconsider */}
+                                {selectedSegment.status === "REJECTED" && (
+                                    <button onClick={() => setSegmentStatus(selectedSegment.id, "AI_SUGGESTED")}
+                                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-gray-600 hover:bg-gray-500 text-white transition-colors">
+                                        <RefreshCw className="w-3 h-3" /> Reconsider
                                     </button>
                                 )}
+                                {/* APPROVED — render + reject */}
+                                {selectedSegment.status === "APPROVED" && (
+                                    <div className="flex gap-1">
+                                        <button onClick={() => renderSegment(selectedSegment.id)} disabled={renderingIds.has(selectedSegment.id)}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-violet-600 hover:bg-violet-500 text-white transition-colors disabled:opacity-50">
+                                            {renderingIds.has(selectedSegment.id) ? <Loader2 className="w-3 h-3 animate-spin" /> : <Film className="w-3 h-3" />}
+                                            Render
+                                        </button>
+                                        <button onClick={() => setSegmentStatus(selectedSegment.id, "REJECTED")}
+                                            className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-red-600/60 hover:bg-red-500 text-white transition-colors">
+                                            <XCircle className="w-3 h-3" />
+                                        </button>
+                                    </div>
+                                )}
+                                {/* RENDERED — preview, download, re-render */}
                                 {(selectedSegment.status === "RENDERED" || selectedSegment.shortVideo?.status === "RENDERED") && selectedSegment.shortVideo && (
                                     <div className="flex gap-1">
                                         <button onClick={() => setPlayingSegId(playingSegId === selectedSegment.id ? null : selectedSegment.id)}
@@ -389,7 +404,19 @@ function StudioContent() {
                                             className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-colors">
                                             <Download className="w-3 h-3" /> Download
                                         </a>
+                                        <button onClick={() => renderSegment(selectedSegment.id)} disabled={renderingIds.has(selectedSegment.id)}
+                                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-amber-600 hover:bg-amber-500 text-white transition-colors disabled:opacity-50"
+                                            title="Re-render with updated style/effects">
+                                            {renderingIds.has(selectedSegment.id) ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                                            Re-render
+                                        </button>
                                     </div>
+                                )}
+                                {/* RENDERING — spinner */}
+                                {selectedSegment.status === "RENDERING" && (
+                                    <span className="flex items-center gap-1.5 text-xs text-amber-400">
+                                        <Loader2 className="w-3 h-3 animate-spin" /> Rendering…
+                                    </span>
                                 )}
                             </div>
                         </div>

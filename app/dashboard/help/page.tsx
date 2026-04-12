@@ -19,6 +19,14 @@ import {
     Play,
     Settings,
     Library,
+    Sparkles,
+    CheckCircle,
+    XCircle,
+    RefreshCw,
+    Save,
+    Wand2,
+    Send,
+    Briefcase,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -43,28 +51,28 @@ export default function HelpPage() {
             content: (
                 <div className="space-y-4">
                     <p className="text-sm text-gray-300">
-                        The YouTube Shorts Slicer automates the entire process from a long-form
-                        video to published YouTube Shorts. Each step triggers the next automatically.
+                        The platform automates the journey from a long-form video to published Shorts.
+                        The first 3 steps are fully automatic — you take control starting at step 4.
                     </p>
                     <div className="space-y-0">
                         {[
-                            { step: "1", label: "Ingest", desc: "Paste a YouTube URL. The system downloads the full video and stores it in cloud storage.", color: "violet" },
-                            { step: "2", label: "Transcribe", desc: "Audio is extracted and transcribed into text with word-level timestamps. Happens automatically after download.", color: "blue" },
-                            { step: "3", label: "AI Segment", desc: "AI analyzes the transcript and suggests the best 30–60 second clips with engagement scores, hook strength, and emotional arc ratings.", color: "cyan" },
-                            { step: "4", label: "Edit", desc: "Review the AI suggestions. Approve, reject, or adjust the in/out points. Split segments, add voiceover text. You have full control.", color: "emerald" },
-                            { step: "5", label: "Render", desc: "Approved segments are cut into vertical 9:16 format with burned-in subtitles, ready for YouTube Shorts.", color: "amber" },
-                            { step: "6", label: "Schedule", desc: "Assign rendered shorts to a channel schedule. Set posting times (e.g., 3x/day at 9am, 1pm, 6pm). Content auto-fills the next open slots.", color: "orange" },
-                            { step: "7", label: "Publish", desc: "At the scheduled time, the system uploads to YouTube with #Shorts metadata, title, description, and hashtags. Errors show suggestions for fixes.", color: "red" },
+                            { step: "1", label: "Add Video", page: "Library → Add Video", desc: "Paste any video URL (YouTube, Vimeo, Twitter, etc.). The system downloads the full video. You can tag it for organization.", color: "violet" },
+                            { step: "2", label: "Transcribe", page: "Automatic", desc: "Audio is extracted and transcribed with word-level timestamps. Happens automatically after download — no action needed.", color: "blue" },
+                            { step: "3", label: "AI Segment", page: "Automatic", desc: "AI analyzes the transcript and suggests the best 30–60 second clips, scoring each for engagement potential, hook strength, and emotional arc.", color: "cyan" },
+                            { step: "4", label: "Review & Style", page: "Studio", desc: "Review AI suggestions. Approve the best segments. Customize subtitle style, add hook text overlays, apply video effects (blur background, color grading, etc.).", color: "emerald" },
+                            { step: "5", label: "Render", page: "Studio", desc: "Render approved segments into vertical 9:16 video with burned-in subtitles, effects, and hook text. Re-render anytime after editing.", color: "amber" },
+                            { step: "6", label: "Export & Publish", page: "Export", desc: "Download rendered clips, publish directly to YouTube, or schedule for future posting. Batch assign to channel schedules.", color: "orange" },
                         ].map((item, i) => (
                             <div key={item.step} className="flex gap-4 items-start">
                                 <div className="flex flex-col items-center">
                                     <div className={`w-8 h-8 rounded-full bg-${item.color}-500/15 border border-${item.color}-500/20 flex items-center justify-center text-xs font-bold text-${item.color}-400`}>
                                         {item.step}
                                     </div>
-                                    {i < 6 && <div className="w-px h-6 bg-gray-800" />}
+                                    {i < 5 && <div className="w-px h-6 bg-gray-800" />}
                                 </div>
                                 <div className="pb-4">
                                     <h4 className="text-sm font-semibold text-white">{item.label}</h4>
+                                    <p className="text-[10px] text-gray-600 mb-0.5">{item.page}</p>
                                     <p className="text-xs text-gray-400 mt-0.5">{item.desc}</p>
                                 </div>
                             </div>
@@ -73,29 +81,7 @@ export default function HelpPage() {
                     <div className="bg-blue-500/5 border border-blue-500/10 rounded-lg p-3 flex items-start gap-2">
                         <AlertCircle className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
                         <p className="text-xs text-gray-400">
-                            <strong className="text-blue-400">Automatic:</strong> Steps 1–3 happen without any input from you. Just paste the URL and wait. You take over at step 4 (Edit).
-                        </p>
-                    </div>
-                </div>
-            ),
-        },
-        {
-            id: "ingest",
-            title: "Ingest — Importing Videos",
-            icon: Download,
-            content: (
-                <div className="space-y-3 text-sm text-gray-300">
-                    <p>The Ingest page is where you start. Paste any YouTube video URL and the system will:</p>
-                    <ol className="list-decimal list-inside space-y-1 text-gray-400 ml-2">
-                        <li>Detect the platform and fetch video metadata (title, thumbnail, duration)</li>
-                        <li>Show you a preview so you can confirm</li>
-                        <li>Let you assign tags for organization</li>
-                        <li>Queue the download — the worker picks it up and downloads the video</li>
-                    </ol>
-                    <p className="text-gray-400">After download completes, transcription and segmentation start <strong className="text-white">automatically</strong>.</p>
-                    <div className="bg-amber-500/5 border border-amber-500/10 rounded-lg p-3">
-                        <p className="text-xs text-gray-400">
-                            <strong className="text-amber-400">Tip:</strong> You can check download progress on the Dashboard or Library page. Status will show as &quot;Downloading&quot; → &quot;Transcribing&quot; → &quot;Segmenting&quot; → &quot;Ready&quot;.
+                            <strong className="text-blue-400">Automatic:</strong> Steps 1–3 happen without any input from you. Just paste the URL and wait. Status progresses: Downloading → Transcribing → Segmenting → Ready.
                         </p>
                     </div>
                 </div>
@@ -103,98 +89,153 @@ export default function HelpPage() {
         },
         {
             id: "library",
-            title: "Library — Managing Your Videos",
+            title: "Library — Your Video Hub",
             icon: Library,
             content: (
                 <div className="space-y-3 text-sm text-gray-300">
-                    <p>The Library shows all your ingested videos with search, filters, and organization tools.</p>
-                    <ul className="space-y-1 text-gray-400 ml-4 list-disc">
-                        <li><strong className="text-white">Grid/List view</strong> — toggle between visual grid and compact list</li>
-                        <li><strong className="text-white">Tags</strong> — color-coded tags for organizing by category (animals, news, influencers, etc.)</li>
-                        <li><strong className="text-white">Status filters</strong> — filter by processing status to find videos ready for editing</li>
-                        <li><strong className="text-white">Search</strong> — search by title or description</li>
-                        <li><strong className="text-white">Channel flags</strong> — flag videos for specific channels</li>
+                    <p>The Library is your home base — it shows every video you&apos;ve imported. This is where you start.</p>
+                    <h4 className="text-xs font-semibold text-white mt-3">Buttons & Actions</h4>
+                    <ul className="space-y-2 text-gray-400 ml-4 list-disc">
+                        <li><strong className="text-white">+ Add Video</strong> — Opens the Ingest page to paste a new video URL. This begins the automated pipeline (download → transcribe → segment).</li>
+                        <li><strong className="text-white">Grid/List toggle</strong> — Switch between visual thumbnail grid and compact list view.</li>
+                        <li><strong className="text-white">Status filter</strong> — Filter by pipeline stage: Pending, Downloading, Transcribing, Segmenting, Ready, Failed. Use &quot;Ready&quot; to find videos that are done processing and ready for the Studio.</li>
+                        <li><strong className="text-white">Tags</strong> — Create color-coded tags (e.g., &quot;Animals&quot;, &quot;Gaming&quot;, &quot;News&quot;) to organize videos by category. Click the Tags button to manage.</li>
+                        <li><strong className="text-white">Search</strong> — Search by video title.</li>
+                        <li><strong className="text-white">Video card click</strong> — Opens the video in <strong className="text-violet-400">Studio</strong> for editing.</li>
+                        <li><strong className="text-white">⋮ Menu → Delete</strong> — Permanently deletes the video, all its segments, rendered shorts, and cloud storage files. Cannot be undone.</li>
                     </ul>
-                </div>
-            ),
-        },
-        {
-            id: "editor",
-            title: "Editor — Review & Adjust Segments",
-            icon: Scissors,
-            content: (
-                <div className="space-y-3 text-sm text-gray-300">
-                    <p>The Segment Editor is where you review AI suggestions and decide what becomes a Short.</p>
-                    <ul className="space-y-1 text-gray-400 ml-4 list-disc">
-                        <li><strong className="text-white">Visual timeline</strong> — colored regions show each segment on a zoomable timeline</li>
-                        <li><strong className="text-white">Video preview</strong> — scrub and play any segment inline</li>
-                        <li><strong className="text-white">Segment details</strong> — title, AI score, hook strength, emotional arc</li>
-                        <li><strong className="text-white">Approve/Reject</strong> — approve segments to queue for rendering, reject ones that don&apos;t work</li>
-                        <li><strong className="text-white">Adjust in/out points</strong> — drag segment boundaries or type exact timestamps</li>
-                        <li><strong className="text-white">Split at playhead</strong> — cut a segment into two at the current playback position</li>
-                        <li><strong className="text-white">Voiceover toggle</strong> — mark segments for AI narration</li>
-                    </ul>
-                    <div className="bg-gray-800/50 rounded-lg p-3">
-                        <p className="text-xs text-gray-500 mb-2">Keyboard shortcuts:</p>
-                        <div className="grid grid-cols-2 gap-1 text-xs text-gray-400">
-                            <span><kbd className="px-1.5 py-0.5 bg-gray-700 rounded text-gray-300">Space</kbd> Play/Pause</span>
-                            <span><kbd className="px-1.5 py-0.5 bg-gray-700 rounded text-gray-300">J/K/L</kbd> Rev/Pause/Fwd</span>
-                            <span><kbd className="px-1.5 py-0.5 bg-gray-700 rounded text-gray-300">I/O</kbd> Set In/Out</span>
-                            <span><kbd className="px-1.5 py-0.5 bg-gray-700 rounded text-gray-300">←/→</kbd> Frame step</span>
-                        </div>
+                    <div className="bg-amber-500/5 border border-amber-500/10 rounded-lg p-3 mt-3">
+                        <p className="text-xs text-gray-400">
+                            <strong className="text-amber-400">Tip:</strong> The Library auto-refreshes every 5 seconds while videos are processing. You&apos;ll see the status badge update in real time.
+                        </p>
                     </div>
                 </div>
             ),
         },
         {
-            id: "render",
-            title: "Render — Create Final Shorts",
-            icon: Film,
+            id: "campaigns",
+            title: "Campaigns — Brand Briefs",
+            icon: Briefcase,
             content: (
                 <div className="space-y-3 text-sm text-gray-300">
-                    <p>Rendering takes your approved segments and converts them into vertical 9:16 YouTube Shorts.</p>
+                    <p>Campaigns let you define brand requirements that apply to your clips. This is useful for sponsored content or multi-channel operations.</p>
+                    <h4 className="text-xs font-semibold text-white mt-3">What a Campaign Brief Contains</h4>
                     <ul className="space-y-1 text-gray-400 ml-4 list-disc">
-                        <li>Automatically cuts to the exact segment timestamps</li>
-                        <li>Converts to 1080×1920 vertical format with padding</li>
-                        <li>Burns in subtitles using your selected style preset</li>
-                        <li>Uploads the rendered file to cloud storage (R2)</li>
-                        <li>Mark segments as &quot;Rendered&quot; — ready for scheduling</li>
+                        <li><strong className="text-white">Target platforms</strong> — TikTok, Instagram, YouTube</li>
+                        <li><strong className="text-white">Caption guidelines</strong> — Pre-written captions and rules</li>
+                        <li><strong className="text-white">Required hashtags</strong> — Auto-included on publish</li>
+                        <li><strong className="text-white">Disclosure/FTC</strong> — Automatic disclosure placement for sponsored content</li>
+                        <li><strong className="text-white">Watermark</strong> — Watermark image URL burned into rendered clips</li>
+                        <li><strong className="text-white">Video settings</strong> — Min/max clip length constraints</li>
+                        <li><strong className="text-white">Requirements / Not Allowed</strong> — Checklist of do&apos;s and don&apos;ts</li>
+                    </ul>
+                    <div className="bg-blue-500/5 border border-blue-500/10 rounded-lg p-3 mt-3">
+                        <p className="text-xs text-gray-400">
+                            <strong className="text-blue-400">How it connects:</strong> When a video is linked to a campaign, the render worker automatically applies watermarks and the scheduler includes required hashtags in the upload description.
+                        </p>
+                    </div>
+                </div>
+            ),
+        },
+        {
+            id: "studio",
+            title: "Studio — Edit, Style & Render",
+            icon: Wand2,
+            content: (
+                <div className="space-y-4 text-sm text-gray-300">
+                    <p>The Studio is the central editing hub. This is where you review AI suggestions, customize styling, apply effects, and render your final clips.</p>
+
+                    <h4 className="text-xs font-semibold text-white">Segment Status Lifecycle</h4>
+                    <div className="bg-gray-800/50 rounded-lg p-3 space-y-2">
+                        <div className="flex items-center gap-3 text-xs">
+                            <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 font-medium">AI SUGGESTED</span>
+                            <span className="text-gray-500">→</span>
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-medium">APPROVED</span>
+                            <span className="text-gray-500">→</span>
+                            <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 font-medium">RENDERING</span>
+                            <span className="text-gray-500">→</span>
+                            <span className="px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-400 font-medium">RENDERED</span>
+                        </div>
+                        <p className="text-[10px] text-gray-500">You can also reject segments or reconsider rejected ones. Rendered segments can be re-rendered after style changes.</p>
+                    </div>
+
+                    <h4 className="text-xs font-semibold text-white mt-3">Action Buttons (per segment)</h4>
+                    <ul className="space-y-2 text-gray-400 ml-4 list-disc">
+                        <li><strong className="text-emerald-400">✓ Approve</strong> — Marks the segment as approved. This is the gate: only approved segments can be rendered. Use this to confirm an AI suggestion is worth keeping.</li>
+                        <li><strong className="text-red-400">✗ Reject</strong> — Marks the segment as rejected. It won&apos;t be rendered. Available from both AI Suggested and Approved states.</li>
+                        <li><strong className="text-gray-300">↻ Reconsider</strong> — Un-rejects a rejected segment, returning it to AI Suggested so you can re-evaluate it.</li>
+                        <li><strong className="text-violet-400">🎬 Render</strong> — Sends this specific segment to the render worker. Produces a 9:16 vertical video with your chosen subtitles, effects, and hook text.</li>
+                        <li><strong className="text-amber-400">↻ Re-render</strong> — Available on already-rendered segments. Use after changing style, effects, or hooks. Replaces the existing clip.</li>
+                        <li><strong className="text-blue-400">▶ Preview</strong> — Plays the rendered clip inline in the Studio.</li>
+                        <li><strong className="text-emerald-400">⬇ Download</strong> — Downloads the rendered MP4 file.</li>
+                        <li><strong className="text-violet-400">Render All Approved (N)</strong> — Bottom-left button. Batch-renders all approved segments in one click.</li>
+                    </ul>
+
+                    <h4 className="text-xs font-semibold text-white mt-3">Style Tab</h4>
+                    <p className="text-gray-400">Controls how burned-in subtitles look on the final video.</p>
+                    <ul className="space-y-1 text-gray-400 ml-4 list-disc">
+                        <li><strong className="text-white">Font Family</strong> — Montserrat, Arial, Impact, etc.</li>
+                        <li><strong className="text-white">Font Size</strong> — Slider from 24px to 200px</li>
+                        <li><strong className="text-white">Text Color</strong> — Color picker + hex input (main subtitle text color)</li>
+                        <li><strong className="text-white">Highlight Color</strong> — The color used to highlight the currently spoken word</li>
+                        <li><strong className="text-white">Animation</strong> — How words appear: word-highlight (karaoke-style), fade, pop, slide-up</li>
+                        <li><strong className="text-white">Position</strong> — Where subtitles sit: bottom, center, or top of frame</li>
+                    </ul>
+                    <p className="text-[10px] text-gray-600 mt-1">Changes are saved per-segment. Click &quot;Save&quot; (only appears when you make changes). Re-render to see updates.</p>
+
+                    <h4 className="text-xs font-semibold text-white mt-3">Effects Tab</h4>
+                    <p className="text-gray-400">Apply video effects that are processed by FFmpeg during rendering.</p>
+                    <ul className="space-y-1 text-gray-400 ml-4 list-disc">
+                        <li><strong className="text-white">🔲 Blur Background</strong> — Full-frame blurred copy behind a sharp, centered letterboxed version (the &quot;video on blurred video&quot; look popular on TikTok)</li>
+                        <li><strong className="text-white">🌅 Warm Cinematic</strong> — Orange/golden color grade (documentary feel)</li>
+                        <li><strong className="text-white">❄️ Cool Blue</strong> — Cold blue tint (tech/night feel)</li>
+                        <li><strong className="text-white">🎞️ Film Grain</strong> — Analog film grain texture overlay</li>
+                        <li><strong className="text-white">🔅 Vignette</strong> — Dark corner fade for cinematic focus</li>
+                        <li><strong className="text-white">⬛ Letterbox</strong> — Black cinematic bars top &amp; bottom</li>
+                        <li><strong className="text-white">🎬 Fade In/Out</strong> — Smooth black fade at start and end of clip</li>
+                        <li><strong className="text-white">⏱️ Slow Motion</strong> — Half-speed playback (audio tempo adjusted)</li>
+                        <li><strong className="text-white">⏩ Speed Up</strong> — 1.5x speed playback (audio tempo adjusted)</li>
+                    </ul>
+                    <p className="text-[10px] text-gray-600 mt-1">Multiple effects can stack. Click preset to add, trash icon to remove. Save, then render/re-render to see results.</p>
+
+                    <h4 className="text-xs font-semibold text-white mt-3">Hooks Tab</h4>
+                    <p className="text-gray-400">Add a prominent on-screen title at the top of your video — the &quot;hook&quot; text that grabs attention in the first seconds.</p>
+                    <ul className="space-y-1 text-gray-400 ml-4 list-disc">
+                        <li><strong className="text-white">Hook Text</strong> — The text shown on screen (e.g., &quot;You won&apos;t believe what happens next&quot;)</li>
+                        <li><strong className="text-white">Font Size</strong> — Slider (auto-shrinks if text is too long for the frame)</li>
+                        <li><strong className="text-white">UPPERCASE</strong> — Toggle to force all-caps</li>
+                        <li><strong className="text-white">Box Color</strong> — Background highlight behind the text (default yellow)</li>
+                        <li><strong className="text-white">Font Color</strong> — Text color (default white)</li>
+                        <li><strong className="text-white">Live Preview</strong> — Shows how hook will look before rendering</li>
                     </ul>
                 </div>
             ),
         },
         {
-            id: "subtitles",
-            title: "Subtitles — Style Your Text",
-            icon: Type,
+            id: "export",
+            title: "Export — Download, Publish & Schedule",
+            icon: Send,
             content: (
                 <div className="space-y-3 text-sm text-gray-300">
-                    <p>Customize how subtitles appear on your Shorts.</p>
-                    <ul className="space-y-1 text-gray-400 ml-4 list-disc">
-                        <li><strong className="text-white">14 fonts</strong> — Montserrat, Oswald, Bangers, and more</li>
-                        <li><strong className="text-white">Colors</strong> — text color, outline, shadow</li>
-                        <li><strong className="text-white">Position</strong> — top, center, or bottom</li>
-                        <li><strong className="text-white">6 animations</strong> — word highlight, fade, pop, slide, typewriter, karaoke</li>
-                        <li><strong className="text-white">5 presets</strong> — BBC Nature, True Crime, Motivational, Clean, Bold</li>
-                        <li><strong className="text-white">Live preview</strong> — see your changes in real-time on a 9:16 canvas</li>
+                    <p>Export is the final step. All rendered clips appear here with three actions per clip.</p>
+                    <h4 className="text-xs font-semibold text-white mt-3">Actions Per Clip</h4>
+                    <ul className="space-y-2 text-gray-400 ml-4 list-disc">
+                        <li><strong className="text-white">📥 Download</strong> — Downloads the MP4 file to your computer. Use for manual upload to TikTok, Instagram, etc.</li>
+                        <li><strong className="text-white">🚀 Publish Now</strong> — Immediately uploads to YouTube via the Data API. Uses the first connected channel. Adds #Shorts and hashtags automatically.</li>
+                        <li><strong className="text-white">📅 Schedule</strong> — Opens a scheduling modal where you pick:
+                            <ul className="ml-4 mt-1 space-y-0.5 list-disc">
+                                <li>Which connected channel to post to</li>
+                                <li>Date and time for the upload</li>
+                                <li>Title and description</li>
+                            </ul>
+                            The scheduler worker picks it up and publishes at the scheduled time.
+                        </li>
                     </ul>
-                </div>
-            ),
-        },
-        {
-            id: "voiceover",
-            title: "Voiceover — AI Narration",
-            icon: Mic,
-            content: (
-                <div className="space-y-3 text-sm text-gray-300">
-                    <p>Add AI-generated narration to your Shorts using Together.ai Kokoro TTS.</p>
-                    <ul className="space-y-1 text-gray-400 ml-4 list-disc">
-                        <li><strong className="text-white">8 voices</strong> — male and female options with different tones</li>
-                        <li><strong className="text-white">3 mix modes</strong> — replace original audio, overlay, or ducking (lower original when narrating)</li>
-                        <li><strong className="text-white">Balance slider</strong> — control the mix ratio between narration and original audio</li>
-                        <li><strong className="text-white">Cost estimation</strong> — see the estimated cost before generating</li>
-                    </ul>
-                    <p className="text-gray-400">Toggle voiceover per segment in the Editor — only marked segments will get narration.</p>
+                    <div className="bg-amber-500/5 border border-amber-500/10 rounded-lg p-3 mt-3">
+                        <p className="text-xs text-gray-400">
+                            <strong className="text-amber-400">Requires:</strong> At least one YouTube channel connected via the Channels page. A banner appears if no channels are detected.
+                        </p>
+                    </div>
                 </div>
             ),
         },
@@ -206,12 +247,12 @@ export default function HelpPage() {
                 <div className="space-y-3 text-sm text-gray-300">
                     <p>Connect your YouTube channels for automatic publishing.</p>
                     <ul className="space-y-1 text-gray-400 ml-4 list-disc">
-                        <li><strong className="text-white">Connect</strong> — click &quot;Connect YouTube Channel&quot; to authorize via Google OAuth</li>
-                        <li><strong className="text-white">Multiple channels</strong> — all channels on your Google account are auto-detected</li>
-                        <li><strong className="text-white">Token refresh</strong> — tokens are silently refreshed when you visit this page (no re-login needed)</li>
-                        <li><strong className="text-white">Channel cards</strong> — click to expand and see subscriber count, video count, properties</li>
-                        <li><strong className="text-white">Disconnect</strong> — remove a channel and its tokens</li>
-                        <li><strong className="text-white">View on YouTube</strong> — direct link to the channel</li>
+                        <li><strong className="text-white">Connect</strong> — Click &quot;Connect YouTube Channel&quot; to authorize via Google OAuth</li>
+                        <li><strong className="text-white">Multiple channels</strong> — All channels on your Google account are auto-detected</li>
+                        <li><strong className="text-white">Token refresh</strong> — Tokens are silently refreshed when you visit this page (no re-login needed)</li>
+                        <li><strong className="text-white">Channel cards</strong> — Click to expand and see subscriber count, video count, properties</li>
+                        <li><strong className="text-white">Disconnect</strong> — Remove a channel and its tokens</li>
+                        <li><strong className="text-white">View on YouTube</strong> — Direct link to the channel</li>
                     </ul>
                     <div className="bg-blue-500/5 border border-blue-500/10 rounded-lg p-3">
                         <p className="text-xs text-gray-400">
@@ -223,47 +264,24 @@ export default function HelpPage() {
         },
         {
             id: "scheduler",
-            title: "Scheduler — Per-Channel Schedules",
+            title: "Scheduler — Automated Posting",
             icon: Calendar,
             content: (
                 <div className="space-y-3 text-sm text-gray-300">
                     <p>Create named schedules for each YouTube channel and batch-assign content.</p>
                     <ul className="space-y-1 text-gray-400 ml-4 list-disc">
-                        <li><strong className="text-white">Create a schedule</strong> — click &quot;+&quot; in the sidebar → name it, pick a channel, set post times</li>
-                        <li><strong className="text-white">Posting times</strong> — configure exact times (e.g., 9am, 1pm, 6pm)</li>
-                        <li><strong className="text-white">Per-channel view</strong> — click a schedule in the sidebar to filter the calendar to just that channel</li>
-                        <li><strong className="text-white">Calendar view</strong> — see scheduled posts on a monthly calendar</li>
-                        <li><strong className="text-white">List view</strong> — sorted list with status and error messages</li>
-                        <li><strong className="text-white">Batch assign</strong> — assign multiple rendered shorts at once; they auto-fill the next open time slots</li>
+                        <li><strong className="text-white">Create a schedule</strong> — Click &quot;+&quot; in the sidebar → name it, pick a channel, set post times</li>
+                        <li><strong className="text-white">Posting times</strong> — Configure exact times (e.g., 9am, 1pm, 6pm)</li>
+                        <li><strong className="text-white">Per-channel view</strong> — Click a schedule in the sidebar to filter the calendar to just that channel</li>
+                        <li><strong className="text-white">Calendar view</strong> — See scheduled posts on a monthly calendar</li>
+                        <li><strong className="text-white">List view</strong> — Sorted list with status and error messages</li>
+                        <li><strong className="text-white">Batch assign</strong> — Assign multiple rendered shorts at once; they auto-fill the next open time slots</li>
                     </ul>
                     <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-lg p-3">
                         <p className="text-xs text-gray-400">
                             <strong className="text-emerald-400">Example:</strong> Create &quot;Animal Clips&quot; → linked to your Animals channel → set to post 3x/day. Then batch-assign 21 rendered animal shorts — they&apos;ll auto-fill the next 7 days of slots.
                         </p>
                     </div>
-                </div>
-            ),
-        },
-        {
-            id: "publishing",
-            title: "Publishing — How Uploads Work",
-            icon: Play,
-            content: (
-                <div className="space-y-3 text-sm text-gray-300">
-                    <p>When a scheduled time arrives, the system automatically:</p>
-                    <ol className="list-decimal list-inside space-y-1 text-gray-400 ml-2">
-                        <li>Refreshes the YouTube OAuth token (silently)</li>
-                        <li>Downloads the rendered short from R2 storage</li>
-                        <li>Adds <strong className="text-white">#Shorts</strong> to the title and hashtags to the description</li>
-                        <li>Uploads via YouTube Data API as a public video</li>
-                        <li>Saves the YouTube video ID for tracking</li>
-                    </ol>
-                    <p className="mt-2"><strong className="text-white">If it fails:</strong></p>
-                    <ul className="space-y-1 text-gray-400 ml-4 list-disc">
-                        <li>The job shows as <span className="text-red-400">FAILED</span> with a clear error message</li>
-                        <li>Suggestions are provided (e.g., &quot;Re-connect your channel&quot;, &quot;Quota exceeded, try tomorrow&quot;)</li>
-                        <li>You can retry from the scheduler</li>
-                    </ul>
                 </div>
             ),
         },
@@ -275,12 +293,42 @@ export default function HelpPage() {
                 <div className="space-y-3 text-sm text-gray-300">
                     <p>Admin-only features for system management.</p>
                     <ul className="space-y-1 text-gray-400 ml-4 list-disc">
-                        <li><strong className="text-white">API Keys</strong> — manage DeepSeek, Gemini, Together.ai, and other service keys</li>
-                        <li><strong className="text-white">Users</strong> — view registered users and roles</li>
-                        <li><strong className="text-white">System</strong> — system info and configuration</li>
-                        <li><strong className="text-white">Stats</strong> — overall platform statistics</li>
+                        <li><strong className="text-white">API Keys</strong> — Manage DeepSeek, Gemini, Together.ai, and other service keys</li>
+                        <li><strong className="text-white">Users</strong> — View registered users and roles</li>
+                        <li><strong className="text-white">System</strong> — System info, configuration, and stuck job cleanup</li>
+                        <li><strong className="text-white">Stuck Job Cleanup</strong> — One-click reset for jobs stuck in INITIALIZING or PROCESSING for more than 30 minutes. Resets them to FAILED so they can be retried.</li>
+                        <li><strong className="text-white">Stats</strong> — Overall platform statistics</li>
                     </ul>
                     <p className="text-gray-400">Only users with the ADMIN role can access this page.</p>
+                </div>
+            ),
+        },
+        {
+            id: "glossary",
+            title: "Glossary — Key Terms",
+            icon: HelpCircle,
+            content: (
+                <div className="space-y-3 text-sm">
+                    <div className="grid grid-cols-1 gap-2">
+                        {[
+                            { term: "Segment", def: "A clip cut from the original video. AI suggests segments based on engagement potential. Each has a start time, end time, title, and AI score." },
+                            { term: "AI Score", def: "0–10 rating of a segment's viral potential. Higher = more likely to perform well. Based on pacing, emotional arc, and hook strength." },
+                            { term: "Hook Strength", def: "0–10 rating of how attention-grabbing the opening seconds are. A strong hook keeps viewers from scrolling past." },
+                            { term: "Approve", def: "Human confirmation that a segment is worth rendering. The AI suggests, but YOU decide what ships. Only approved segments can be rendered." },
+                            { term: "Render", def: "The process of cutting the segment from the source video, converting to 9:16 vertical, burning in subtitles/effects/hooks, and uploading to cloud storage." },
+                            { term: "Re-render", def: "Available on already-rendered segments. Overwrites the existing clip with updated style, effects, or hook changes." },
+                            { term: "Effects", def: "FFmpeg video filters applied during rendering. Includes blur background, color grading, film grain, speed changes, and more. Stored as JSON on each segment." },
+                            { term: "Hook Text", def: "Bold on-screen text at the top of the video that grabs attention. Rendered with a colored background box." },
+                            { term: "Ingest", def: "The process of downloading a video from a URL and storing it in cloud storage. Transcription and segmentation start automatically after ingest." },
+                            { term: "BullMQ", def: "The job queue system that processes downloads, transcriptions, renders, and publishes in the background via Redis." },
+                            { term: "R2", def: "Cloudflare R2 — the cloud storage where source videos and rendered shorts are kept." },
+                        ].map(item => (
+                            <div key={item.term} className="bg-gray-800/30 rounded-lg px-3 py-2">
+                                <span className="text-xs font-semibold text-violet-400">{item.term}</span>
+                                <p className="text-xs text-gray-400 mt-0.5">{item.def}</p>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             ),
         },
@@ -295,7 +343,7 @@ export default function HelpPage() {
                     Help & Documentation
                 </h1>
                 <p className="text-gray-400 text-sm mt-1">
-                    Everything you need to know about using YouTube Shorts Slicer
+                    Complete guide to every page, button, and feature in the platform
                 </p>
             </div>
 
@@ -305,15 +353,17 @@ export default function HelpPage() {
                 <div className="flex items-center gap-3 text-xs text-gray-300 flex-wrap">
                     <span className="bg-gray-800/60 px-2.5 py-1.5 rounded-lg">1. Connect YouTube</span>
                     <ArrowRight className="w-3 h-3 text-gray-600" />
-                    <span className="bg-gray-800/60 px-2.5 py-1.5 rounded-lg">2. Paste Video URL</span>
+                    <span className="bg-gray-800/60 px-2.5 py-1.5 rounded-lg">2. Library → Add Video</span>
                     <ArrowRight className="w-3 h-3 text-gray-600" />
                     <span className="bg-gray-800/60 px-2.5 py-1.5 rounded-lg">3. Wait for AI</span>
                     <ArrowRight className="w-3 h-3 text-gray-600" />
-                    <span className="bg-gray-800/60 px-2.5 py-1.5 rounded-lg">4. Approve Segments</span>
+                    <span className="bg-gray-800/60 px-2.5 py-1.5 rounded-lg">4. Studio → Approve</span>
                     <ArrowRight className="w-3 h-3 text-gray-600" />
-                    <span className="bg-gray-800/60 px-2.5 py-1.5 rounded-lg">5. Render</span>
+                    <span className="bg-gray-800/60 px-2.5 py-1.5 rounded-lg">5. Style & Effects</span>
                     <ArrowRight className="w-3 h-3 text-gray-600" />
-                    <span className="bg-gray-800/60 px-2.5 py-1.5 rounded-lg">6. Schedule & Publish</span>
+                    <span className="bg-gray-800/60 px-2.5 py-1.5 rounded-lg">6. Render</span>
+                    <ArrowRight className="w-3 h-3 text-gray-600" />
+                    <span className="bg-gray-800/60 px-2.5 py-1.5 rounded-lg">7. Export / Schedule</span>
                 </div>
             </div>
 
@@ -354,7 +404,7 @@ export default function HelpPage() {
             {/* Footer */}
             <div className="bg-gray-900/30 border border-gray-800 rounded-xl p-4 text-center">
                 <p className="text-xs text-gray-500">
-                    YouTube Shorts Slicer v1.0 · Built with Next.js, Prisma, BullMQ, FFmpeg
+                    YouTube Shorts Slicer v2.0 · Built with Next.js, Prisma, BullMQ, FFmpeg
                 </p>
             </div>
         </div>
