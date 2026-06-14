@@ -1000,8 +1000,7 @@ const renderWorker = new Worker(
             }
 
             // Step 3.8: Apply video effects if any are configured
-            const segmentEffects = (segment as any).effects;
-            if (segmentEffects && Array.isArray(segmentEffects) && segmentEffects.length > 0) {
+            if ((segment as any).effects && Array.isArray((segment as any).effects) && (segment as any).effects.length > 0) {
                 try {
                     const { buildEffectChain, buildAudioSpeedFilter } = await import("../lib/effects");
 
