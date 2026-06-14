@@ -110,7 +110,7 @@ function vttTimeToSeconds(time: string): number {
 const downloadWorker = new Worker(
     QUEUE_NAMES.VIDEO_DOWNLOAD,
     async (job: Job) => {
-        const { videoId, userId, sourceUrl, autoTranscribe = true, autoSegment = true } = job.data;
+        const { videoId, userId, sourceUrl, autoTranscribe = true, autoSegment = false, minDuration, maxDuration, segmentMode } = job.data;
         const videoDir = path.join(TEMP_DIR, videoId);
 
         try {
@@ -261,6 +261,22 @@ const downloadWorker = new Worker(
             }
             await job.updateProgress(85);
 
+            // AI Synopsis
+            let synopsis = "";
+            if (transcriptId) {
+                try {
+                    // Fetch full text of transcript
+                    const transcriptObj = await prisma.transcript.findUnique({ where: { videoId } });
+                    if (transcriptObj?.content) {
+                        const { generateVideoSynopsis } = await import("../lib/ai");
+                        synopsis = await generateVideoSynopsis(transcriptObj.content);
+                        console.log(`[Download] Generated synopsis: ${synopsis.substring(0, 80)}...`);
+                    }
+                } catch (synError: any) {
+                    console.error("[Download] Failed to generate synopsis:", synError.message);
+                }
+            }
+
             // Update database
             await prisma.video.update({
                 where: { id: videoId },
@@ -269,20 +285,21 @@ const downloadWorker = new Worker(
                     thumbnail: metadata.thumbnail || null,
                     duration: Math.round(metadata.duration || 0),
                     storagePath,
-                    status: transcriptId ? "SEGMENTING" : "READY",
+                    description: synopsis || null,
+                    status: (transcriptId && autoSegment) ? "SEGMENTING" : "READY",
                 },
             });
 
-            // Chain to segmentation if we have a transcript
+            // Chain to segmentation if we have a transcript and autoSegment is enabled
             if (transcriptId && autoSegment) {
                 const { Queue } = await import("bullmq");
                 const segQueue = new Queue(QUEUE_NAMES.SEGMENTATION, { connection: redis as any });
                 await segQueue.add(
                     `segment-${videoId}`,
-                    { videoId, userId, transcriptId },
+                    { videoId, userId, transcriptId, minDuration, maxDuration, segmentMode },
                     { priority: 1 }
                 );
-                console.log(`[Download] Ã¢â€ â€™ Chained to segmentation queue`);
+                console.log(`[Download] → Chained to segmentation queue`);
             }
 
             console.log(`[Download] Ã¢Å“â€¦ Complete: ${videoId}`);
@@ -320,7 +337,7 @@ const downloadWorker = new Worker(
 const transcriptionWorker = new Worker(
     QUEUE_NAMES.TRANSCRIPTION,
     async (job: Job) => {
-        const { videoId, userId, storagePath, retranscribe } = job.data;
+        const { videoId, userId, storagePath, retranscribe, autoSegment = false, minDuration, maxDuration, segmentMode } = job.data;
         console.log(`[Transcription] Starting Whisper re-transcription: video=${videoId}`);
 
         // Get Together API key (DB first, env fallback)
@@ -506,8 +523,25 @@ const transcriptionWorker = new Worker(
             console.log(`[Transcription] Ã¢Å“â€¦ Whisper transcript saved: ${segments.length} segments (word-level)`);
             await job.updateProgress(85);
 
-            // Step 6: Clear old segments + chain to segmentation
-            await prisma.video.update({ where: { id: videoId }, data: { status: "SEGMENTING" } });
+            // AI Synopsis
+            let synopsis = "";
+            try {
+                const { generateVideoSynopsis } = await import("../lib/ai");
+                synopsis = await generateVideoSynopsis(fullText);
+                console.log(`[Transcription] Generated synopsis: ${synopsis.substring(0, 80)}...`);
+            } catch (synError: any) {
+                console.error("[Transcription] Failed to generate synopsis:", synError.message);
+            }
+
+            // Step 6: Clear old segments + chain to segmentation if autoSegment is true
+            await prisma.video.update({
+                where: { id: videoId },
+                data: {
+                    description: synopsis || null,
+                    status: autoSegment ? "SEGMENTING" : "READY"
+                }
+            });
+
             const oldSegs = await prisma.segment.findMany({ where: { videoId }, select: { id: true } });
             if (oldSegs.length > 0) {
                 await prisma.shortVideo.deleteMany({ where: { segmentId: { in: oldSegs.map(s => s.id) } } });
@@ -515,16 +549,22 @@ const transcriptionWorker = new Worker(
                 console.log(`[Transcription] Cleared ${oldSegs.length} old segments`);
             }
 
-            const { Queue } = await import("bullmq");
-            const segQueue = new Queue(QUEUE_NAMES.SEGMENTATION, { connection: redis as any });
-            await segQueue.add(`segment-${videoId}`, { videoId, userId, transcriptId: transcript.id }, { priority: 1 });
-            console.log("[Transcription] Ã¢â€ â€™ Chained to segmentation queue");
+            if (autoSegment) {
+                const { Queue } = await import("bullmq");
+                const segQueue = new Queue(QUEUE_NAMES.SEGMENTATION, { connection: redis as any });
+                await segQueue.add(
+                    `segment-${videoId}`,
+                    { videoId, userId, transcriptId: transcript.id, minDuration, maxDuration, segmentMode },
+                    { priority: 1 }
+                );
+                console.log("[Transcription] → Chained to segmentation queue");
+            }
 
             await job.updateProgress(100);
             fs.rmSync(workDir, { recursive: true, force: true });
             return { videoId, transcriptId: transcript.id, segmentCount: segments.length };
         } catch (error: any) {
-            console.error(`[Transcription] Ã¢ÂÅ’ Failed: ${videoId}`, error.message);
+            console.error(`[Transcription] ⮂ Failed: ${videoId}`, error.message);
             await prisma.video.update({ where: { id: videoId }, data: { status: "FAILED", errorMsg: error.message } });
             if (fs.existsSync(workDir)) fs.rmSync(workDir, { recursive: true, force: true });
             throw error;
@@ -533,11 +573,11 @@ const transcriptionWorker = new Worker(
     { connection: redis as any, concurrency: 1, maxStalledCount: 2 }
 );
 
-// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Segmentation Worker Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+// ————————————————————— Segmentation Worker —————————————————————
 const segmentationWorker = new Worker(
     QUEUE_NAMES.SEGMENTATION,
     async (job: Job) => {
-        const { videoId, userId, transcriptId } = job.data;
+        const { videoId, userId, transcriptId, minDuration, maxDuration, segmentMode, defaultLayout } = job.data;
         console.log(`[Segmentation] Starting: video=${videoId}`);
 
         try {
@@ -557,11 +597,12 @@ const segmentationWorker = new Worker(
 
             // Call AI for segmentation
             const { segmentVideo } = await import("../lib/ai");
-            const suggestions = await segmentVideo(segments, videoDuration);
+            const suggestions = await segmentVideo(segments, videoDuration, { minDuration, maxDuration, segmentMode });
             console.log(`[Segmentation] Got ${suggestions.length} suggestions`);
             await job.updateProgress(70);
 
             for (const suggestion of suggestions) {
+                const initialEffects = defaultLayout ? [{ type: "layout", params: defaultLayout }] : [];
                 await prisma.segment.create({
                     data: {
                         videoId,
@@ -571,6 +612,7 @@ const segmentationWorker = new Worker(
                         description: suggestion.description,
                         aiScore: suggestion.overallScore,
                         status: "AI_SUGGESTED",
+                        effects: initialEffects as any,
                     },
                 });
             }
@@ -642,13 +684,72 @@ const renderWorker = new Worker(
             const outputPath = path.join(renderDir, "final.mp4");
             const duration = segment.endTime - segment.startTime;
 
-            // Step 2+3: Cut segment AND convert to 9:16 in ONE pass
-            // IMPORTANT: Using re-encode (not -c copy) to get frame-accurate timing.
-            // -c copy seeks to nearest keyframe which offsets subtitle timestamps.
-            execSync(
-                `ffmpeg -ss ${segment.startTime} -i "${sourceVideo}" -t ${duration} -vf "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,setsar=1" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k -movflags +faststart "${outputPath}" -y`,
-                { timeout: 600000 }
-            );
+            // Parse layout/sizing settings from segment.effects
+            const segmentEffects = (segment as any).effects || [];
+            const layoutEffect = segmentEffects.find((e: any) => e.type === "layout");
+            const layout = layoutEffect?.params || {};
+
+            const aspectRatio = layout.aspectRatio || "9:16";
+            const cropMode = layout.cropMode || "letterbox";
+            const manualX = layout.manualXOffset !== undefined ? layout.manualXOffset : 50;
+            const gameplayLoop = layout.gameplayLoop || "minecraft";
+            const cuts = layout.cuts || [];
+
+            // Target size
+            let outW = 1080;
+            let outH = 1920;
+            if (aspectRatio === "1:1") {
+                outW = 1080;
+                outH = 1080;
+            } else if (aspectRatio === "16:9") {
+                outW = 1920;
+                outH = 1080;
+            }
+
+            let filterComplex = "";
+            let finalCommand = "";
+
+            if (cropMode === "split" && aspectRatio === "9:16") {
+                console.log(`[Render] Split-screen layout configured with loop: ${gameplayLoop}`);
+                const gameplayVideoPath = await downloadGameplayLoop(gameplayLoop, renderDir);
+                
+                // Top half (main video) cropped/scaled to 1080x960
+                // Bottom half (gameplay video) cropped/scaled to 1080x960
+                filterComplex = `[0:v]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960[top];[1:v]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960[bottom];[top][bottom]vstack=inputs=2[vout]`;
+                
+                finalCommand = `ffmpeg -ss ${segment.startTime} -i "${sourceVideo}" -t ${duration} -stream_loop -1 -i "${gameplayVideoPath}" -filter_complex "${filterComplex}" -map "[vout]" -map 0:a -shortest -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k -movflags +faststart "${outputPath}" -y`;
+            } else {
+                let vf = "";
+                if (cropMode === "letterbox") {
+                    vf = `scale=${outW}:${outH}:force_original_aspect_ratio=decrease,pad=${outW}:${outH}:(ow-iw)/2:(oh-ih)/2:black,setsar=1`;
+                } else if (cropMode === "center" || cropMode === "smart") {
+                    if (aspectRatio === "9:16") {
+                        vf = `crop=in_h*9/16:in_h:(in_w-in_h*9/16)/2:0,scale=1080:1920,setsar=1`;
+                    } else if (aspectRatio === "1:1") {
+                        vf = `crop=in_h:in_h:(in_w-in_h)/2:0,scale=1080:1080,setsar=1`;
+                    } else {
+                        vf = `scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,setsar=1`;
+                    }
+                } else if (cropMode === "manual") {
+                    if (aspectRatio === "9:16") {
+                        vf = `crop=in_h*9/16:in_h:(in_w-in_h*9/16)*${manualX}/100:0,scale=1080:1920,setsar=1`;
+                    } else if (aspectRatio === "1:1") {
+                        vf = `crop=in_h:in_h:(in_w-in_h)*${manualX}/100:0,scale=1080:1080,setsar=1`;
+                    } else {
+                        vf = `scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,setsar=1`;
+                    }
+                } else if (cropMode === "multicam" && aspectRatio === "9:16") {
+                    const cropExpr = buildMultiCamCropExpression(cuts);
+                    vf = `crop=in_h*9/16:in_h:'${cropExpr}':0,scale=1080:1920,setsar=1`;
+                } else {
+                    vf = `scale=${outW}:${outH}:force_original_aspect_ratio=decrease,pad=${outW}:${outH}:(ow-iw)/2:(oh-ih)/2:black,setsar=1`;
+                }
+
+                finalCommand = `ffmpeg -ss ${segment.startTime} -i "${sourceVideo}" -t ${duration} -vf "${vf}" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k -movflags +faststart "${outputPath}" -y`;
+            }
+
+            console.log(`[Render] Sizing command: ${finalCommand}`);
+            execSync(finalCommand, { timeout: 600000 });
             await job.updateProgress(50);
 
             // Step 3.5: Burn subtitles if transcript has word-level timestamps
@@ -1054,8 +1155,75 @@ console.log("\nWaiting for jobs...\n");
 
 // Keep alive
 process.on("SIGTERM", async () => {
-    console.log("\nÃ¢ÂÂ¹ Shutting down workers...");
+    console.log("\n🗙 Shutting down workers...");
     await Promise.all(workers.map(({ worker }) => worker.close()));
     await pool.end();
     process.exit(0);
 });
+
+function buildMultiCamCropExpression(cuts: { time: number; angle: string }[]) {
+    if (!cuts || cuts.length === 0) {
+        return `(in_w-out_w)/2`;
+    }
+    const sortedCuts = [...cuts].sort((a, b) => a.time - b.time);
+    let expr = `(in_w-out_w)/2`; // default fallback
+    const getAngleX = (angle: string) => {
+        if (angle === "left" || angle === "speaker1") return `(in_w-out_w)*0.15`;
+        if (angle === "right" || angle === "speaker2") return `(in_w-out_w)*0.85`;
+        return `(in_w-out_w)/2`;
+    };
+
+    for (let i = sortedCuts.length - 1; i >= 0; i--) {
+        const cut = sortedCuts[i];
+        const nextCut = sortedCuts[i + 1];
+        const start = cut.time;
+        const end = nextCut ? nextCut.time : 999999;
+        const val = getAngleX(cut.angle);
+        expr = `if(between(t,${start},${end}),${val},${expr})`;
+    }
+    return expr;
+}
+
+async function downloadGameplayLoop(loopType: string, workDir: string): Promise<string> {
+    const path = await import("path");
+    const fs = await import("fs");
+    const { execSync } = await import("child_process");
+    
+    const gameplayDir = path.join(process.cwd(), "public", "gameplay");
+    if (!fs.existsSync(gameplayDir)) fs.mkdirSync(gameplayDir, { recursive: true });
+
+    const localPath = path.join(gameplayDir, `${loopType}.mp4`);
+    if (fs.existsSync(localPath)) {
+        console.log(`[Gameplay] Cache hit for ${loopType}: ${localPath}`);
+        return localPath;
+    }
+
+    const loopUrls: Record<string, string> = {
+        minecraft: "https://pub-c2a4f48358484e5699b9cf9018c6cd6a.r2.dev/minecraft_loop.mp4",
+        gta5: "https://pub-c2a4f48358484e5699b9cf9018c6cd6a.r2.dev/gta5_loop.mp4",
+        subway_surfers: "https://pub-c2a4f48358484e5699b9cf9018c6cd6a.r2.dev/subway_loop.mp4"
+    };
+
+    const url = loopUrls[loopType] || loopUrls.minecraft;
+    console.log(`[Gameplay] Cache miss. Downloading ${loopType} loop from ${url}...`);
+
+    try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP error ${response.status}`);
+        const buffer = Buffer.from(await response.arrayBuffer());
+        fs.writeFileSync(localPath, buffer);
+        console.log(`[Gameplay] Saved loop to ${localPath}`);
+        return localPath;
+    } catch (err: any) {
+        console.error(`[Gameplay] Download failed for ${loopType}, using fallback blank generator:`, err.message);
+        const fallbackPath = path.join(gameplayDir, "fallback.mp4");
+        if (!fs.existsSync(fallbackPath)) {
+            try {
+                execSync(`ffmpeg -f lavfi -i color=c=green:s=1080x960:d=5 -c:v libx264 -pix_fmt yuv420p "${fallbackPath}" -y`);
+            } catch {
+                return "";
+            }
+        }
+        return fallbackPath;
+    }
+}

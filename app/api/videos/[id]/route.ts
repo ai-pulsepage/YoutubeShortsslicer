@@ -88,6 +88,7 @@ export async function GET(
         where: { id, userId: session.user.id },
         include: {
             _count: { select: { segments: true } },
+            transcript: true,
         },
     });
 

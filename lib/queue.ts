@@ -52,6 +52,9 @@ export interface VideoDownloadJobData {
     platform: string;
     autoTranscribe?: boolean;
     autoSegment?: boolean;
+    minDuration?: number;
+    maxDuration?: number;
+    segmentMode?: string;
 }
 
 export interface AudioExtractJobData {
@@ -64,12 +67,18 @@ export interface TranscriptionJobData {
     videoId: string;
     userId: string;
     audioStoragePath: string;
+    minDuration?: number;
+    maxDuration?: number;
+    segmentMode?: string;
 }
 
 export interface SegmentationJobData {
     videoId: string;
     userId: string;
     transcriptId: string;
+    minDuration?: number;
+    maxDuration?: number;
+    segmentMode?: string;
 }
 
 export interface RenderJobData {

@@ -81,12 +81,43 @@ Respond ONLY with valid JSON array. No markdown, no explanation:
   }
 ]`;
 
+function buildCustomPromptInstructions(
+    minDuration?: number,
+    maxDuration?: number,
+    segmentMode?: string
+): string {
+    let instructions = "";
+    if (minDuration || maxDuration) {
+        const min = minDuration || 30;
+        const max = maxDuration || 60;
+        instructions += `\n\nDURATION RULE OVERRIDE: Each suggested segment MUST be strictly between ${min} and ${max} seconds in duration. Ignore the default 30-60s rule and strictly apply these boundaries.`;
+    }
+    if (segmentMode) {
+        instructions += "\n\nFOCUS STYLE OVERRIDE: ";
+        if (segmentMode === "high_drama") {
+            instructions += "Focus strictly on high-tension, high-drama scenes, conflicts, intense debates, emotional escalations, or shocking statements. Start the clip immediately at the hook/provocative statement, and end it right after the climax or reaction.";
+        } else if (segmentMode === "suspense") {
+            instructions += "Focus on scenes that build up suspense, mysteries, or tension. End the segments on a cliffhanger immediately before the resolution to make the viewer want a Part 2.";
+        } else if (segmentMode === "funny") {
+            instructions += "Focus strictly on humorous moments, jokes, punchlines, sarcasm, laughing fits, funny anecdotes, or hilarious banter.";
+        } else if (segmentMode === "educational") {
+            instructions += "Focus strictly on explanations, tips, advice, facts, tutorials, or key takeaways that are self-contained and informative.";
+        } else if (segmentMode === "storytelling") {
+            instructions += "Focus strictly on narrative story arcs with a clear beginning, middle, and end, telling a complete mini-story.";
+        } else {
+            instructions += "Find natural engaging topic blocks with a clear beginning, middle, and end.";
+        }
+    }
+    return instructions;
+}
+
 /**
  * Call DeepSeek V3.2 for segmentation
  */
 export async function segmentWithDeepSeek(
     transcript: TranscriptSegment[],
-    videoDuration: number
+    videoDuration: number,
+    options?: { minDuration?: number; maxDuration?: number; segmentMode?: string }
 ): Promise<SegmentSuggestion[]> {
     let apiKey = process.env.DEEPSEEK_API_KEY;
     const apiBase = process.env.DEEPSEEK_API_BASE || "https://api.deepseek.com";
@@ -101,6 +132,12 @@ export async function segmentWithDeepSeek(
         ? `from ${formatTimeHMS(transcript[0].start)} to ${formatTimeHMS(transcript[transcript.length - 1].end)}`
         : "";
 
+    const customInstructions = buildCustomPromptInstructions(
+        options?.minDuration,
+        options?.maxDuration,
+        options?.segmentMode
+    );
+
     const response = await fetch(`${apiBase}/v1/chat/completions`, {
         method: "POST",
         headers: {
@@ -110,7 +147,7 @@ export async function segmentWithDeepSeek(
         body: JSON.stringify({
             model: "deepseek-chat",
             messages: [
-                { role: "system", content: SEGMENTATION_PROMPT },
+                { role: "system", content: SEGMENTATION_PROMPT + customInstructions },
                 {
                     role: "user",
                     content: `Video total duration: ${videoDuration} seconds (${formatTimeHMS(videoDuration)})\nThis transcript chunk covers ${timeRange}.\n\nTranscript:\n${transcriptText}`,
@@ -140,7 +177,8 @@ export async function segmentWithDeepSeek(
  */
 export async function segmentWithGemini(
     transcript: TranscriptSegment[],
-    videoDuration: number
+    videoDuration: number,
+    options?: { minDuration?: number; maxDuration?: number; segmentMode?: string }
 ): Promise<SegmentSuggestion[]> {
     let apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
@@ -153,6 +191,12 @@ export async function segmentWithGemini(
         ? `from ${formatTimeHMS(transcript[0].start)} to ${formatTimeHMS(transcript[transcript.length - 1].end)}`
         : "";
 
+    const customInstructions = buildCustomPromptInstructions(
+        options?.minDuration,
+        options?.maxDuration,
+        options?.segmentMode
+    );
+
     const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
         {
@@ -163,7 +207,7 @@ export async function segmentWithGemini(
                     {
                         parts: [
                             {
-                                text: `${SEGMENTATION_PROMPT}\n\nVideo total duration: ${videoDuration} seconds (${formatTimeHMS(videoDuration)})\nThis transcript chunk covers ${timeRange}.\n\nTranscript:\n${transcriptText}`,
+                                text: `${SEGMENTATION_PROMPT + customInstructions}\n\nVideo total duration: ${videoDuration} seconds (${formatTimeHMS(videoDuration)})\nThis transcript chunk covers ${timeRange}.\n\nTranscript:\n${transcriptText}`,
                             },
                         ],
                     },
@@ -197,14 +241,15 @@ export async function segmentWithGemini(
  */
 export async function segmentVideo(
     transcript: TranscriptSegment[],
-    videoDuration: number
+    videoDuration: number,
+    options?: { minDuration?: number; maxDuration?: number; segmentMode?: string }
 ): Promise<SegmentSuggestion[]> {
     const CHUNK_DURATION = 600; // 10 minutes in seconds
     const OVERLAP = 120; // 2 minute overlap — ensures stories spanning chunk boundaries are captured
 
     // For short videos (under 12 min), process in one shot
     if (videoDuration <= CHUNK_DURATION + OVERLAP * 2) {
-        return segmentChunk(transcript, videoDuration);
+        return segmentChunk(transcript, videoDuration, options);
     }
 
     // Split transcript into chunks
@@ -233,7 +278,7 @@ export async function segmentVideo(
     for (let i = 0; i < chunks.length; i++) {
         console.log(`[AI] Processing chunk ${i + 1}/${chunks.length} (${formatTimeHMS(chunks[i][0].start)} → ${formatTimeHMS(chunks[i][chunks[i].length - 1].end)})`);
         try {
-            const chunkResults = await segmentChunk(chunks[i], videoDuration);
+            const chunkResults = await segmentChunk(chunks[i], videoDuration, options);
             allSegments.push(...chunkResults);
             console.log(`[AI] Chunk ${i + 1}: found ${chunkResults.length} segments`);
         } catch (err: any) {
@@ -253,13 +298,14 @@ export async function segmentVideo(
  */
 async function segmentChunk(
     transcript: TranscriptSegment[],
-    videoDuration: number
+    videoDuration: number,
+    options?: { minDuration?: number; maxDuration?: number; segmentMode?: string }
 ): Promise<SegmentSuggestion[]> {
     try {
-        return await segmentWithDeepSeek(transcript, videoDuration);
+        return await segmentWithDeepSeek(transcript, videoDuration, options);
     } catch (deepSeekError: any) {
         console.warn("[AI] DeepSeek failed, trying Gemini:", deepSeekError.message);
-        return await segmentWithGemini(transcript, videoDuration);
+        return await segmentWithGemini(transcript, videoDuration, options);
     }
 }
 
@@ -643,4 +689,78 @@ function parseClipSegments(
             overallScore: clamp(s.viralScore || s.viral_score || s.overallScore || s.overall_score || 5, 1, 10),
         }))
         .sort((a: SegmentSuggestion, b: SegmentSuggestion) => b.overallScore - a.overallScore);
+}
+
+/**
+ * Generate a thorough synopsis/summary of a long-form video transcript.
+ */
+export async function generateVideoSynopsis(transcript: string): Promise<string> {
+    let apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+        apiKey = await getDbApiKey("gemini_api_key") || undefined;
+    }
+    if (!apiKey) {
+        apiKey = process.env.DEEPSEEK_API_KEY || await getDbApiKey("deepseek_api_key") || undefined;
+    }
+
+    if (!apiKey) {
+        return "No API key configured for AI synopsis generator.";
+    }
+
+    const isDeepSeek = !process.env.GEMINI_API_KEY && !!process.env.DEEPSEEK_API_KEY;
+    const prompt = "You are a helpful media editor assistant. Summarize the following video transcript in a thorough, engaging, and detailed synopsis. Detail the core topics covered, key speakers, and main takeaways. Format it cleanly with paragraphs and bullet points if appropriate. Keep it concise but highly informative.";
+
+    try {
+        if (isDeepSeek) {
+            const apiBase = process.env.DEEPSEEK_API_BASE || "https://api.deepseek.com";
+            const response = await fetch(`${apiBase}/v1/chat/completions`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${apiKey}`,
+                },
+                body: JSON.stringify({
+                    model: "deepseek-chat",
+                    messages: [
+                        { role: "system", content: prompt },
+                        { role: "user", content: `Transcript:\n${transcript.substring(0, 80000)}` },
+                    ],
+                    temperature: 0.5,
+                    max_tokens: 1000,
+                }),
+            });
+            if (response.ok) {
+                const data = await response.json();
+                return data.choices?.[0]?.message?.content || "No synopsis generated.";
+            }
+        } else {
+            const response = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        contents: [
+                            {
+                                parts: [
+                                    { text: `${prompt}\n\nTranscript:\n${transcript.substring(0, 80000)}` },
+                                ],
+                            },
+                        ],
+                        generationConfig: {
+                            temperature: 0.5,
+                            maxOutputTokens: 1000,
+                        },
+                    }),
+                }
+            );
+            if (response.ok) {
+                const data = await response.json();
+                return data.candidates?.[0]?.content?.parts?.[0]?.text || "No synopsis generated.";
+            }
+        }
+    } catch (err: any) {
+        console.error("[Synopsis] Generation failed:", err.message);
+    }
+    return "Synopsis generation failed due to an error.";
 }

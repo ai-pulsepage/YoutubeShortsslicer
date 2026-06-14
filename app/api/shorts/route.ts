@@ -36,6 +36,7 @@ export async function GET(req: Request) {
                 select: {
                     id: true,
                     title: true,
+                    description: true,
                     startTime: true,
                     endTime: true,
                     aiScore: true,
@@ -59,6 +60,7 @@ export async function GET(req: Request) {
                                             brand: true,
                                             targetPlatforms: true,
                                             cpmRate: true,
+                                            subtitleStyle: true,
                                         },
                                     },
                                 },

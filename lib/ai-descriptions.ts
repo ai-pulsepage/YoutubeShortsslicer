@@ -21,6 +21,22 @@ interface GenerateOptions {
     transcriptExcerpt?: string;
     sourceVideoTitle?: string;
     platform: Platform;
+    personality?: string;
+}
+
+function buildPersonalityPromptInstructions(personality?: string): string {
+    if (!personality) return "";
+    let rules = "";
+    if (personality === "rage_bait") {
+        rules += "\nPERSONALITY RULE: Act as a 'Rage Baiter'. Write provocative, mildly controversial, or highly opinionated hooks that spark debates in the comments. Make nonsensical claims or emphasize controversial angles in a way that viewers feel compelled to correct or comment on.";
+    } else if (personality === "brainrot") {
+        rules += "\nPERSONALITY RULE: Use 'Gen Z / Brainrot' style. Inject popular internet slang, high energy, abbreviations, all-lowercase text, or meme terminology (e.g. sigma, rizz, gyatt, skibidi, mewing, blud, cooks, let him cook, no cap, FR FR, etc.). Make it sound like it's from a Gen-Z meme page.";
+    } else if (personality === "hype") {
+        rules += "\nPERSONALITY RULE: Write in a highly enthusiastic, hype-filled, energetic style. Use multiple exclamation marks, uppercase words for emphasis, and lots of fire/rocket/gem emojis. Create high suspense or extreme excitement.";
+    } else if (personality === "straight_forward") {
+        rules += "\nPERSONALITY RULE: Write in a straightforward, informative, logical, and objective tone. Do not use overhyped phrases, clickbait, or exaggerated statements. Keep it intellectual, educational, and clean.";
+    }
+    return rules;
 }
 
 // Platform-specific prompt templates — easy to extend for new platforms
@@ -35,7 +51,7 @@ Transcript excerpt: ${opts.transcriptExcerpt || "N/A"}
 Requirements:
 - Title: catchy, under 100 chars, include relevant emoji, NO clickbait
 - Description: 2-3 sentences, SEO-friendly, include "#Shorts" tag
-- Hashtags: 5-8 relevant hashtags for discoverability
+- Hashtags: 5-8 relevant hashtags for discoverability${buildPersonalityPromptInstructions(opts.personality)}
 
 Respond ONLY in JSON:
 {"title": "...", "description": "...", "hashtags": ["#Shorts", ...]}`,
@@ -49,7 +65,7 @@ Source video: ${opts.sourceVideoTitle || "N/A"}
 Requirements:
 - Title: compelling, under 50 chars
 - Description: engaging caption with emojis, 1-2 sentences, NO links
-- Hashtags: 10-15 relevant hashtags for Explore page discovery
+- Hashtags: 10-15 relevant hashtags for Explore page discovery${buildPersonalityPromptInstructions(opts.personality)}
 
 Respond ONLY in JSON:
 {"title": "...", "description": "...", "hashtags": ["#Reels", ...]}`,
@@ -62,7 +78,7 @@ Clip description: ${opts.segmentDescription || "N/A"}
 Requirements:
 - Title: hook-style, under 80 chars
 - Description: short, trendy, include emojis
-- Hashtags: 5-10 trending + niche hashtags
+- Hashtags: 5-10 trending + niche hashtags${buildPersonalityPromptInstructions(opts.personality)}
 
 Respond ONLY in JSON:
 {"title": "...", "description": "...", "hashtags": ["#fyp", ...]}`,
@@ -75,7 +91,7 @@ Clip description: ${opts.segmentDescription || "N/A"}
 Requirements:
 - Title: descriptive, under 100 chars
 - Description: 1-2 sentences
-- Hashtags: 5 relevant hashtags
+- Hashtags: 5 relevant hashtags${buildPersonalityPromptInstructions(opts.personality)}
 
 Respond ONLY in JSON:
 {"title": "...", "description": "...", "hashtags": [...]}`,

@@ -39,6 +39,7 @@ type ClipProjectBrief = {
         brand: string | null;
         targetPlatforms: string[];
         cpmRate: number | null;
+        subtitleStyle: any;
     } | null;
 };
 
@@ -52,6 +53,7 @@ type ShortVideo = {
     segment: {
         id: string;
         title: string;
+        description: string | null;
         startTime: number;
         endTime: number;
         aiScore: number | null;
@@ -456,35 +458,83 @@ export default function ExportPage() {
             )}
 
             {/* Schedule Modal */}
-            {scheduleModal && (
-                <ScheduleModal
-                    shortVideoId={scheduleModal.shortId}
-                    title={scheduleModal.title}
-                    channels={channels}
-                    onClose={() => setScheduleModal(null)}
-                />
-            )}
+            {scheduleModal && (() => {
+                const short = shorts.find(s => s.id === scheduleModal.shortId);
+                if (!short) return null;
+                return (
+                    <ScheduleModal
+                        short={short}
+                        channels={channels}
+                        onClose={() => setScheduleModal(null)}
+                    />
+                );
+            })()}
         </div>
     );
 }
 
 function ScheduleModal({
-    shortVideoId,
-    title,
+    short,
     channels,
     onClose,
 }: {
-    shortVideoId: string;
-    title: string;
+    short: ShortVideo;
     channels: Channel[];
     onClose: () => void;
 }) {
     const [channelId, setChannelId] = useState(channels[0]?.id || "");
     const [scheduledDate, setScheduledDate] = useState("");
     const [scheduledTime, setScheduledTime] = useState("12:00");
-    const [postTitle, setPostTitle] = useState(title);
+    const [postTitle, setPostTitle] = useState(short.segment?.title || "Short");
     const [description, setDescription] = useState("");
     const [submitting, setSubmitting] = useState(false);
+    const [generating, setGenerating] = useState(false);
+    const [selectedPersonality, setSelectedPersonality] = useState("straight_forward");
+
+    const triggerDescriptionGen = async (personalityVal: string) => {
+        setGenerating(true);
+        try {
+            const platform = (channels.find(c => c.id === channelId)?.platform || "YOUTUBE").toUpperCase();
+            const res = await fetch("/api/generate-description", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    segmentTitle: short.segment?.title || postTitle,
+                    segmentDescription: short.segment?.description || "",
+                    sourceVideoTitle: short.segment?.video?.title || "",
+                    platform,
+                    personality: personalityVal,
+                }),
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.title) setPostTitle(data.title);
+                if (data.description) {
+                    const hashtagsStr = Array.isArray(data.hashtags) && data.hashtags.length > 0
+                        ? "\n\n" + data.hashtags.join(" ")
+                        : "";
+                    setDescription(data.description + hashtagsStr);
+                }
+            }
+        } catch (err) {
+            console.error("Failed to generate description:", err);
+        } finally {
+            setGenerating(false);
+        }
+    };
+
+    useEffect(() => {
+        const brief = short.segment?.video?.clipProjects?.[0]?.brief;
+        const style = brief?.subtitleStyle as any;
+        const autoGen = style?.automated !== false;
+        const personality = style?.personality || "straight_forward";
+
+        setSelectedPersonality(personality);
+
+        if (brief && autoGen) {
+            triggerDescriptionGen(personality);
+        }
+    }, [short, channelId]);
 
     const handleSchedule = async () => {
         if (!channelId || !scheduledDate) return;
@@ -495,7 +545,7 @@ function ScheduleModal({
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    shortVideoId,
+                    shortVideoId: short.id,
                     channelId,
                     title: postTitle,
                     description,
@@ -519,8 +569,8 @@ function ScheduleModal({
 
     return (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-md p-6 shadow-2xl">
-                <h2 className="text-lg font-semibold text-white mb-4">Schedule Post</h2>
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4">
+                <h2 className="text-lg font-semibold text-white">Schedule Post</h2>
 
                 <div className="space-y-3">
                     <div>
@@ -557,6 +607,38 @@ function ScheduleModal({
                         />
                     </div>
 
+                    {/* AI Caption Generator Panel */}
+                    <div className="bg-gray-800/40 border border-gray-800 rounded-xl p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold text-gray-300">AI Caption Generator</span>
+                            <button
+                                type="button"
+                                onClick={() => triggerDescriptionGen(selectedPersonality)}
+                                disabled={generating}
+                                className="text-[10px] bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white px-2.5 py-1 rounded transition-colors"
+                            >
+                                {generating ? "Generating..." : "Regenerate"}
+                            </button>
+                        </div>
+                        <div className="flex gap-4 items-center justify-between">
+                            <span className="text-[10px] text-gray-400">Tone/Personality:</span>
+                            <select
+                                value={selectedPersonality}
+                                onChange={(e) => {
+                                    setSelectedPersonality(e.target.value);
+                                    triggerDescriptionGen(e.target.value);
+                                }}
+                                disabled={generating}
+                                className="bg-gray-950 border border-gray-800 rounded px-2.5 py-1 text-xs text-white focus:outline-none"
+                            >
+                                <option value="straight_forward">Straightforward</option>
+                                <option value="rage_bait">Rage Baiter</option>
+                                <option value="brainrot">Gen Z / Brainrot</option>
+                                <option value="hype">Enthusiastic / Hype</option>
+                            </select>
+                        </div>
+                    </div>
+
                     <div className="grid grid-cols-2 gap-3">
                         <div>
                             <label className="text-xs text-gray-400 mb-1 block">Date</label>
@@ -579,7 +661,7 @@ function ScheduleModal({
                     </div>
                 </div>
 
-                <div className="flex gap-2 mt-5">
+                <div className="flex gap-2 pt-2">
                     <button
                         onClick={onClose}
                         className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium bg-gray-800 hover:bg-gray-700 text-white transition-colors"

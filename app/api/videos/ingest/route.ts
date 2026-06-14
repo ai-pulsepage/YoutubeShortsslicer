@@ -13,7 +13,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { url, tags, autoTranscribe = true, autoSegment = true } = await req.json();
+    const { url, tags, autoTranscribe = true, autoSegment = false, minDuration, maxDuration, segmentMode } = await req.json();
     if (!url?.trim()) {
         return NextResponse.json({ error: "URL is required" }, { status: 400 });
     }
@@ -52,6 +52,9 @@ export async function POST(req: Request) {
             platform,
             autoTranscribe,
             autoSegment,
+            minDuration,
+            maxDuration,
+            segmentMode,
         } as VideoDownloadJobData,
         {
             priority: 1,

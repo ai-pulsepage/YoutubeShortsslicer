@@ -42,6 +42,7 @@ export async function POST(req: Request) {
             transcriptExcerpt: body.transcriptExcerpt,
             sourceVideoTitle: body.sourceVideoTitle,
             platform,
+            personality: body.personality,
         },
         apiKey
     );

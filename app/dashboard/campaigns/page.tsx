@@ -504,6 +504,8 @@ function CampaignEditorModal({
     // Caption
     const [captionGuidelines, setCaptionGuidelines] = useState(brief?.captionGuidelines || "");
     const [suggestedCaptions, setSuggestedCaptions] = useState<string[]>(brief?.suggestedCaptions || [""]);
+    const [automatedCaption, setAutomatedCaption] = useState(brief?.subtitleStyle?.automated !== false);
+    const [captionPersonality, setCaptionPersonality] = useState(brief?.subtitleStyle?.personality || "straight_forward");
 
 
     // Tags
@@ -585,6 +587,11 @@ function CampaignEditorModal({
             notAllowed: cleanArray(notAllowed),
             onScreenTextNotes: onScreenTextNotes.trim() || null,
             onScreenSuggestions: cleanArray(onScreenSuggestions),
+            subtitleStyle: {
+                ...(brief?.subtitleStyle || {}),
+                automated: automatedCaption,
+                personality: captionPersonality,
+            },
         };
 
         try {
@@ -727,6 +734,33 @@ function CampaignEditorModal({
                             <div>
                                 <label className={labelClass}>Caption Guidelines</label>
                                 <textarea value={captionGuidelines} onChange={(e) => setCaptionGuidelines(e.target.value)} placeholder="Free-text guidance about what captions should say..." className={`${inputClass} min-h-[60px] resize-y`} />
+                            </div>
+
+                            <div className="space-y-2 py-2">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={automatedCaption}
+                                        onChange={(e) => setAutomatedCaption(e.target.checked)}
+                                        className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-amber-500 focus:ring-amber-500"
+                                    />
+                                    <span className="text-sm text-gray-300 font-medium">Automated Caption Generation</span>
+                                </label>
+                                {automatedCaption && (
+                                    <div>
+                                        <label className={labelClass}>Default Caption Personality</label>
+                                        <select
+                                            value={captionPersonality}
+                                            onChange={(e) => setCaptionPersonality(e.target.value)}
+                                            className={inputClass}
+                                        >
+                                            <option value="straight_forward">Straightforward / Informative</option>
+                                            <option value="rage_bait">Rage Baiter (Provocative)</option>
+                                            <option value="brainrot">Gen Z / Brainrot (Slang-heavy)</option>
+                                            <option value="hype">Enthusiastic / Hype (High-energy)</option>
+                                        </select>
+                                    </div>
+                                )}
                             </div>
 
                             <div>

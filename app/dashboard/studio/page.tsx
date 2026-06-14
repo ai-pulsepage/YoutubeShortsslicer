@@ -89,15 +89,21 @@ function StudioContent() {
     const searchParams = useSearchParams();
     const videoId = searchParams.get("video");
 
-    const [video, setVideo] = useState<Video | null>(null);
+    const [video, setVideo] = useState<(Video & { transcript?: { content: string } | null; description?: string | null }) | null>(null);
     const [segments, setSegments] = useState<Segment[]>([]);
     const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<"style" | "effects" | "hooks">("style");
+    const [activeTab, setActiveTab] = useState<"style" | "layout" | "effects" | "hooks">("style");
     const [loading, setLoading] = useState(true);
     const [videos, setVideos] = useState<Video[]>([]);
     const [renderingIds, setRenderingIds] = useState<Set<string>>(new Set());
     const [saving, setSaving] = useState(false);
     const [playingSegId, setPlayingSegId] = useState<string | null>(null);
+
+    // Global layout defaults stored in state
+    const [globalAspect, setGlobalAspect] = useState<"9:16" | "1:1" | "16:9">("9:16");
+    const [globalCropMode, setGlobalCropMode] = useState<string>("letterbox");
+
+    const [pollingVideo, setPollingVideo] = useState(false);
 
     const selectedSegment = segments.find(s => s.id === selectedSegmentId);
 
@@ -132,7 +138,38 @@ function StudioContent() {
         }).catch(() => setLoading(false));
     }, [videoId]);
 
-    // Poll for render status
+    // Poll for status of video if generating/transcribing
+    useEffect(() => {
+        if (!videoId || !video || (video.status !== "SEGMENTING" && video.status !== "TRANSCRIBING")) {
+            setPollingVideo(false);
+            return;
+        }
+
+        setPollingVideo(true);
+        const interval = setInterval(() => {
+            Promise.all([
+                fetch(`/api/videos/${videoId}`).then(r => r.json()),
+                fetch(`/api/videos/${videoId}/segment`).then(r => r.json()),
+            ]).then(([videoData, segData]) => {
+                setVideo(videoData);
+                const segs = Array.isArray(segData) ? segData : segData.segments || [];
+                setSegments(segs);
+                if (videoData.status !== "SEGMENTING" && videoData.status !== "TRANSCRIBING") {
+                    setPollingVideo(false);
+                    if (segs.length > 0 && !selectedSegmentId) {
+                        setSelectedSegmentId(segs[0].id);
+                    }
+                    clearInterval(interval);
+                }
+            }).catch(err => {
+                console.error("Polling error:", err);
+            });
+        }, 4000);
+
+        return () => clearInterval(interval);
+    }, [videoId, video?.status]);
+
+    // Poll for segment rendering status
     useEffect(() => {
         if (renderingIds.size === 0) return;
         const interval = setInterval(() => {
@@ -183,6 +220,7 @@ function StudioContent() {
         await saveSegment(segId, { status } as any);
     };
 
+    // Render single segment
     const renderSegment = async (segmentId: string) => {
         setRenderingIds(prev => new Set([...prev, segmentId]));
         try {
@@ -201,6 +239,7 @@ function StudioContent() {
         }
     };
 
+    // Render all approved segments
     const renderAllApproved = async () => {
         const approved = segments.filter(s => s.status === "APPROVED");
         const ids = approved.map(s => s.id);
@@ -213,6 +252,105 @@ function StudioContent() {
             });
         } catch (err) {
             console.error("Render all failed:", err);
+        }
+    };
+
+    // Delete a video and associated data
+    const handleDeleteVideo = async (e: React.MouseEvent | null, id: string) => {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        if (!confirm("Are you sure you want to delete this video? All clips, transcripts, and storage assets will be permanently deleted.")) {
+            return;
+        }
+        setLoading(true);
+        try {
+            const res = await fetch(`/api/videos/${id}`, { method: "DELETE" });
+            if (res.ok) {
+                if (videoId === id) {
+                    window.location.href = "/dashboard/studio";
+                } else {
+                    setVideos(prev => prev.filter(v => v.id !== id));
+                    setLoading(false);
+                }
+            } else {
+                const err = await res.json().catch(() => ({}));
+                alert(`Delete failed: ${err.error || res.statusText}`);
+                setLoading(false);
+            }
+        } catch (err: any) {
+            alert(`Delete failed: ${err.message}`);
+            setLoading(false);
+        }
+    };
+
+    // Trigger AI clipping generation
+    const handleGenerateClips = async (minDuration: number, maxDuration: number, segmentMode: string) => {
+        setPollingVideo(true);
+        setVideo(prev => prev ? { ...prev, status: "SEGMENTING" } : null);
+        try {
+            const res = await fetch(`/api/videos/${videoId}/segment/generate`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    minDuration,
+                    maxDuration,
+                    segmentMode,
+                    defaultLayout: {
+                        aspectRatio: globalAspect,
+                        cropMode: globalCropMode,
+                    }
+                }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                alert(`Failed to trigger generation: ${err.error || res.statusText}`);
+                setVideo(prev => prev ? { ...prev, status: "READY" } : null);
+                setPollingVideo(false);
+            }
+        } catch (err: any) {
+            alert(`Failed to trigger generation: ${err.message}`);
+            setVideo(prev => prev ? { ...prev, status: "READY" } : null);
+            setPollingVideo(false);
+        }
+    };
+
+    // Apply layout settings of one segment to all segments of this video
+    const handleApplyToAll = async (
+        aspectRatio: string,
+        cropMode: string,
+        manualXOffset: number,
+        gameplayLoop: string,
+        cuts: any[]
+    ) => {
+        if (!confirm("Apply these layout settings to all segments of this video?")) {
+            return;
+        }
+        setSaving(true);
+        try {
+            const promises = segments.map(seg => {
+                const otherEffects = (seg.effects || []).filter(e => e.type !== "layout");
+                const nextEffects = [...otherEffects, {
+                    type: "layout",
+                    params: { aspectRatio, cropMode, manualXOffset, gameplayLoop, cuts }
+                }];
+                return fetch(`/api/videos/${videoId}/segment/${seg.id}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ effects: nextEffects }),
+                });
+            });
+            await Promise.all(promises);
+            // Reload segments
+            const res = await fetch(`/api/videos/${videoId}/segment`);
+            const data = await res.json();
+            setSegments(Array.isArray(data) ? data : data.segments || []);
+            alert("Applied layout settings to all segments successfully!");
+        } catch (err: any) {
+            alert(`Apply to all failed: ${err.message}`);
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -249,14 +387,59 @@ function StudioContent() {
         );
     }
 
-    // No video selected — show video picker
+    // Polling / processing view
+    if (video && (pollingVideo || video.status === "SEGMENTING" || video.status === "TRANSCRIBING")) {
+        return (
+            <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-gray-950/20 rounded-2xl border border-gray-900/50">
+                <Loader2 className="w-12 h-12 text-violet-400 animate-spin mb-4" />
+                <h2 className="text-xl font-bold text-white mb-2">
+                    {video.status === "TRANSCRIBING" ? "Transcribing Video..." : "Generating AI Clips..."}
+                </h2>
+                <p className="text-sm text-gray-400 max-w-md">
+                    {video.status === "TRANSCRIBING"
+                        ? "Whisper is transcribing the video audio and extracting word-level timestamps."
+                        : "Gemini is analyzing the transcript to detect hooks, calculate engagement scores, and slice segments."}
+                </p>
+                <p className="text-xs text-gray-500 mt-4 animate-pulse">This process may take 1-2 minutes. Please keep this page open.</p>
+            </div>
+        );
+    }
+
+    // No video selected — show video picker with Global defaults card
     if (!videoId) {
         return (
             <div className="space-y-6">
-                <div>
-                    <h1 className="text-2xl font-bold text-white">Studio</h1>
-                    <p className="text-gray-400 text-sm mt-1">Select a video to open in the editor</p>
+                <div className="flex justify-between items-start">
+                    <div>
+                        <h1 className="text-2xl font-bold text-white">Studio</h1>
+                        <p className="text-gray-400 text-sm mt-1">Select a video to open in the editor</p>
+                    </div>
+
+                    {/* Global Layout Default configuration card */}
+                    <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-4 w-80 space-y-3">
+                        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Global Clip Defaults</h3>
+                        <div className="space-y-2">
+                            <div>
+                                <label className="text-[10px] text-gray-500 mb-1 block">Default Aspect Ratio</label>
+                                <select value={globalAspect} onChange={e => setGlobalAspect(e.target.value as any)}
+                                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-xs text-white focus:outline-none">
+                                    <option value="9:16">9:16 Vertical (Shorts)</option>
+                                    <option value="1:1">1:1 Square</option>
+                                    <option value="16:9">16:9 Landscape</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-[10px] text-gray-500 mb-1 block">Default Crop Mode</label>
+                                <select value={globalCropMode} onChange={e => setGlobalCropMode(e.target.value)}
+                                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-xs text-white focus:outline-none">
+                                    <option value="letterbox">Letterbox (Fit)</option>
+                                    <option value="center">Center Crop (Zoom)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
                 </div>
+
                 {videos.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 text-center">
                         <Wand2 className="w-12 h-12 text-gray-600 mb-4" />
@@ -267,23 +450,31 @@ function StudioContent() {
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {videos.map(v => (
-                            <Link key={v.id} href={`/dashboard/studio?video=${v.id}`}
-                                className="bg-gray-900/50 border border-gray-800 rounded-2xl overflow-hidden hover:border-violet-500/50 transition-all group">
-                                <div className="aspect-video bg-gray-800 relative">
-                                    {v.thumbnail ? (
-                                        <img src={v.thumbnail} alt="" className="w-full h-full object-cover" />
-                                    ) : (
-                                        <div className="w-full h-full flex items-center justify-center"><Film className="w-10 h-10 text-gray-600" /></div>
-                                    )}
-                                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
-                                        <Wand2 className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                            <div key={v.id} className="relative bg-gray-900/50 border border-gray-800 rounded-2xl overflow-hidden hover:border-violet-500/50 transition-all group">
+                                <Link href={`/dashboard/studio?video=${v.id}`} className="block">
+                                    <div className="aspect-video bg-gray-800 relative">
+                                        {v.thumbnail ? (
+                                            <img src={v.thumbnail} alt="" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center"><Film className="w-10 h-10 text-gray-600" /></div>
+                                        )}
+                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                                            <Wand2 className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                                        </div>
                                     </div>
-                                </div>
-                                <div className="p-4">
-                                    <h3 className="text-sm font-medium text-white truncate">{v.title || "Untitled"}</h3>
-                                    <p className="text-xs text-gray-500 mt-1">{v.duration ? formatTime(v.duration) : "--:--"}</p>
-                                </div>
-                            </Link>
+                                    <div className="p-4">
+                                        <h3 className="text-sm font-medium text-white truncate pr-6">{v.title || "Untitled"}</h3>
+                                        <p className="text-xs text-gray-500 mt-1">{v.duration ? formatTime(v.duration) : "--:--"}</p>
+                                    </div>
+                                </Link>
+                                <button
+                                    onClick={(e) => handleDeleteVideo(e, v.id)}
+                                    className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 hover:bg-red-600 text-gray-300 hover:text-white opacity-0 group-hover:opacity-100 transition-all z-10"
+                                    title="Delete Video"
+                                >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                            </div>
                         ))}
                     </div>
                 )}
@@ -291,7 +482,19 @@ function StudioContent() {
         );
     }
 
-    // Video selected — full Studio view
+    // Video is ready but has 0 segments — show Video Preparation View
+    if (segments.length === 0 && video) {
+        return (
+            <VideoPreparationView
+                video={video}
+                onGenerate={handleGenerateClips}
+                generating={pollingVideo}
+                onDelete={() => handleDeleteVideo(null, video.id)}
+            />
+        );
+    }
+
+    // Video selected with segments — standard Studio view
     const approvedCount = segments.filter(s => s.status === "APPROVED").length;
     const renderedCount = segments.filter(s => s.status === "RENDERED" || s.shortVideo?.status === "RENDERED").length;
 
@@ -301,10 +504,13 @@ function StudioContent() {
             <div className="w-72 flex-shrink-0 flex flex-col bg-gray-900/50 border border-gray-800 rounded-2xl overflow-hidden">
                 <div className="px-4 py-3 border-b border-gray-800">
                     <div className="flex items-center gap-2 mb-2">
-                        <Link href="/dashboard/library" className="p-1 text-gray-400 hover:text-white transition-colors">
+                        <Link href="/dashboard/studio" className="p-1 text-gray-400 hover:text-white transition-colors">
                             <ChevronLeft className="w-4 h-4" />
                         </Link>
                         <h2 className="text-sm font-semibold text-white truncate flex-1">{video?.title || "Untitled"}</h2>
+                        <button onClick={(e) => video && handleDeleteVideo(null, video.id)} className="p-1 text-gray-400 hover:text-red-400 transition-colors" title="Delete Video">
+                            <Trash2 className="w-4 h-4" />
+                        </button>
                     </div>
                     <div className="flex gap-2">
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400">{approvedCount} approved</span>
@@ -438,6 +644,7 @@ function StudioContent() {
                         <div className="flex border-b border-gray-800">
                             {([
                                 { key: "style" as const, label: "Style", icon: Type },
+                                { key: "layout" as const, label: "Layout & Sizing", icon: Film },
                                 { key: "effects" as const, label: "Effects", icon: Sparkles },
                                 { key: "hooks" as const, label: "Hooks", icon: Wand2 },
                             ]).map(tab => (
@@ -450,7 +657,7 @@ function StudioContent() {
                                     {tab.label}
                                     {tab.key === "effects" && (selectedSegment.effects?.length || 0) > 0 && (
                                         <span className="ml-1 text-[9px] px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-400">
-                                            {selectedSegment.effects!.length}
+                                            {selectedSegment.effects!.filter((e: any) => e.type !== "layout").length}
                                         </span>
                                     )}
                                 </button>
@@ -461,6 +668,13 @@ function StudioContent() {
                         <div className="flex-1 overflow-y-auto p-5">
                             {activeTab === "style" && (
                                 <StyleTab segment={selectedSegment} onSave={(data) => saveSegment(selectedSegment.id, data)} />
+                            )}
+                            {activeTab === "layout" && (
+                                <LayoutTab 
+                                    segment={selectedSegment} 
+                                    onSave={(data) => saveSegment(selectedSegment.id, data)}
+                                    onApplyToAll={handleApplyToAll}
+                                />
                             )}
                             {activeTab === "effects" && (
                                 <EffectsTab segment={selectedSegment} onSave={(data) => saveSegment(selectedSegment.id, data)} />
@@ -576,16 +790,16 @@ function StyleTab({ segment, onSave }: { segment: Segment; onSave: (data: any) =
 // ─── Effects Tab ─────────────────────────────────────────
 
 function EffectsTab({ segment, onSave }: { segment: Segment; onSave: (data: any) => void }) {
-    const [applied, setApplied] = useState<AppliedEffect[]>(segment.effects || []);
+    const [applied, setApplied] = useState<AppliedEffect[]>([]);
     const [dirty, setDirty] = useState(false);
 
     useEffect(() => {
-        setApplied(segment.effects || []);
+        const nonLayout = (segment.effects || []).filter(e => e.type !== "layout");
+        setApplied(nonLayout);
         setDirty(false);
-    }, [segment.id]);
+    }, [segment.id, segment.effects]);
 
     const addEffect = (effectId: string) => {
-        // Don't add duplicate
         if (applied.find(e => e.type === effectId)) return;
         const next = [...applied, { type: effectId, params: {} }];
         setApplied(next);
@@ -599,7 +813,12 @@ function EffectsTab({ segment, onSave }: { segment: Segment; onSave: (data: any)
     };
 
     const handleSave = () => {
-        onSave({ effects: applied.length > 0 ? applied : null });
+        const layoutEffect = (segment.effects || []).find(e => e.type === "layout");
+        const nextEffects = [...applied];
+        if (layoutEffect) {
+            nextEffects.push(layoutEffect);
+        }
+        onSave({ effects: nextEffects.length > 0 ? nextEffects : null });
         setDirty(false);
     };
 
@@ -762,6 +981,320 @@ function HooksTab({ segment, onSave }: { segment: Segment; onSave: (data: any) =
                         </div>
                     </div>
                 )}
+            </div>
+        </div>
+    );
+}
+
+// ─── Layout & Sizing Tab ─────────────────────────────────
+
+function LayoutTab({
+    segment,
+    onSave,
+    onApplyToAll,
+}: {
+    segment: Segment;
+    onSave: (data: any) => void;
+    onApplyToAll: (aspectRatio: string, cropMode: string, manualXOffset: number, gameplayLoop: string, cuts: any[]) => void;
+}) {
+    const layoutEffect = (segment.effects || []).find(e => e.type === "layout");
+    const layoutParams = layoutEffect?.params || {};
+
+    const [aspectRatio, setAspectRatio] = useState<"9:16" | "1:1" | "16:9">(layoutParams.aspectRatio || "9:16");
+    const [cropMode, setCropMode] = useState<"letterbox" | "center" | "manual" | "smart" | "multicam" | "split">(layoutParams.cropMode || "letterbox");
+    const [manualXOffset, setManualXOffset] = useState<number>(layoutParams.manualXOffset !== undefined ? layoutParams.manualXOffset : 50);
+    const [gameplayLoop, setGameplayLoop] = useState<"minecraft" | "gta5" | "subway_surfers">(layoutParams.gameplayLoop || "minecraft");
+    const [cuts, setCuts] = useState<{ time: number; angle: "left" | "right" | "center" }[]>(layoutParams.cuts || []);
+
+    const [newCutTime, setNewCutTime] = useState<string>("0");
+    const [newCutAngle, setNewCutAngle] = useState<"left" | "right" | "center">("center");
+    const [dirty, setDirty] = useState(false);
+
+    const segmentDuration = segment.endTime - segment.startTime;
+
+    useEffect(() => {
+        const eff = (segment.effects || []).find(e => e.type === "layout");
+        const p = eff?.params || {};
+        setAspectRatio(p.aspectRatio || "9:16");
+        setCropMode(p.cropMode || "letterbox");
+        setManualXOffset(p.manualXOffset !== undefined ? p.manualXOffset : 50);
+        setGameplayLoop(p.gameplayLoop || "minecraft");
+        setCuts(p.cuts || []);
+        setDirty(false);
+    }, [segment.id, segment.effects]);
+
+    const handleSave = () => {
+        const otherEffects = (segment.effects || []).filter(e => e.type !== "layout");
+        const nextEffects = [...otherEffects, {
+            type: "layout",
+            params: { aspectRatio, cropMode, manualXOffset, gameplayLoop, cuts }
+        }];
+        onSave({ effects: nextEffects });
+        setDirty(false);
+    };
+
+    const addCut = () => {
+        const t = parseFloat(newCutTime);
+        if (isNaN(t) || t < 0 || t > segmentDuration) {
+            alert(`Cut time must be between 0 and ${segmentDuration.toFixed(1)} seconds`);
+            return;
+        }
+        const newCuts = [...cuts, { time: t, angle: newCutAngle }].sort((a, b) => a.time - b.time);
+        setCuts(newCuts);
+        setDirty(true);
+        setNewCutTime("");
+    };
+
+    const removeCut = (index: number) => {
+        setCuts(cuts.filter((_, i) => i !== index));
+        setDirty(true);
+    };
+
+    const change = (setter: Function) => (val: any) => {
+        setter(val);
+        setDirty(true);
+    };
+
+    return (
+        <div className="space-y-6">
+            <div className="flex items-center justify-between">
+                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Layout & Sizing</h4>
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => onApplyToAll(aspectRatio, cropMode, manualXOffset, gameplayLoop, cuts)}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-800 hover:bg-gray-700 text-white transition-colors border border-gray-700"
+                    >
+                        Apply to All
+                    </button>
+                    {dirty && (
+                        <button onClick={handleSave} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-violet-600 hover:bg-violet-500 text-white transition-colors">
+                            <Save className="w-3.5 h-3.5" /> Save Layout
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+                {/* Aspect Ratio */}
+                <div>
+                    <label className="text-xs text-gray-500 mb-1.5 block">Aspect Ratio</label>
+                    <select value={aspectRatio} onChange={e => change(setAspectRatio)(e.target.value)}
+                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:border-violet-500 focus:outline-none">
+                        <option value="9:16">9:16 Vertical (Shorts/Reels)</option>
+                        <option value="1:1">1:1 Square (Instagram/Post)</option>
+                        <option value="16:9">16:9 Landscape (Widescreen)</option>
+                    </select>
+                </div>
+
+                {/* Crop Mode */}
+                <div>
+                    <label className="text-xs text-gray-500 mb-1.5 block">Framing & Crop Mode</label>
+                    <select value={cropMode} onChange={e => change(setCropMode)(e.target.value)}
+                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:border-violet-500 focus:outline-none">
+                        <option value="letterbox">Letterbox (Fit with bars)</option>
+                        <option value="center">Center Crop (Zoom to fill)</option>
+                        <option value="manual">Manual X-Offset</option>
+                        <option value="smart">Smart Auto-Crop (Face tracking)</option>
+                        {aspectRatio === "9:16" && <option value="multicam">Virtual Multi-Cam Cuts</option>}
+                        {aspectRatio === "9:16" && <option value="split">Split-Screen Layout (Gameplay Stack)</option>}
+                    </select>
+                </div>
+            </div>
+
+            {/* Manual X-Offset Slider */}
+            {cropMode === "manual" && (
+                <div className="bg-gray-800/30 border border-gray-800 rounded-xl p-4 space-y-2">
+                    <div className="flex justify-between text-xs text-gray-400">
+                        <span>Horizontal Offset: {manualXOffset}%</span>
+                        <span>0% (Left) — 100% (Right)</span>
+                    </div>
+                    <input type="range" min={0} max={100} value={manualXOffset} onChange={e => change(setManualXOffset)(parseInt(e.target.value))}
+                        className="w-full accent-violet-500" />
+                </div>
+            )}
+
+            {/* Gameplay Loop Select */}
+            {cropMode === "split" && aspectRatio === "9:16" && (
+                <div className="bg-gray-800/30 border border-gray-800 rounded-xl p-4 space-y-3">
+                    <label className="text-xs text-gray-400 font-medium block">Gameplay Loop Background</label>
+                    <select value={gameplayLoop} onChange={e => change(setGameplayLoop)(e.target.value)}
+                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:border-violet-500 focus:outline-none">
+                        <option value="minecraft">Minecraft Parkour</option>
+                        <option value="gta5">GTA 5 Stunts</option>
+                        <option value="subway_surfers">Subway Surfers</option>
+                    </select>
+                    <p className="text-[10px] text-gray-500">A royalty-free gameplay loop video will stack underneath the main talking head content.</p>
+                </div>
+            )}
+
+            {/* Virtual Multi-Cam Cuts Editor */}
+            {cropMode === "multicam" && aspectRatio === "9:16" && (
+                <div className="bg-gray-800/30 border border-gray-800 rounded-xl p-4 space-y-4">
+                    <label className="text-xs text-gray-400 font-medium block">Virtual Director Camera Cuts</label>
+
+                    {/* Cuts List */}
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                        {cuts.length === 0 ? (
+                            <p className="text-xs text-gray-500 italic">No camera cuts added. Video will default to center angle.</p>
+                        ) : (
+                            cuts.map((cut, idx) => (
+                                <div key={idx} className="flex items-center justify-between bg-gray-800/60 rounded-lg px-3 py-1.5 text-xs text-white">
+                                    <span>Cut #{idx+1} at <span className="font-semibold text-violet-400">{cut.time.toFixed(1)}s</span> → <span className="capitalize">{cut.angle} Speaker</span></span>
+                                    <button onClick={() => removeCut(idx)} className="text-gray-400 hover:text-red-400 transition-colors">
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                            ))
+                        )}
+                    </div>
+
+                    {/* Add Cut Controls */}
+                    <div className="grid grid-cols-3 gap-2 pt-2 border-t border-gray-800">
+                        <div>
+                            <label className="text-[10px] text-gray-500 mb-1 block">Time (seconds)</label>
+                            <input type="number" step="0.1" min="0" max={segmentDuration} value={newCutTime} onChange={e => setNewCutTime(e.target.value)}
+                                placeholder="0.0" className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none" />
+                        </div>
+                        <div>
+                            <label className="text-[10px] text-gray-500 mb-1 block">Angle / Speaker</label>
+                            <select value={newCutAngle} onChange={e => setNewCutAngle(e.target.value as any)}
+                                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none">
+                                <option value="left">Left Speaker</option>
+                                <option value="center">Center / Wide</option>
+                                <option value="right">Right Speaker</option>
+                            </select>
+                        </div>
+                        <div className="flex items-end">
+                            <button onClick={addCut}
+                                className="w-full bg-violet-600 hover:bg-violet-500 text-white rounded-lg py-1.5 text-xs font-semibold transition-colors flex items-center justify-center gap-1">
+                                <Plus className="w-3.5 h-3.5" /> Add
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ─── Video Preparation View ──────────────────────────────
+
+function VideoPreparationView({
+    video,
+    onGenerate,
+    generating,
+    onDelete,
+}: {
+    video: Video & { transcript?: { content: string } | null; description?: string | null };
+    onGenerate: (minDuration: number, maxDuration: number, segmentMode: string) => void;
+    generating: boolean;
+    onDelete: () => void;
+}) {
+    const [minDuration, setMinDuration] = useState(30);
+    const [maxDuration, setMaxDuration] = useState(60);
+    const [segmentMode, setSegmentMode] = useState("standard");
+
+    return (
+        <div className="flex-1 flex gap-6 p-6 overflow-hidden h-[calc(100vh-4rem)]">
+            {/* Left: Video Player + Transcript & Synopsis */}
+            <div className="flex-1 flex flex-col gap-6 overflow-y-auto pr-2">
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                    <div>
+                        <Link href="/dashboard/studio" className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-white transition-colors mb-2">
+                            <ChevronLeft className="w-4 h-4" /> Back to Studio
+                        </Link>
+                        <h1 className="text-2xl font-bold text-white">{video.title || "Untitled Video"}</h1>
+                    </div>
+                    <button onClick={onDelete} className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium bg-red-950/30 border border-red-900/30 text-red-400 hover:bg-red-900/20 transition-all">
+                        <Trash2 className="w-4 h-4" /> Delete Video
+                    </button>
+                </div>
+
+                {/* Video Player */}
+                <div className="aspect-video bg-black rounded-2xl border border-gray-800 overflow-hidden relative group">
+                    <video src={`/api/videos/${video.id}/stream`} controls className="w-full h-full" />
+                </div>
+
+                {/* AI Synopsis */}
+                {video.description && (
+                    <div className="bg-gray-900/30 border border-gray-800 rounded-2xl p-5">
+                        <h3 className="text-sm font-semibold text-white mb-2 flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-violet-400" />
+                            AI Synopsis
+                        </h3>
+                        <p className="text-sm text-gray-300 leading-relaxed">{video.description}</p>
+                    </div>
+                )}
+
+                {/* Transcript */}
+                <div className="bg-gray-900/30 border border-gray-800 rounded-2xl p-5 flex-1 min-h-[200px] flex flex-col">
+                    <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                        <Type className="w-4 h-4 text-violet-400" />
+                        Full Transcript
+                    </h3>
+                    <div className="flex-1 overflow-y-auto max-h-[300px] text-sm text-gray-400 leading-relaxed pr-2 font-light">
+                        {video.transcript?.content || "No transcript available for this video."}
+                    </div>
+                </div>
+            </div>
+
+            {/* Right: Settings & Actions */}
+            <div className="w-96 bg-gray-900/50 border border-gray-800 rounded-2xl p-6 flex flex-col justify-between h-fit gap-6">
+                <div className="space-y-6">
+                    <div>
+                        <h2 className="text-lg font-bold text-white mb-1">Generate AI Clips</h2>
+                        <p className="text-xs text-gray-400">Configure parameters for Gemini to find the most engaging segments of your video.</p>
+                    </div>
+
+                    {/* Form Fields */}
+                    <div className="space-y-4">
+                        <div>
+                            <label className="text-xs text-gray-500 mb-1.5 block">Min Duration: {minDuration}s</label>
+                            <input type="range" min={15} max={90} step={5} value={minDuration} onChange={e => setMinDuration(parseInt(e.target.value))}
+                                className="w-full accent-violet-500" />
+                        </div>
+
+                        <div>
+                            <label className="text-xs text-gray-500 mb-1.5 block">Max Duration: {maxDuration}s</label>
+                            <input type="range" min={minDuration} max={120} step={5} value={maxDuration} onChange={e => setMaxDuration(parseInt(e.target.value))}
+                                className="w-full accent-violet-500" />
+                        </div>
+
+                        <div>
+                            <label className="text-xs text-gray-500 mb-1.5 block">Clipping Focus Style</label>
+                            <select value={segmentMode} onChange={e => setSegmentMode(e.target.value)}
+                                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white focus:border-violet-500 focus:outline-none">
+                                <option value="standard">Standard (General Highlights)</option>
+                                <option value="high_drama">High Drama (Tension & Conflicts)</option>
+                                <option value="educational">Educational / Explainer (Informative)</option>
+                                <option value="funny">Funny (Humor & Comedy)</option>
+                                <option value="suspense">Suspense (Thrills & Mystery)</option>
+                                <option value="storytelling">Storytelling (Narrative Arc)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="pt-6 border-t border-gray-800">
+                    <button
+                        onClick={() => onGenerate(minDuration, maxDuration, segmentMode)}
+                        disabled={generating}
+                        className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold bg-violet-600 hover:bg-violet-500 text-white transition-all disabled:opacity-50 shadow-lg shadow-violet-500/20"
+                    >
+                        {generating ? (
+                            <>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                Analyzing & Clipping…
+                            </>
+                        ) : (
+                            <>
+                                <Wand2 className="w-4 h-4" />
+                                Generate AI Clips
+                            </>
+                        )}
+                    </button>
+                </div>
             </div>
         </div>
     );
