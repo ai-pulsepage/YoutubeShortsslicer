@@ -39,7 +39,7 @@ export async function POST(req: Request) {
         }
 
         const result = execSync(
-            `yt-dlp ${cookieFlag} ${proxyFlag} --dump-json --no-download "${url.trim()}"`,
+            `yt-dlp ${cookieFlag} ${proxyFlag} --no-playlist --dump-json --no-download "${url.trim()}"`,
             {
                 encoding: "utf8",
                 timeout: 90000,

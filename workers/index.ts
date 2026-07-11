@@ -126,7 +126,7 @@ const downloadWorker = new Worker(
 
             // Get metadata
             const metadataJson = execSync(
-                `yt-dlp ${ytdlpCookieFlag()} ${ytdlpProxyFlag()} --js-runtimes node --remote-components ejs:github --dump-json --no-download "${sourceUrl}"`,
+                `yt-dlp ${ytdlpCookieFlag()} ${ytdlpProxyFlag()} --no-playlist --js-runtimes node --remote-components ejs:github --dump-json --no-download "${sourceUrl}"`,
                 { encoding: "utf8", timeout: 90000 }
             );
             const metadata = JSON.parse(metadataJson);
@@ -135,7 +135,7 @@ const downloadWorker = new Worker(
             // Download video
             const outputTemplate = path.join(videoDir, "%(id)s.%(ext)s");
             execSync(
-                `yt-dlp ${ytdlpCookieFlag()} ${ytdlpProxyFlag()} --js-runtimes node --remote-components ejs:github -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4 -o "${outputTemplate}" "${sourceUrl}"`,
+                `yt-dlp ${ytdlpCookieFlag()} ${ytdlpProxyFlag()} --no-playlist --js-runtimes node --remote-components ejs:github -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4 -o "${outputTemplate}" "${sourceUrl}"`,
                 { encoding: "utf8", timeout: 600000, maxBuffer: 50 * 1024 * 1024 }
             );
             await job.updateProgress(50);

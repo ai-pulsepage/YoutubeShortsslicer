@@ -69,7 +69,7 @@ async function processDownload(job: Job<VideoDownloadJobData>) {
 
         // Step 1: Get metadata
         const metadataJson = execSync(
-            `yt-dlp ${ytdlpCookieFlag()} ${ytdlpProxyFlag()} --js-runtimes node --dump-json --no-download "${sourceUrl}"`,
+            `yt-dlp ${ytdlpCookieFlag()} ${ytdlpProxyFlag()} --no-playlist --js-runtimes node --dump-json --no-download "${sourceUrl}"`,
             { encoding: "utf8", timeout: 90000 }
         );
         const metadata = JSON.parse(metadataJson);
@@ -78,7 +78,7 @@ async function processDownload(job: Job<VideoDownloadJobData>) {
         // Step 2: Download video (best quality, mp4 preferred)
         const outputTemplate = path.join(videoDir, "%(id)s.%(ext)s");
         execSync(
-            `yt-dlp ${ytdlpCookieFlag()} ${ytdlpProxyFlag()} --js-runtimes node -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4 -o "${outputTemplate}" "${sourceUrl}"`,
+            `yt-dlp ${ytdlpCookieFlag()} ${ytdlpProxyFlag()} --no-playlist --js-runtimes node -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4 -o "${outputTemplate}" "${sourceUrl}"`,
             {
                 encoding: "utf8",
                 timeout: 600000, // 10 minute timeout
