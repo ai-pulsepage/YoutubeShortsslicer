@@ -9,6 +9,7 @@ import {
     Zap,
     Plus,
     ExternalLink,
+    Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -122,7 +123,7 @@ export default async function DashboardPage() {
             {/* Quick Actions */}
             <div>
                 <h2 className="text-lg font-semibold text-white mb-4">Quick Actions</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                     <QuickAction
                         href="/dashboard/library"
                         icon={<Upload className="w-6 h-6" />}
@@ -131,11 +132,18 @@ export default async function DashboardPage() {
                         gradient="from-violet-500 to-purple-600"
                     />
                     <QuickAction
-                        href="/dashboard/library"
+                        href="/dashboard/ugc"
+                        icon={<Sparkles className="w-6 h-6" />}
+                        label="UGC Studio"
+                        description="AI avatar & product promotion videos"
+                        gradient="from-pink-500 to-rose-600"
+                    />
+                    <QuickAction
+                        href="/dashboard/animated"
                         icon={<Film className="w-6 h-6" />}
-                        label="Browse Library"
-                        description="View all videos and shorts"
-                        gradient="from-blue-500 to-cyan-600"
+                        label="Animated Shorts"
+                        description="Script to video automated synthesis"
+                        gradient="from-blue-500 to-indigo-600"
                     />
                     <QuickAction
                         href="/dashboard/scheduler"
@@ -143,6 +151,13 @@ export default async function DashboardPage() {
                         label="Schedule Content"
                         description="Plan your posting calendar"
                         gradient="from-emerald-500 to-teal-600"
+                    />
+                    <QuickAction
+                        href="/dashboard/library"
+                        icon={<Scissors className="w-6 h-6" />}
+                        label="Browse Library"
+                        description="View all videos and shorts"
+                        gradient="from-cyan-500 to-blue-600"
                     />
                 </div>
             </div>

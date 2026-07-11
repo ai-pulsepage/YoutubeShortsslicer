@@ -192,6 +192,66 @@ const PRESETS: EffectPreset[] = [
             return `[0:v]setpts=${(1 / factor).toFixed(4)}*PTS`;
         },
     },
+    {
+        id: "mirror_flip",
+        label: "Mirror / Flip",
+        description: "Flip video left-right",
+        icon: "🪞",
+        category: "color" as EffectCategory,
+        params: [],
+        buildFilter: () => `[0:v]hflip`,
+    },
+    {
+        id: "desaturate",
+        label: "Desaturate",
+        description: "Black and white",
+        icon: "⬜",
+        category: "color" as EffectCategory,
+        params: [{ key: "amount", label: "Amount", type: "number", default: 1.0, min: 0.3, max: 1.0 }],
+        buildFilter: (params) => `[0:v]hue=s=${1 - (params.amount || 1.0)}`,
+    },
+    {
+        id: "high_contrast",
+        label: "High Contrast",
+        description: "Punchy blacks and whites",
+        icon: "◐",
+        category: "color" as EffectCategory,
+        params: [{ key: "contrast", label: "Contrast", type: "number", default: 1.5, min: 1.1, max: 2.5 }],
+        buildFilter: (params) => `[0:v]eq=contrast=${params.contrast || 1.5}:brightness=-0.05:saturation=1.2`,
+    },
+    {
+        id: "vintage",
+        label: "Vintage",
+        description: "Faded retro look",
+        icon: "📼",
+        category: "color" as EffectCategory,
+        params: [],
+        buildFilter: () =>
+            `[0:v]curves=r='0/0.1 1/0.9':g='0/0.05 1/0.85':b='0/0.0 1/0.7',hue=s=0.7,noise=c0s=8:c0f=t+u`,
+    },
+    {
+        id: "dark_dramatic",
+        label: "Dark Dramatic",
+        description: "Dark moody cinematic",
+        icon: "🌑",
+        category: "color" as EffectCategory,
+        params: [],
+        buildFilter: () =>
+            `[0:v]eq=brightness=-0.08:contrast=1.3:saturation=0.85,colorbalance=rs=-0.05:gs=-0.02:bs=0.05`,
+    },
+    {
+        id: "crop_zoom",
+        label: "Zoom In 110%",
+        description: "Slight zoom — changes framing",
+        icon: "📐",
+        category: "layout" as EffectCategory,
+        params: [],
+        buildFilter: (_, meta) => {
+            const cropW = Math.round(meta.width / 1.1);
+            const cropH = Math.round(meta.height / 1.1);
+            return `[0:v]crop=${cropW}:${cropH}:(iw-${cropW})/2:(ih-${cropH})/2,scale=${meta.width}:${meta.height}`;
+        },
+    },
 ];
 
 // ─── Public API ──────────────────────────────────────────

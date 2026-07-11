@@ -22,6 +22,7 @@ export async function POST(
     const { id } = await params;
     const body = await req.json().catch(() => ({}));
     const requestedIds: string[] | undefined = body.segmentIds;
+    const outputConfig = body.outputConfig;
 
     // Verify video ownership
     const video = await prisma.video.findFirst({
@@ -84,6 +85,7 @@ export async function POST(
                     startTime: segment.startTime,
                     endTime: segment.endTime,
                     title: segment.title,
+                    outputConfig,
                 },
                 { priority: 1 }
             );

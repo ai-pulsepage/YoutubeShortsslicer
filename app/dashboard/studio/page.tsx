@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { Suspense, useState, useEffect, useCallback, useRef } from "react";
+import React, { Suspense, useState, useEffect, useCallback, useRef } from "react";
 import {
     Wand2,
     Film,
@@ -22,6 +22,8 @@ import {
     Trash2,
     Plus,
     GripVertical,
+    X,
+    Camera,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -69,6 +71,30 @@ type AppliedEffect = {
     params: Record<string, any>;
 };
 
+type OutputConfig = {
+    mirrorFlip: boolean;
+    speedFactor: number;
+    colorGrade: string;
+    cropZoom: boolean;
+    blurBackground: boolean;
+    filmGrain: boolean;
+    vignette: boolean;
+    letterbox: boolean;
+    narratorMode: string;
+    narratorVoiceEngine: string;
+    narratorVoiceId: string;
+    narratorAudioMix: string;
+    camOverlayEnabled: boolean;
+    camRecordingPath: string | null;
+    camPosition: { x: number; y: number };
+    camSize: { w: number; h: number };
+    camShape: string;
+    camBorderColor: string;
+    camBorderWidth: number;
+    camBgRemoval: boolean;
+    customNarratorScript?: string;
+};
+
 const EFFECT_PRESETS = [
     { id: "blur_background", label: "Blur Background", icon: "🔲", desc: "Blurred BG + sharp center", category: "layout" },
     { id: "warm_cinematic", label: "Warm Cinematic", icon: "🌅", desc: "Warm orange tone", category: "color" },
@@ -98,6 +124,30 @@ function StudioContent() {
     const [renderingIds, setRenderingIds] = useState<Set<string>>(new Set());
     const [saving, setSaving] = useState(false);
     const [playingSegId, setPlayingSegId] = useState<string | null>(null);
+
+    const [outputDrawerOpen, setOutputDrawerOpen] = useState(false);
+    const [outputConfig, setOutputConfig] = useState<OutputConfig>({
+        mirrorFlip: false,
+        speedFactor: 1.0,
+        colorGrade: "none",
+        cropZoom: false,
+        blurBackground: false,
+        filmGrain: false,
+        vignette: false,
+        letterbox: false,
+        narratorMode: "none",
+        narratorVoiceEngine: "elevenlabs",
+        narratorVoiceId: "21m00Tcm4TlvDq8ikWAM",
+        narratorAudioMix: "replace",
+        camOverlayEnabled: false,
+        camRecordingPath: null,
+        camPosition: { x: 20, y: 20 },
+        camSize: { w: 30, h: 30 },
+        camShape: "circle",
+        camBorderColor: "#FFFFFF",
+        camBorderWidth: 3,
+        camBgRemoval: true,
+    });
 
     // Global layout defaults stored in state
     const [globalAspect, setGlobalAspect] = useState<"9:16" | "1:1" | "16:9">("9:16");
@@ -228,6 +278,24 @@ function StudioContent() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ segmentIds: [segmentId] }),
+            });
+        } catch (err) {
+            console.error("Render failed:", err);
+            setRenderingIds(prev => {
+                const next = new Set(prev);
+                next.delete(segmentId);
+                return next;
+            });
+        }
+    };
+
+    const renderSegmentWithConfig = async (segmentId: string, cfg: OutputConfig) => {
+        setRenderingIds(prev => new Set([...prev, segmentId]));
+        try {
+            await fetch(`/api/videos/${videoId}/render`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ segmentIds: [segmentId], outputConfig: cfg }),
             });
         } catch (err) {
             console.error("Render failed:", err);
@@ -588,7 +656,7 @@ function StudioContent() {
                                 {/* APPROVED — render + reject */}
                                 {selectedSegment.status === "APPROVED" && (
                                     <div className="flex gap-1">
-                                        <button onClick={() => renderSegment(selectedSegment.id)} disabled={renderingIds.has(selectedSegment.id)}
+                                        <button onClick={() => setOutputDrawerOpen(true)} disabled={renderingIds.has(selectedSegment.id)}
                                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-violet-600 hover:bg-violet-500 text-white transition-colors disabled:opacity-50">
                                             {renderingIds.has(selectedSegment.id) ? <Loader2 className="w-3 h-3 animate-spin" /> : <Film className="w-3 h-3" />}
                                             Render
@@ -610,7 +678,7 @@ function StudioContent() {
                                             className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-colors">
                                             <Download className="w-3 h-3" /> Download
                                         </a>
-                                        <button onClick={() => renderSegment(selectedSegment.id)} disabled={renderingIds.has(selectedSegment.id)}
+                                        <button onClick={() => setOutputDrawerOpen(true)} disabled={renderingIds.has(selectedSegment.id)}
                                             className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-amber-600 hover:bg-amber-500 text-white transition-colors disabled:opacity-50"
                                             title="Re-render with updated style/effects">
                                             {renderingIds.has(selectedSegment.id) ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
@@ -693,6 +761,20 @@ function StudioContent() {
                     </div>
                 )}
             </div>
+
+            {outputDrawerOpen && selectedSegment && (
+                <OutputDrawer 
+                    segment={selectedSegment}
+                    outputConfig={outputConfig}
+                    setOutputConfig={setOutputConfig}
+                    onClose={() => setOutputDrawerOpen(false)}
+                    onRender={(cfg) => {
+                        renderSegmentWithConfig(selectedSegment.id, cfg);
+                        setOutputDrawerOpen(false);
+                    }}
+                    setActiveTab={setActiveTab}
+                />
+            )}
         </div>
     );
 }
@@ -1295,6 +1377,633 @@ function VideoPreparationView({
                         )}
                     </button>
                 </div>
+            </div>
+        </div>
+    );
+}
+
+// ─── Output Drawer Component ────────────────────────────────
+
+type OutputDrawerProps = {
+    segment: Segment;
+    outputConfig: OutputConfig;
+    setOutputConfig: React.Dispatch<React.SetStateAction<OutputConfig>>;
+    onClose: () => void;
+    onRender: (cfg: OutputConfig) => void;
+    setActiveTab: (tab: "style" | "layout" | "effects" | "hooks") => void;
+};
+
+function OutputDrawer({
+    segment,
+    outputConfig,
+    setOutputConfig,
+    onClose,
+    onRender,
+    setActiveTab,
+}: OutputDrawerProps) {
+    const [section, setSection] = useState<"transforms" | "narrator" | "webcam" | "subs">("transforms");
+    const [generatingScript, setGeneratingScript] = useState(false);
+    const [scriptPreview, setScriptPreview] = useState("");
+    const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
+    const [selectedCam, setSelectedCam] = useState("");
+    const [recording, setRecording] = useState(false);
+    const [recordingCountdown, setRecordingCountdown] = useState(0);
+    const [previewActive, setPreviewActive] = useState(false);
+    const [uploadingCam, setUploadingCam] = useState(false);
+    const [camStatus, setCamStatus] = useState("No clip recorded");
+
+    const videoRef = useRef<HTMLVideoElement | null>(null);
+    const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const streamRef = useRef<MediaStream | null>(null);
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const chunksRef = useRef<Blob[]>([]);
+    const animationFrameRef = useRef<number | null>(null);
+
+    const segmentDuration = segment.endTime - segment.startTime;
+
+    // Load available cameras
+    useEffect(() => {
+        if (outputConfig.camOverlayEnabled) {
+            navigator.mediaDevices.enumerateDevices().then(devices => {
+                const videoDevices = devices.filter(d => d.kind === "videoinput");
+                setCameras(videoDevices);
+                if (videoDevices.length > 0 && !selectedCam) {
+                    setSelectedCam(videoDevices[0].deviceId);
+                }
+            });
+        }
+    }, [outputConfig.camOverlayEnabled, selectedCam]);
+
+    // Load MediaPipe Selfie Segmentation CDN scripts
+    useEffect(() => {
+        if (outputConfig.camOverlayEnabled && outputConfig.camBgRemoval) {
+            if (!(window as any).SelfieSegmentation) {
+                const script = document.createElement("script");
+                script.src = "https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js";
+                script.async = true;
+                document.body.appendChild(script);
+            }
+        }
+    }, [outputConfig.camOverlayEnabled, outputConfig.camBgRemoval]);
+
+    const handleCopyrightSafeChange = (checked: boolean) => {
+        if (checked) {
+            setOutputConfig(prev => ({
+                ...prev,
+                mirrorFlip: true,
+                speedFactor: 1.25,
+                colorGrade: "warm",
+                cropZoom: true,
+                filmGrain: true,
+            }));
+        } else {
+            setOutputConfig(prev => ({
+                ...prev,
+                mirrorFlip: false,
+                speedFactor: 1.0,
+                colorGrade: "none",
+                cropZoom: false,
+                filmGrain: false,
+            }));
+        }
+    };
+
+    const handlePreviewScript = async () => {
+        if (outputConfig.narratorMode === "none") return;
+        setGeneratingScript(true);
+        try {
+            const res = await fetch(`/api/videos/${segment.videoId}/narrator-preview`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ segmentId: segment.id, narratorMode: outputConfig.narratorMode })
+            });
+            const data = await res.json();
+            if (data.script) {
+                setScriptPreview(data.script);
+                setOutputConfig(prev => ({ ...prev, customNarratorScript: data.script }));
+            }
+        } catch (err) {
+            console.error("Failed to generate narrator preview script:", err);
+        } finally {
+            setGeneratingScript(false);
+        }
+    };
+
+    // Camera preview controls
+    const togglePreview = async () => {
+        if (previewActive) {
+            stopPreview();
+        } else {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { deviceId: selectedCam ? { exact: selectedCam } : undefined },
+                    audio: true
+                });
+                streamRef.current = stream;
+                if (videoRef.current) {
+                    videoRef.current.srcObject = stream;
+                    videoRef.current.play();
+                }
+                setPreviewActive(true);
+
+                if (outputConfig.camBgRemoval) {
+                    startSelfieSegmentation();
+                }
+            } catch (err) {
+                console.error("Camera access failed:", err);
+            }
+        }
+    };
+
+    const stopPreview = () => {
+        if (animationFrameRef.current) {
+            cancelAnimationFrame(animationFrameRef.current);
+            animationFrameRef.current = null;
+        }
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach(track => track.stop());
+            streamRef.current = null;
+        }
+        if (videoRef.current) {
+            videoRef.current.srcObject = null;
+        }
+        setPreviewActive(false);
+    };
+
+    // MediaPipe background removal loop
+    const startSelfieSegmentation = () => {
+        const checkLoaded = setInterval(() => {
+            const mp = (window as any);
+            if (mp.SelfieSegmentation) {
+                clearInterval(checkLoaded);
+                const selfieSegmentation = new mp.SelfieSegmentation({
+                    locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`,
+                });
+                selfieSegmentation.setOptions({
+                    modelSelection: 1,
+                });
+                selfieSegmentation.onResults(onSelfieResults);
+
+                const renderLoop = async () => {
+                    if (!streamRef.current || !videoRef.current || !previewActive) return;
+                    await selfieSegmentation.send({ image: videoRef.current });
+                    animationFrameRef.current = requestAnimationFrame(renderLoop);
+                };
+                animationFrameRef.current = requestAnimationFrame(renderLoop);
+            }
+        }, 500);
+    };
+
+    const onSelfieResults = (results: any) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+
+        ctx.save();
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw segmentation mask
+        ctx.drawImage(results.segmentationMask, 0, 0, canvas.width, canvas.height);
+
+        // Keep source pixels only inside the mask
+        ctx.globalCompositeOperation = "source-in";
+        ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+
+        ctx.restore();
+    };
+
+    const startRecording = () => {
+        if (!streamRef.current) return;
+        chunksRef.current = [];
+
+        let recordStream = streamRef.current;
+        if (outputConfig.camBgRemoval && canvasRef.current) {
+            const canvasStream = canvasRef.current.captureStream(30);
+            recordStream = new MediaStream([
+                ...canvasStream.getVideoTracks(),
+                ...streamRef.current.getAudioTracks()
+            ]);
+        }
+
+        const recorder = new MediaRecorder(recordStream, { mimeType: "video/webm" });
+        mediaRecorderRef.current = recorder;
+
+        recorder.ondataavailable = (e) => {
+            if (e.data.size > 0) chunksRef.current.push(e.data);
+        };
+
+        recorder.onstop = async () => {
+            setUploadingCam(true);
+            setCamStatus("Uploading clip to R2...");
+            const blob = new Blob(chunksRef.current, { type: "video/webm" });
+            const file = new File([blob], "cam.webm", { type: "video/webm" });
+
+            const fd = new FormData();
+            fd.append("file", file);
+            fd.append("segmentId", segment.id);
+
+            try {
+                const res = await fetch("/api/cam-overlay/upload", {
+                    method: "POST",
+                    body: fd
+                });
+                const data = await res.json();
+                if (data.key) {
+                    setOutputConfig(prev => ({ ...prev, camRecordingPath: data.key }));
+                    setCamStatus(`✓ Clip ready (${segmentDuration.toFixed(1)}s)`);
+                } else {
+                    setCamStatus("Upload failed");
+                }
+            } catch (err) {
+                setCamStatus("Upload failed");
+            } finally {
+                setUploadingCam(false);
+            }
+        };
+
+        recorder.start();
+        setRecording(true);
+        setRecordingCountdown(Math.ceil(segmentDuration));
+
+        const interval = setInterval(() => {
+            setRecordingCountdown(prev => {
+                if (prev <= 1) {
+                    clearInterval(interval);
+                    recorder.stop();
+                    setRecording(false);
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+    };
+
+    useEffect(() => {
+        return () => {
+            stopPreview();
+        };
+    }, []);
+
+    // Active counts
+    const activeTransforms = [
+        outputConfig.mirrorFlip && "Mirror",
+        outputConfig.speedFactor !== 1.0 && `${outputConfig.speedFactor}x`,
+        outputConfig.colorGrade !== "none" && "Grade",
+        outputConfig.cropZoom && "Zoom",
+    ].filter(Boolean);
+
+    return (
+        <div className="w-[420px] flex-shrink-0 flex flex-col bg-gray-900/50 border border-gray-800 rounded-2xl overflow-hidden">
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-gray-800 flex items-center justify-between">
+                <div>
+                    <h3 className="text-sm font-semibold text-white">Output Configuration</h3>
+                    <p className="text-xs text-gray-500 mt-0.5 truncate max-w-[280px]">
+                        &quot;{segment.title || "Untitled"}&quot; · {segmentDuration.toFixed(1)}s
+                    </p>
+                </div>
+                <button onClick={onClose} className="p-1 text-gray-400 hover:text-white transition-colors">
+                    <X className="w-5 h-5" />
+                </button>
+            </div>
+
+            {/* Navigation Tabs */}
+            <div className="flex border-b border-gray-800 bg-gray-900/20">
+                {[
+                    { id: "transforms" as const, label: "Transforms", active: activeTransforms.length > 0 },
+                    { id: "narrator" as const, label: "AI Narrator", active: outputConfig.narratorMode !== "none" },
+                    { id: "webcam" as const, label: "Webcam Overlay", active: outputConfig.camOverlayEnabled },
+                    { id: "subs" as const, label: "Subtitles", active: true },
+                ].map(t => (
+                    <button key={t.id} onClick={() => setSection(t.id)}
+                        className={cn("flex-1 text-center py-2.5 text-xs font-medium border-b-2 transition-all relative",
+                            section === t.id ? "text-violet-400 border-violet-500" : "text-gray-500 border-transparent hover:text-gray-300 hover:border-gray-800")}>
+                        {t.label}
+                        {t.active && t.id !== "subs" && (
+                            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-violet-500" />
+                        )}
+                    </button>
+                ))}
+            </div>
+
+            {/* Section Body */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-6">
+                {section === "transforms" && (
+                    <div className="space-y-4">
+                        <label className="flex items-center gap-2 cursor-pointer bg-gray-800/30 border border-gray-800 rounded-xl p-3.5 hover:border-violet-500/30 transition-all">
+                            <input type="checkbox" className="rounded accent-violet-500"
+                                onChange={e => handleCopyrightSafeChange(e.target.checked)} />
+                            <div>
+                                <p className="text-xs font-semibold text-white">Enable copyright safe presets</p>
+                                <p className="text-[10px] text-gray-500 mt-0.5">Applies: Mirror + Speed 1.25x + Warm Grade + Film Grain</p>
+                            </div>
+                        </label>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <label className={cn("flex flex-col gap-1 p-3 rounded-xl border cursor-pointer transition-all",
+                                outputConfig.mirrorFlip ? "border-violet-500 bg-violet-500/5 text-violet-400" : "border-gray-800 bg-gray-900/30 text-gray-400 hover:border-gray-700")}>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs font-medium">Mirror Video</span>
+                                    <input type="checkbox" checked={outputConfig.mirrorFlip} className="hidden"
+                                        onChange={e => setOutputConfig(prev => ({ ...prev, mirrorFlip: e.target.checked }))} />
+                                    <span className="text-sm">🪞</span>
+                                </div>
+                                <span className="text-[9px] text-gray-500">Horizontal flip</span>
+                            </label>
+
+                            <label className={cn("flex flex-col gap-1 p-3 rounded-xl border cursor-pointer transition-all",
+                                outputConfig.cropZoom ? "border-violet-500 bg-violet-500/5 text-violet-400" : "border-gray-800 bg-gray-900/30 text-gray-400 hover:border-gray-700")}>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs font-medium">Zoom In 110%</span>
+                                    <input type="checkbox" checked={outputConfig.cropZoom} className="hidden"
+                                        onChange={e => setOutputConfig(prev => ({ ...prev, cropZoom: e.target.checked }))} />
+                                    <span className="text-sm">📐</span>
+                                </div>
+                                <span className="text-[9px] text-gray-500">Avoid match hashes</span>
+                            </label>
+                        </div>
+
+                        <div className="space-y-3 pt-2">
+                            <div>
+                                <label className="text-xs text-gray-400 mb-1.5 block">Speed Factor: {outputConfig.speedFactor}x</label>
+                                <div className="grid grid-cols-4 gap-2">
+                                    {[1.0, 1.25, 1.5, 2.0].map(s => (
+                                        <button key={s} onClick={() => setOutputConfig(prev => ({ ...prev, speedFactor: s }))}
+                                            className={cn("py-1.5 rounded-lg text-xs font-medium transition-all border",
+                                                outputConfig.speedFactor === s ? "bg-violet-500/10 border-violet-500 text-violet-400" : "bg-gray-800 border-transparent text-gray-400 hover:border-gray-700")}>
+                                            {s}x
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-xs text-gray-400 mb-1.5 block">Colour Grading Look</label>
+                                <select value={outputConfig.colorGrade} onChange={e => setOutputConfig(prev => ({ ...prev, colorGrade: e.target.value }))}
+                                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white focus:border-violet-500 focus:outline-none">
+                                    <option value="none">None (Standard)</option>
+                                    <option value="warm">Warm tone (Affiliate focus)</option>
+                                    <option value="cool">Cool / Blue look</option>
+                                    <option value="desaturate">Desaturated / Mono</option>
+                                    <option value="high_contrast">High Contrast (Bold highlights)</option>
+                                    <option value="vintage">Vintage Retro</option>
+                                    <option value="dark">Moody Dark Cinematic</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {section === "narrator" && (
+                    <div className="space-y-5">
+                        <div className="space-y-2">
+                            <label className="text-xs text-gray-400 font-medium block">Narration Style Mode</label>
+                            <div className="space-y-2 max-h-52 overflow-y-auto">
+                                {[
+                                    { value: "none", label: "No narrator", desc: "Original audio plays through" },
+                                    { value: "explanatory", label: "Explanatory", desc: "Calm, educational documentary tone" },
+                                    { value: "sarcastic", label: "Sarcastic Commentary", desc: "Outrageous takes to trigger comments" },
+                                    { value: "wrong", label: "Blatantly Wrong", desc: "Comedy misinterpretation of video" },
+                                    { value: "dramatic", label: "Dramatic", desc: 'Suspenseful: "Little did they know..."' },
+                                    { value: "eli5", label: "ELI5", desc: "Simple child-like explanations" },
+                                ].map(m => (
+                                    <button key={m.value} onClick={() => setOutputConfig(prev => ({ ...prev, narratorMode: m.value }))}
+                                        className={cn("flex items-center justify-between w-full px-3 py-2 rounded-lg border text-left text-xs transition-all",
+                                            outputConfig.narratorMode === m.value ? "border-violet-500 bg-violet-500/10 text-white" : "border-gray-800 bg-gray-900/30 text-gray-400 hover:border-gray-700")}>
+                                        <span>{m.label}</span>
+                                        <span className="text-[10px] text-gray-500">{m.desc}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {outputConfig.narratorMode !== "none" && (
+                            <div className="bg-gray-800/20 border border-gray-800 rounded-xl p-4 space-y-4">
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="text-[10px] text-gray-500 mb-1 block">Voice Engine</label>
+                                        <select value={outputConfig.narratorVoiceEngine} onChange={e => setOutputConfig(prev => ({ ...prev, narratorVoiceEngine: e.target.value }))}
+                                            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none">
+                                            <option value="elevenlabs">ElevenLabs</option>
+                                            <option value="xtts">XTTS (self-hosted)</option>
+                                            <option value="dia">Dia (RunPod)</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] text-gray-500 mb-1 block">Voice ID</label>
+                                        <input type="text" placeholder="21m00Tcm..." value={outputConfig.narratorVoiceId} onChange={e => setOutputConfig(prev => ({ ...prev, narratorVoiceId: e.target.value }))}
+                                            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white placeholder:text-gray-600 focus:outline-none" />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="text-[10px] text-gray-500 mb-1.5 block">Audio Mixing Mode</label>
+                                    <div className="flex gap-4">
+                                        <label className="flex items-center gap-1.5 text-xs text-white cursor-pointer">
+                                            <input type="radio" name="mix" checked={outputConfig.narratorAudioMix === "replace"} onChange={() => setOutputConfig(prev => ({ ...prev, narratorAudioMix: "replace" }))} className="accent-violet-500" />
+                                            Mute Original
+                                        </label>
+                                        <label className="flex items-center gap-1.5 text-xs text-white cursor-pointer">
+                                            <input type="radio" name="mix" checked={outputConfig.narratorAudioMix === "mix"} onChange={() => setOutputConfig(prev => ({ ...prev, narratorAudioMix: "mix" }))} className="accent-violet-500" />
+                                            Layer Under (ambient)
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <button onClick={handlePreviewScript} disabled={generatingScript}
+                                    className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-medium bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 transition-all border border-violet-500/20">
+                                    {generatingScript ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
+                                    Preview Script (LLM)
+                                </button>
+
+                                {scriptPreview && (
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] text-gray-500 block">Edit Narration Script</label>
+                                        <textarea value={scriptPreview} onChange={e => { setScriptPreview(e.target.value); setOutputConfig(prev => ({ ...prev, customNarratorScript: e.target.value })); }}
+                                            rows={4} className="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-violet-500 resize-none font-mono" />
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {section === "webcam" && (
+                    <div className="space-y-5">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" checked={outputConfig.camOverlayEnabled} onChange={e => setOutputConfig(prev => ({ ...prev, camOverlayEnabled: e.target.checked }))} className="rounded accent-violet-500" />
+                            <span className="text-xs font-semibold text-white uppercase tracking-wider">Webcam overlay active</span>
+                        </label>
+
+                        {outputConfig.camOverlayEnabled && (
+                            <div className="space-y-4 pt-2">
+                                <div className="space-y-3 bg-gray-800/10 border border-gray-800 rounded-xl p-4">
+                                    <div>
+                                        <label className="text-[10px] text-gray-500 mb-1 block font-medium">Select Camera</label>
+                                        <select value={selectedCam} onChange={e => setSelectedCam(e.target.value)}
+                                            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none">
+                                            {cameras.map(c => <option key={c.deviceId} value={c.deviceId}>{c.label || `Camera ${c.deviceId.substring(0, 5)}`}</option>)}
+                                        </select>
+                                    </div>
+
+                                    <div className="flex gap-2">
+                                        <button onClick={togglePreview}
+                                            className="flex-1 py-1.5 text-xs font-medium border border-gray-700 rounded-lg text-white hover:bg-gray-800 transition-all">
+                                            {previewActive ? "Stop Preview" : "Start Camera"}
+                                        </button>
+                                        <button onClick={startRecording} disabled={!previewActive || recording}
+                                            className="flex-1 py-1.5 text-xs font-semibold bg-red-600 hover:bg-red-500 text-white rounded-lg transition-all disabled:opacity-50 flex items-center justify-center gap-1">
+                                            <Camera className="w-3.5 h-3.5" />
+                                            {recording ? `Recording (${recordingCountdown}s)...` : "Record Clip"}
+                                        </button>
+                                    </div>
+
+                                    <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-black flex items-center justify-center">
+                                        <video ref={videoRef} className={cn("w-full h-full object-cover", outputConfig.camBgRemoval && "hidden")} muted playsInline />
+                                        <canvas ref={canvasRef} width={640} height={480} className={cn("w-full h-full object-cover", !outputConfig.camBgRemoval && "hidden")} />
+                                        
+                                        {uploadingCam && (
+                                            <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-xs text-white gap-2">
+                                                <Loader2 className="w-4 h-4 animate-spin text-violet-400" /> Uploading...
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input type="checkbox" checked={outputConfig.camBgRemoval} onChange={e => {
+                                            setOutputConfig(prev => ({ ...prev, camBgRemoval: e.target.checked }));
+                                            if (previewActive) {
+                                                stopPreview();
+                                                setTimeout(() => togglePreview(), 200);
+                                            }
+                                        }} className="rounded accent-violet-500" />
+                                        <span className="text-[10px] text-gray-400">Apply background removal (MediaPipe)</span>
+                                    </label>
+
+                                    <p className="text-xs text-gray-400 text-center font-medium mt-1">{camStatus}</p>
+                                </div>
+
+                                <div className="space-y-3 bg-gray-800/10 border border-gray-800 rounded-xl p-4">
+                                    <h4 className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Position & Size</h4>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-[10px] text-gray-500 mb-1 block">X Position: {outputConfig.camPosition.x}%</label>
+                                            <input type="range" min={0} max={80} value={outputConfig.camPosition.x} onChange={e => setOutputConfig(prev => ({ ...prev, camPosition: { ...prev.camPosition, x: parseInt(e.target.value) } }))}
+                                                className="w-full accent-violet-500" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-gray-500 mb-1 block">Y Position: {outputConfig.camPosition.y}%</label>
+                                            <input type="range" min={0} max={70} value={outputConfig.camPosition.y} onChange={e => setOutputConfig(prev => ({ ...prev, camPosition: { ...prev.camPosition, y: parseInt(e.target.value) } }))}
+                                                className="w-full accent-violet-500" />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-[10px] text-gray-500 mb-1 block">Size Width: {outputConfig.camSize.w}%</label>
+                                            <input type="range" min={10} max={50} value={outputConfig.camSize.w} onChange={e => setOutputConfig(prev => ({ ...prev, camSize: { ...prev.camSize, w: parseInt(e.target.value), h: parseInt(e.target.value) } }))}
+                                                className="w-full accent-violet-500" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-gray-500 mb-1 block">Shape border</label>
+                                            <div className="flex gap-2">
+                                                {["circle", "square"].map(s => (
+                                                    <button key={s} onClick={() => setOutputConfig(prev => ({ ...prev, camShape: s }))}
+                                                        className={cn("flex-1 py-1 rounded text-xs font-semibold capitalize border transition-all",
+                                                            outputConfig.camShape === s ? "border-violet-500 bg-violet-500/10 text-violet-400" : "border-gray-800 text-gray-500 hover:border-gray-700")}>
+                                                        {s}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-[10px] text-gray-500 mb-1 block">Border Color</label>
+                                            <div className="flex items-center gap-2">
+                                                <input type="color" value={outputConfig.camBorderColor} onChange={e => setOutputConfig(prev => ({ ...prev, camBorderColor: e.target.value }))}
+                                                    className="w-6 h-6 border-none cursor-pointer bg-transparent" />
+                                                <span className="text-xs text-white font-mono">{outputConfig.camBorderColor}</span>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-gray-500 mb-1 block">Border Width: {outputConfig.camBorderWidth}px</label>
+                                            <input type="number" min={0} max={10} value={outputConfig.camBorderWidth} onChange={e => setOutputConfig(prev => ({ ...prev, camBorderWidth: parseInt(e.target.value) || 0 }))}
+                                                className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-0.5 text-xs text-white" />
+                                        </div>
+                                    </div>
+
+                                    {/* Mock Preview Overlay Position */}
+                                    <div className="pt-2">
+                                        <p className="text-[9px] text-gray-500 mb-2">Overlay position preview on 9:16 frame:</p>
+                                        <div className="relative aspect-[9/16] bg-gray-800/80 border border-gray-700 rounded-lg mx-auto overflow-hidden" style={{ height: 160 }}>
+                                            <div className="absolute bg-violet-500/20 border-violet-500/80 flex items-center justify-center overflow-hidden"
+                                                style={{
+                                                    left: `${outputConfig.camPosition.x}%`,
+                                                    top: `${outputConfig.camPosition.y}%`,
+                                                    width: `${outputConfig.camSize.w}%`,
+                                                    height: `${outputConfig.camSize.w * 1.777}%`, // match height aspect
+                                                    borderRadius: outputConfig.camShape === "circle" ? "50%" : "8px",
+                                                    borderWidth: `${outputConfig.camBorderWidth}px`,
+                                                    borderColor: outputConfig.camBorderColor
+                                                }}>
+                                                <span className="text-[7px] text-violet-400 font-bold uppercase truncate">Cam</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {section === "subs" && (
+                    <div className="space-y-4">
+                        <div className="bg-gray-800/10 border border-gray-800 rounded-xl p-4 space-y-3">
+                            <h4 className="text-xs font-semibold text-white">Subtitle Style Overview</h4>
+                            <div className="grid grid-cols-2 gap-y-2 text-xs">
+                                <span className="text-gray-500">Font Family:</span>
+                                <span className="text-white font-medium">{segment.subFont || "Montserrat"}</span>
+
+                                <span className="text-gray-500">Font Size:</span>
+                                <span className="text-white font-medium">{segment.subFontSize || 64}px</span>
+
+                                <span className="text-gray-500">Animation:</span>
+                                <span className="text-white font-medium">{segment.subAnimation || "word-highlight"}</span>
+
+                                <span className="text-gray-500">Position:</span>
+                                <span className="text-white font-medium capitalize">{segment.subPosition || "Bottom"}</span>
+                            </div>
+                        </div>
+
+                        <button onClick={() => { setActiveTab("style"); onClose(); }}
+                            className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold bg-violet-600 hover:bg-violet-500 text-white transition-all">
+                            Edit Subtitle Style in Style Tab →
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            {/* Footer buttons */}
+            <div className="p-4 border-t border-gray-800 bg-gray-900/30 flex gap-3">
+                <button onClick={onClose}
+                    className="flex-1 py-2.5 rounded-xl text-xs font-semibold border border-gray-800 text-gray-400 hover:text-white transition-all">
+                    Cancel
+                </button>
+                <button onClick={() => {
+                    if (outputConfig.camOverlayEnabled && !outputConfig.camRecordingPath) {
+                        alert("Please record and upload a webcam overlay clip first, or disable the webcam overlay option.");
+                        return;
+                    }
+                    onRender(outputConfig);
+                }}
+                    className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-violet-600 hover:bg-violet-500 text-white transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-violet-500/20">
+                    <Play className="w-3.5 h-3.5" />
+                    Render Now
+                </button>
             </div>
         </div>
     );

@@ -21,6 +21,7 @@ export const QUEUE_NAMES = {
     SEGMENTATION: "segmentation",
     RENDER: "render",
     PUBLISH: "publish",
+    UGC_GENERATION: "ugc-generation",
 } as const;
 
 // ─── Queue Instances ──────────────────────────────

@@ -92,6 +92,11 @@ model User {
   podcastShows      PodcastShow[]
   podcastSponsors   PodcastSponsor[]
 
+  // UGC
+  ugcAvatars  UGCAvatar[]
+  ugcProducts UGCProduct[]
+  ugcJobs     UGCJob[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -946,4 +951,86 @@ model CampaignBrief {
 
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+}
+
+// ─── UGC System ──────────────────────────────────────────
+
+enum UGCJobStatus {
+  PENDING
+  GENERATING_SCRIPT
+  GENERATING_VIDEO
+  COMPOSITING
+  DONE
+  FAILED
+}
+
+enum UGCHookStyle {
+  TESTIMONIAL
+  PROBLEM_SOLUTION
+  UNBOXING
+  COMPARISON
+  TUTORIAL
+}
+
+model UGCAvatar {
+  id                String   @id @default(cuid())
+  userId            String
+  name              String
+  referenceImageUrl String?
+  referenceVideoUrl String?
+  thumbnailUrl      String?
+  voiceEngine       String   @default("elevenlabs")
+  voiceId           String?
+  voiceRefPath      String?
+  persona           String?  @db.Text
+  isActive          Boolean  @default(true)
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ugcJobs UGCJob[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model UGCProduct {
+  id            String    @id @default(cuid())
+  userId        String
+  sourceUrl     String
+  name          String
+  description   String?   @db.Text
+  price         String?
+  imageUrls     String[]
+  affiliateLink String?
+  brand         String?
+  category      String?
+  scrapedAt     DateTime?
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ugcJobs UGCJob[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model UGCJob {
+  id          String       @id @default(cuid())
+  userId      String
+  avatarId    String
+  productId   String
+  hookStyle   UGCHookStyle @default(TESTIMONIAL)
+  script      String?      @db.Text
+  outputUrl   String?
+  thumbnailUrl String?
+  duration    Float?
+  aspectRatio String       @default("9:16")
+  status      UGCJobStatus @default(PENDING)
+  errorMsg    String?      @db.Text
+  metadata    Json?
+
+  user    User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  avatar  UGCAvatar  @relation(fields: [avatarId], references: [id], onDelete: Cascade)
+  product UGCProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

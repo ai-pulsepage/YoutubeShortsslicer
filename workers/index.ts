@@ -11,6 +11,7 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 import IORedis from "ioredis";
+import { ugcWorker } from "./ugc";
 
 // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Shared Setup Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -1065,6 +1066,181 @@ const renderWorker = new Worker(
                 }
             }
 
+            // Step 3.85: Apply Output Configurations (Transforms, Narrator, Webcam Overlay)
+            if (job.data.outputConfig) {
+                const cfg = job.data.outputConfig;
+                const transforms: string[] = [];
+
+                if (cfg.mirrorFlip) transforms.push("hflip");
+
+                const colorFilters: Record<string, string> = {
+                    warm: "colorbalance=rs=0.12:gs=0.04:bs=-0.10",
+                    cool: "colorbalance=rs=-0.10:gs=-0.03:bs=0.10",
+                    desaturate: "hue=s=0",
+                    high_contrast: "eq=contrast=1.5:brightness=-0.05:saturation=1.2",
+                    vintage: "curves=r='0/0.1 1/0.9':g='0/0.05 1/0.85':b='0/0.0 1/0.7',hue=s=0.7,noise=c0s=8:c0f=t+u",
+                    dark: "eq=brightness=-0.08:contrast=1.3:saturation=0.85,colorbalance=rs=-0.05:gs=-0.02:bs=0.05",
+                };
+                if (cfg.colorGrade && cfg.colorGrade !== "none" && colorFilters[cfg.colorGrade]) {
+                    transforms.push(colorFilters[cfg.colorGrade]);
+                }
+
+                if (cfg.cropZoom) {
+                    const cropW = Math.round(outW / 1.1);
+                    const cropH = Math.round(outH / 1.1);
+                    transforms.push(`crop=${cropW}:${cropH}:(iw-${cropW})/2:(ih-${cropH})/2,scale=${outW}:${outH}`);
+                }
+
+                if (transforms.length > 0) {
+                    console.log(`[Render] Applying output transforms: ${transforms.join(",")}`);
+                    const transformOutput = path.join(renderDir, "transformed.mp4");
+                    execSync(
+                        `ffmpeg -i "${outputPath}" -filter_complex "[0:v]${transforms.join(",")}[vout]" -map "[vout]" -map 0:a -c:v libx264 -preset fast -crf 23 -c:a copy "${transformOutput}" -y`,
+                        { timeout: 300000 }
+                    );
+                    fs.renameSync(transformOutput, outputPath);
+                }
+
+                // Speed change
+                if (cfg.speedFactor && cfg.speedFactor !== 1.0) {
+                    console.log(`[Render] Applying speed factor: ${cfg.speedFactor}`);
+                    const factor = cfg.speedFactor;
+                    const aFilter = factor > 2.0 ? `atempo=2.0,atempo=${(factor/2).toFixed(2)}` : `atempo=${factor}`;
+                    const speedOutput = path.join(renderDir, "sped.mp4");
+                    execSync(
+                        `ffmpeg -i "${outputPath}" -filter_complex "[0:v]setpts=${(1/factor).toFixed(4)}*PTS[v];[0:a]${aFilter}[a]" -map "[v]" -map "[a]" -c:v libx264 -preset fast -crf 23 -c:a aac "${speedOutput}" -y`,
+                        { timeout: 300000 }
+                    );
+                    fs.renameSync(speedOutput, outputPath);
+                }
+
+                // AI Narrator overlay
+                if (cfg.narratorMode && cfg.narratorMode !== "none") {
+                    console.log(`[Render] Applying AI Narrator: ${cfg.narratorMode}`);
+                    try {
+                        let narratorScript = cfg.customNarratorScript || "";
+
+                        if (!narratorScript) {
+                            const PROMPTS: Record<string, string> = {
+                                explanatory: "Calm educational documentary narrator. Rewrite as clear narration. Output ONLY script.",
+                                sarcastic: "Sarcastic social media commentator. Outrageous takes to trigger comments. Output ONLY script.",
+                                wrong: "Comedy narrator who misinterprets everything hilariously. Output ONLY script.",
+                                dramatic: "Epic dramatic narrator. 'Little did they know...'. Output ONLY script.",
+                                eli5: "Explain to a 5-year-old. Simple words, short sentences. Output ONLY script.",
+                            };
+
+                            let deepseekApiKey = process.env.DEEPSEEK_API_KEY;
+                            if (!deepseekApiKey) {
+                                const dbKey = await prisma.apiKey.findUnique({ where: { service: "deepseek_api_key" } });
+                                if (dbKey?.key) deepseekApiKey = Buffer.from(dbKey.key, "base64").toString("utf8");
+                            }
+
+                            if (deepseekApiKey) {
+                                const tx = (segment.video as any).transcript;
+                                const allWords = tx?.segments ? (typeof tx.segments === "string" ? JSON.parse(tx.segments) : tx.segments) : [];
+                                const segText = allWords
+                                    .filter((w: any) => w.start >= segment.startTime && w.end <= segment.endTime)
+                                    .map((w: any) => w.text).join(" ");
+
+                                const genRes = await fetch("https://api.deepseek.com/v1/chat/completions", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json", Authorization: `Bearer ${deepseekApiKey}` },
+                                    body: JSON.stringify({
+                                        model: "deepseek-chat",
+                                        messages: [
+                                            { role: "system", content: PROMPTS[cfg.narratorMode] || PROMPTS.explanatory },
+                                            { role: "user", content: `Transcript:\n${segText}` },
+                                        ],
+                                        temperature: 0.8,
+                                        max_tokens: 500,
+                                    }),
+                                });
+                                const genData = await genRes.json();
+                                narratorScript = genData.choices?.[0]?.message?.content?.trim() || "";
+                            }
+                        }
+
+                        if (narratorScript) {
+                            const { generateVoiceover } = await import("../lib/tts");
+                            const audioBuffer = await generateVoiceover({
+                                text: narratorScript,
+                                engine: cfg.narratorVoiceEngine || "elevenlabs",
+                                voiceId: cfg.narratorVoiceId || "21m00Tcm4TlvDq8ikWAM",
+                                narratorStyle: "documentary",
+                            });
+
+                            const narratorPath = path.join(renderDir, "narrator.mp3");
+                            fs.writeFileSync(narratorPath, audioBuffer);
+
+                            const mixOutput = path.join(renderDir, "narrated.mp4");
+                            const origVol = cfg.narratorAudioMix === "replace" ? "0" : "0.2";
+                            execSync(
+                                `ffmpeg -i "${outputPath}" -i "${narratorPath}" ` +
+                                `-filter_complex "[0:a]volume=${origVol}[orig];[1:a]volume=1.0[narr];[orig][narr]amix=inputs=2:duration=first[aout]" ` +
+                                `-map 0:v -map "[aout]" -c:v copy -c:a aac "${mixOutput}" -y`,
+                                { timeout: 300000 }
+                            );
+                            fs.renameSync(mixOutput, outputPath);
+                            console.log(`[Render] ✓ Narrator applied: ${cfg.narratorMode}`);
+                        }
+                    } catch (err: any) {
+                        console.warn(`[Render] Narrator failed (non-fatal): ${err.message}`);
+                    }
+                }
+
+                // Webcam overlay composite
+                if (cfg.camOverlayEnabled && cfg.camRecordingPath) {
+                    console.log(`[Render] Applying Webcam overlay: ${cfg.camRecordingPath}`);
+                    try {
+                        const camLocalPath = path.join(renderDir, "cam.webm");
+                        const { downloadFileFromR2 } = await import("../lib/storage");
+                        await downloadFileFromR2(cfg.camRecordingPath, camLocalPath);
+
+                        const xPx = Math.round((cfg.camPosition.x / 100) * outW);
+                        const yPx = Math.round((cfg.camPosition.y / 100) * outH);
+                        const wPx = Math.round((cfg.camSize.w / 100) * outW);
+                        const hPx = wPx;
+
+                        const camScaledPath = path.join(renderDir, "cam_scaled.mp4");
+                        // Crop video to a centered square first to prevent stretching, then scale to wPx:hPx
+                        execSync(
+                            `ffmpeg -i "${camLocalPath}" -vf "crop='min(iw,ih)':'min(iw,ih)',scale=${wPx}:${hPx}" -c:v libx264 -preset fast -crf 23 -an "${camScaledPath}" -y`,
+                            { timeout: 120000 }
+                        );
+
+                        const overlayOutput = path.join(renderDir, "overlaid.mp4");
+
+                        if (cfg.camShape === "circle") {
+                            const maskedCam = path.join(renderDir, "cam_masked.mp4");
+                            execSync(
+                                `ffmpeg -i "${camScaledPath}" -vf "format=yuva420p,geq=lum='p(X,Y)':a='if(lte(hypot(X-W/2,Y-H/2),W/2),255,0)'" -c:v libx264 -preset fast -crf 23 "${maskedCam}" -y`,
+                                { timeout: 120000 }
+                            );
+                            const borderHex = cfg.camBorderColor.replace("#", "0x");
+                            const bw = cfg.camBorderWidth || 3;
+                            execSync(
+                                `ffmpeg -i "${outputPath}" -i "${maskedCam}" ` +
+                                `-filter_complex "[0:v]drawbox=x=${xPx-bw}:y=${yPx-bw}:w=${wPx+bw*2}:h=${hPx+bw*2}:color=${borderHex}@1:t=fill[base];[base][1:v]overlay=${xPx}:${yPx}:format=auto[vout]" ` +
+                                `-map "[vout]" -map 0:a -c:v libx264 -preset fast -crf 23 -c:a copy "${overlayOutput}" -y`,
+                                { timeout: 300000 }
+                            );
+                        } else {
+                            execSync(
+                                `ffmpeg -i "${outputPath}" -i "${camScaledPath}" ` +
+                                `-filter_complex "[0:v][1:v]overlay=${xPx}:${yPx}[vout]" ` +
+                                `-map "[vout]" -map 0:a -c:v libx264 -preset fast -crf 23 -c:a copy "${overlayOutput}" -y`,
+                                { timeout: 300000 }
+                            );
+                        }
+
+                        fs.renameSync(overlayOutput, outputPath);
+                        console.log(`[Render] ✓ Webcam overlay composited`);
+                    } catch (err: any) {
+                        console.warn(`[Render] Webcam overlay failed (non-fatal): ${err.message}`);
+                    }
+                }
+            }
+
             // Step 4: Generate and mix voiceover if enabled
             const mixMode = (segment as any).voiceoverMixMode || "mix";
             if (segment.voiceoverEnabled && segment.voiceoverText && mixMode !== "original") {
@@ -1138,6 +1314,7 @@ const workers = [
     { name: "Transcription", worker: transcriptionWorker },
     { name: "Segmentation", worker: segmentationWorker },
     { name: "Render", worker: renderWorker },
+    { name: "UGC", worker: ugcWorker },
 ];
 
 for (const { name, worker } of workers) {
