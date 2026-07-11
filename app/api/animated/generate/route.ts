@@ -5,7 +5,7 @@ export async function POST(req: Request) {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { topic, aspectRatio } = await req.json();
+    const { topic, aspectRatio, voiceName, bgmType, subtitleEnabled } = await req.json();
     if (!topic) return NextResponse.json({ error: "Topic is required" }, { status: 400 });
 
     const moneyPrinterUrl = process.env.MONEY_PRINTER_URL || "http://localhost:8080";
@@ -20,9 +20,9 @@ export async function POST(req: Request) {
                 video_subject: topic,
                 video_aspect: videoAspect,
                 video_source: "pexels",
-                voice_name: "", // EdgeTTS auto-detect
-                bgm_type: "random",
-                subtitle_enabled: true
+                voice_name: voiceName || "",
+                bgm_type: bgmType || "random",
+                subtitle_enabled: subtitleEnabled !== false
             })
         });
 
