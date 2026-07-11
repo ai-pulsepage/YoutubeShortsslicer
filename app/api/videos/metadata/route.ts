@@ -33,11 +33,16 @@ export async function POST(req: Request) {
             cookieFlag = `--cookies "${cookiePath}"`;
         }
 
+        let proxyFlag = "";
+        if (process.env.YTDLP_PROXY) {
+            proxyFlag = `--proxy "${process.env.YTDLP_PROXY}"`;
+        }
+
         const result = execSync(
-            `yt-dlp ${cookieFlag} --dump-json --no-download "${url.trim()}"`,
+            `yt-dlp ${cookieFlag} ${proxyFlag} --dump-json --no-download "${url.trim()}"`,
             {
                 encoding: "utf8",
-                timeout: 30000,
+                timeout: 90000,
                 maxBuffer: 10 * 1024 * 1024,
             }
         );

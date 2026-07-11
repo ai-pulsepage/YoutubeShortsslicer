@@ -56,6 +56,10 @@ function ytdlpCookieFlag(): string {
     return fs.existsSync(COOKIES_PATH) ? `--cookies "${COOKIES_PATH}"` : "";
 }
 
+function ytdlpProxyFlag(): string {
+    return process.env.YTDLP_PROXY ? `--proxy "${process.env.YTDLP_PROXY}"` : "";
+}
+
 /**
  * Parse WebVTT subtitle file into transcript segments
  * YouTube auto-captions use VTT format with timestamps like:
@@ -122,8 +126,8 @@ const downloadWorker = new Worker(
 
             // Get metadata
             const metadataJson = execSync(
-                `yt-dlp ${ytdlpCookieFlag()} --js-runtimes node --remote-components ejs:github --dump-json --no-download "${sourceUrl}"`,
-                { encoding: "utf8", timeout: 30000 }
+                `yt-dlp ${ytdlpCookieFlag()} ${ytdlpProxyFlag()} --js-runtimes node --remote-components ejs:github --dump-json --no-download "${sourceUrl}"`,
+                { encoding: "utf8", timeout: 90000 }
             );
             const metadata = JSON.parse(metadataJson);
             await job.updateProgress(20);
@@ -131,7 +135,7 @@ const downloadWorker = new Worker(
             // Download video
             const outputTemplate = path.join(videoDir, "%(id)s.%(ext)s");
             execSync(
-                `yt-dlp ${ytdlpCookieFlag()} --js-runtimes node --remote-components ejs:github -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4 -o "${outputTemplate}" "${sourceUrl}"`,
+                `yt-dlp ${ytdlpCookieFlag()} ${ytdlpProxyFlag()} --js-runtimes node --remote-components ejs:github -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4 -o "${outputTemplate}" "${sourceUrl}"`,
                 { encoding: "utf8", timeout: 600000, maxBuffer: 50 * 1024 * 1024 }
             );
             await job.updateProgress(50);
