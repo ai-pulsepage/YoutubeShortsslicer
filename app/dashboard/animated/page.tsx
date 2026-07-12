@@ -61,15 +61,25 @@ const EDGE_TTS_VOICES = [
     { id: "zh-CN-YunxiNeural-Male", label: "Yunxi (CN Male)" },
 ];
 
+// Pre-configured "cookie-cutter" character templates for quick insertion
+const CHARACTER_PRESETS = [
+    { name: "Leo", prompt: "cheerful 3D cartoon boy with red hair, green eyes, yellow shirt, Pixar 3d style" },
+    { name: "Lily", prompt: "cheerful 3D cartoon girl with black hair, princess crown, pink dress, Pixar 3d style" },
+    { name: "Bingo", prompt: "cute anthropomorphic talking bunny, fluffy white fur, wearing a tiny blue vest, 3d cartoon style, Pixar look" },
+    { name: "Rex", prompt: "happy anthropomorphic baby green dinosaur, friendly expression, big round eyes, 3d cartoon style, Pixar look" },
+    { name: "Rusty", prompt: "cute shiny toy robot, smiling digital eyes, colorful buttons, friendly cartoon style, 3d look" },
+    { name: "Buddy", prompt: "adorable anthropomorphic golden retriever puppy, wearing a red collar, happy expression, 3d cartoon style, Pixar look" }
+];
+
 export default function KidsStoryBuilderPage() {
     const [sourceMode, setSourceMode] = useState<"text" | "video">("video");
     const [docId, setDocId] = useState<string | null>(null);
     const [scenes, setScenes] = useState<Scene[]>([]);
     
-    // Character Consistency Profiles
+    // Character Consistency Profiles (Defaults loaded on start)
     const [characters, setCharacters] = useState<Character[]>([
-        { id: "1", name: "Leo", prompt: "cheerful 3D cartoon boy with red hair, green eyes, yellow shirt, Pixar 3d style" },
-        { id: "2", name: "Lily", prompt: "cheerful 3D cartoon girl with black hair, princess crown, pink dress, Pixar 3d style" }
+        { id: "1", name: "Leo", prompt: CHARACTER_PRESETS[0].prompt },
+        { id: "2", name: "Lily", prompt: CHARACTER_PRESETS[1].prompt }
     ]);
 
     // Voice preview audio state
@@ -327,10 +337,25 @@ export default function KidsStoryBuilderPage() {
     };
 
     // Character Profiles Actions
-    const addCharacterProfile = () => {
+    const addManualCharacter = () => {
         setCharacters(prev => [
             ...prev,
             { id: `char-${Date.now()}`, name: "CharacterName", prompt: "description details..." }
+        ]);
+    };
+
+    const addPresetCharacter = (presetIndex: number) => {
+        const preset = CHARACTER_PRESETS[presetIndex];
+        setCharacters(prev => [
+            ...prev,
+            { id: `char-preset-${Date.now()}-${presetIndex}`, name: preset.name, prompt: preset.prompt }
+        ]);
+    };
+
+    const resetToDefaultCharacters = () => {
+        setCharacters([
+            { id: "1", name: "Leo", prompt: CHARACTER_PRESETS[0].prompt },
+            { id: "2", name: "Lily", prompt: CHARACTER_PRESETS[1].prompt }
         ]);
     };
 
@@ -465,9 +490,25 @@ export default function KidsStoryBuilderPage() {
                             <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
                                 <Users className="w-4 h-4 text-violet-400" /> Cast of Characters (Consistency Directory)
                             </h3>
-                            <button onClick={addCharacterProfile} className="flex items-center gap-1 px-2 py-0.5 bg-violet-600/10 border border-violet-500/20 text-violet-400 rounded text-[10px] font-bold hover:bg-violet-600/20 transition-all">
-                                <Plus className="w-3 h-3" /> Add Character
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <button onClick={resetToDefaultCharacters} className="px-2 py-0.5 bg-gray-850 hover:bg-gray-800 border border-gray-750 text-gray-400 rounded text-[10px] font-bold transition-all">
+                                    Reset Defaults
+                                </button>
+                                <select onChange={e => {
+                                    if (e.target.value !== "") {
+                                        addPresetCharacter(parseInt(e.target.value));
+                                        e.target.value = ""; // reset dropdown selection
+                                    }
+                                }} className="bg-violet-600/10 border border-violet-500/20 text-violet-400 rounded text-[10px] font-bold px-2 py-0.5 focus:outline-none cursor-pointer">
+                                    <option value="" className="bg-gray-900 text-gray-400">Add Preset Character...</option>
+                                    {CHARACTER_PRESETS.map((preset, idx) => (
+                                        <option key={idx} value={idx} className="bg-gray-900 text-white">{preset.name} (Template)</option>
+                                    ))}
+                                </select>
+                                <button onClick={addManualCharacter} className="flex items-center gap-1 px-2 py-0.5 bg-violet-600/10 border border-violet-500/20 text-violet-400 rounded text-[10px] font-bold hover:bg-violet-600/20 transition-all">
+                                    <Plus className="w-3 h-3" /> Manual
+                                </button>
+                            </div>
                         </div>
                         
                         <div className="space-y-2.5 max-h-[160px] overflow-y-auto pr-1">
@@ -578,7 +619,7 @@ export default function KidsStoryBuilderPage() {
                                                             {scene.type === "song" ? "Song Lyrics" : "Dialogue Spoken Text"}
                                                         </label>
                                                         <textarea value={scene.text} onChange={e => updateScene(scene.id, { text: e.target.value })} rows={4}
-                                                            className="w-full bg-gray-850 border border-gray-750 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500 font-sans leading-relaxed" />
+                                                            className="w-full bg-gray-850 border border-gray-750 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500 font-sans leading-relaxed font-mono" />
                                                     </div>
 
                                                     {/* Visual prompt input */}
@@ -615,7 +656,6 @@ export default function KidsStoryBuilderPage() {
                                                     <div className="flex-1 flex flex-col items-center justify-center">
                                                         {scene.visualPath ? (
                                                             <div className="w-full aspect-video flex items-center justify-center relative bg-black/40 rounded-xl overflow-hidden border border-gray-800">
-                                                                {/* Map output key to a temporary public url */}
                                                                 <video src={`/api/storage/signed?key=${scene.visualPath}`} controls className="max-h-full max-w-full" />
                                                             </div>
                                                         ) : (
