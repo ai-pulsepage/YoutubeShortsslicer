@@ -115,6 +115,7 @@ export default function KidsStoryBuilderPage() {
     const [selectedProjectId, setSelectedProjectId] = useState<string>("");
     const [projectTitle, setProjectTitle] = useState("");
     const [projectScript, setProjectScript] = useState("");
+    const [targetDuration, setTargetDuration] = useState<number>(2); // Default to 2 minutes
     const [saving, setSaving] = useState(false);
 
     const [docId, setDocId] = useState<string | null>(null);
@@ -359,6 +360,7 @@ export default function KidsStoryBuilderPage() {
                 setSourceMode("text");
                 setSelectedVideoId("");
             }
+            setTargetDuration(proj.sourceUrls ? (proj as any).targetDuration || 2 : 2);
             setCurrentStep(1);
         }
     };
@@ -377,7 +379,8 @@ export default function KidsStoryBuilderPage() {
                     script: projectScript,
                     characters,
                     scenes,
-                    sourceUrls: selectedVideoId ? [selectedVideoId] : []
+                    sourceUrls: selectedVideoId ? [selectedVideoId] : [],
+                    targetDuration
                 })
             });
 
@@ -403,8 +406,8 @@ export default function KidsStoryBuilderPage() {
         setInsufficientFunds(false);
         try {
             const bodyPayload = sourceMode === "video" 
-                ? { videoId: selectedVideoId, characters } 
-                : { premise: projectScript, characters };
+                ? { videoId: selectedVideoId, characters, targetDuration } 
+                : { premise: projectScript, characters, targetDuration };
 
             const res = await fetch("/api/animated/summarize", {
                 method: "POST",
@@ -1077,10 +1080,23 @@ export default function KidsStoryBuilderPage() {
                             <div className="lg:col-span-8 space-y-4">
                                 <h3 className="text-lg font-bold text-white flex items-center gap-1.5"><FileText className="w-5 h-5 text-violet-400" /> Story Premise Details</h3>
                                 <div className="space-y-3">
-                                    <div>
-                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Story Project Title</label>
-                                        <input type="text" placeholder="Busby Beaver's Big Dam Adventure..." value={projectTitle} onChange={e => setProjectTitle(e.target.value)}
-                                            className="w-full bg-gray-850 border border-gray-750 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-violet-500 font-semibold" />
+                                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5">
+                                        <div className="md:col-span-8">
+                                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Story Project Title</label>
+                                            <input type="text" placeholder="Busby Beaver's Big Dam Adventure..." value={projectTitle} onChange={e => setProjectTitle(e.target.value)}
+                                                className="w-full bg-gray-850 border border-gray-750 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-violet-500 font-semibold" />
+                                        </div>
+                                        <div className="md:col-span-4">
+                                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Target Video Duration</label>
+                                            <select value={targetDuration} onChange={e => setTargetDuration(parseInt(e.target.value))}
+                                                className="w-full bg-gray-850 border border-gray-750 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-violet-500 font-semibold">
+                                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(m => (
+                                                    <option key={m} value={m} className="bg-gray-900 text-white">
+                                                        {m} Min (~{m * 3} scenes)
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
                                     </div>
                                     <div>
                                         <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Premise Idea or Source Lyrics Concept</label>

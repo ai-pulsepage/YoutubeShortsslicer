@@ -30,6 +30,7 @@ import {
     Briefcase,
     PackageOpen,
     Wand2,
+    Activity,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -53,6 +54,7 @@ const aiStudioItems = [
 ];
 
 const bottomNavItems = [
+    { label: "Queue Monitor", href: "/dashboard/queue", icon: Activity },
     { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
     { label: "Whop", href: "/dashboard/whop", icon: DollarSign },
     { label: "Help", href: "/dashboard/help", icon: HelpCircle },

@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
                     type: "ref_image",
                     prompt: asset.prompt || "",
                     referenceImages: [],
-                    metadata: { characterId: asset.id, model: "flux" }
+                    metadata: { characterId: asset.id, model: "flux", sourceApp: "Animated Shorts", title: project.title || "Kids Story Project" }
                 });
 
                 queuedAvatarsCount++;
@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
                         type: "shot_video",
                         prompt: shot.visualPrompt,
                         referenceImages,
-                        metadata: { shotId: shot.id, sceneId: scene.id }
+                        metadata: { shotId: shot.id, sceneId: scene.id, sourceApp: "Animated Shorts", title: project.title || "Kids Story Project" }
                     });
 
                     shot.jobId = job.id;

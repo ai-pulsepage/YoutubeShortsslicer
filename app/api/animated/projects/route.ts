@@ -44,6 +44,7 @@ export async function GET(req: NextRequest) {
                 let visualPrompt = s.searchQueries || "";
                 let sunoStylePrompt = "";
                 let visualShots: any[] = [];
+                let sunoAudioKey = "";
 
                 try {
                     if (s.searchQueries && s.searchQueries.startsWith("{")) {
@@ -54,6 +55,7 @@ export async function GET(req: NextRequest) {
                         if (meta.visualPrompt !== undefined) visualPrompt = meta.visualPrompt;
                         if (meta.sunoStylePrompt) sunoStylePrompt = meta.sunoStylePrompt;
                         if (meta.visualShots) visualShots = meta.visualShots;
+                        if (meta.sunoAudioKey) sunoAudioKey = meta.sunoAudioKey;
                     }
                 } catch (e) {
                     console.error("JSON parse searchQueries failed:", e);
@@ -68,6 +70,7 @@ export async function GET(req: NextRequest) {
                     visualPrompt,
                     sunoStylePrompt,
                     visualShots,
+                    sunoAudioKey: sunoAudioKey || undefined,
                     visualPath: s.assembledPath || undefined,
                     narrationPath: s.narrationPath || undefined
                 };
@@ -169,7 +172,8 @@ export async function POST(req: NextRequest) {
                     voice: s.voice,
                     type: s.type,
                     sunoStylePrompt: s.sunoStylePrompt || "",
-                    visualShots: s.visualShots || []
+                    visualShots: s.visualShots || [],
+                    sunoAudioKey: s.sunoAudioKey || ""
                 });
 
                 await prisma.docScene.create({
@@ -216,6 +220,7 @@ export async function POST(req: NextRequest) {
                     let visualPrompt = s.searchQueries || "";
                     let sunoStylePrompt = "";
                     let visualShots: any[] = [];
+                    let sunoAudioKey = "";
 
                     try {
                         if (s.searchQueries && s.searchQueries.startsWith("{")) {
@@ -226,6 +231,7 @@ export async function POST(req: NextRequest) {
                             if (meta.visualPrompt !== undefined) visualPrompt = meta.visualPrompt;
                             if (meta.sunoStylePrompt) sunoStylePrompt = meta.sunoStylePrompt;
                             if (meta.visualShots) visualShots = meta.visualShots;
+                            if (meta.sunoAudioKey) sunoAudioKey = meta.sunoAudioKey;
                         }
                     } catch (e) {
                         console.error("JSON parse searchQueries failed:", e);
@@ -240,6 +246,7 @@ export async function POST(req: NextRequest) {
                         visualPrompt,
                         sunoStylePrompt,
                         visualShots,
+                        sunoAudioKey: sunoAudioKey || undefined,
                         visualPath: s.assembledPath || undefined,
                         narrationPath: s.narrationPath || undefined
                     };

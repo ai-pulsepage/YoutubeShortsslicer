@@ -6,7 +6,7 @@ export async function POST(req: NextRequest) {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { videoId, premise, scriptText, characters } = await req.json();
+    const { videoId, premise, scriptText, characters, targetDuration } = await req.json();
     if (!videoId && !premise && !scriptText) {
         return NextResponse.json({ error: "videoId, premise or scriptText is required" }, { status: 400 });
     }
@@ -35,9 +35,12 @@ export async function POST(req: NextRequest) {
             ? characters.map((c: any) => c.name).join(", ")
             : "Narrator, Leo, Lily";
 
+        const durationMin = targetDuration ? parseFloat(targetDuration) : 2.0;
+        const numScenes = Math.max(3, Math.min(25, Math.ceil(durationMin * 3)));
+
         if (!apiKey) {
             // Fallback: build a default structured story from the transcript
-            const sentences = contentToProcess.split(/[.!?。！？]/).filter(Boolean).slice(0, 4);
+            const sentences = contentToProcess.split(/[.!?。！？]/).filter(Boolean).slice(0, numScenes);
             const scenes = sentences.map((sentence: string, idx: number) => ({
                 id: `scene-${idx}`,
                 type: idx % 3 === 2 ? "song" : "dialogue",
@@ -50,11 +53,48 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ scenes });
         }
 
-        const systemPrompt = `You are an expert children's content writer. Read the transcript/premise/script of a story, and rewrite it into a highly original, short storyboard script (5 scenes or less) containing dialogue and sing-along songs.
+        // Phase 1: High-Level Concept Summary Extraction (if ingested video)
+        let premiseOutline = contentToProcess;
+        if (videoId) {
+            console.log(`[Summarize] Performing Step 1 concept summary on long video transcript...`);
+            const summaryPrompt = `You are a children's content director. Read the following ingested video transcript, and output ONLY a simple 1-paragraph summary outline of the core events, character actions, and themes (e.g. "Jimmy wakes up, Lily greets him, Buddy plays in a cape, mother Jenny serves juice, they sing together"). Do NOT output dialogues, verses or songs. Make it plain, descriptive prose.`;
+            
+            try {
+                const outlineRes = await fetch("https://api.deepseek.com/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: "deepseek-chat",
+                        messages: [
+                            { role: "system", content: summaryPrompt },
+                            { role: "user", content: contentToProcess }
+                        ],
+                        temperature: 0.3,
+                        max_tokens: 800
+                    })
+                });
+                
+                if (outlineRes.ok) {
+                    const summaryData = await outlineRes.json();
+                    premiseOutline = summaryData.choices?.[0]?.message?.content?.trim() || contentToProcess;
+                    console.log(`[Summarize] Concept outline extracted successfully:`, premiseOutline);
+                } else {
+                    console.warn(`[Summarize] Concept outline fetch failed, using transcript raw content.`);
+                }
+            } catch (outlineErr: any) {
+                console.error(`[Summarize] Concept outline call errored:`, outlineErr.message);
+            }
+        }
+
+        // Phase 2: Creative Composition
+        const systemPrompt = `You are an expert children's content writer. Read the following simple premise outline of a story, and expand it into a highly original storyboard script consisting of exactly ${numScenes} scenes containing dialogue and sing-along songs.
 
 CRITICAL COMPLIANCE RULES:
-1. COPYRIGHT PROTECTION & LEGAL DISTINCTNESS: You must rewrite the input script, lyrics, and story beats to be completely original, newly composed, and legally distinct. Do NOT copy the rhythm, rhyming phrases, or direct wording of the input lyrics. Make them legally independent songs and dialogue while keeping only the same educational theme (e.g. washing hands, brushing teeth). Use completely different metaphors, rhyming patterns, and vocabularies to guarantee 100% legal safety.
-2. CAST ALIGNMENT: You MUST ONLY use the following characters for the speaker roles and dialogue: ${characterNames}. Do NOT invent other characters or fall back to names like Leo or Lily unless they are explicitly in this cast list. Always assign the speaker roles correctly based on this cast.
+1. COMPLETE ORIGINALITY: The input is a raw premise outline. You must compose all dialogue and song lyrics entirely from scratch. Write catchy, simple, newly composed rhyming song lyrics and warm, natural kids' dialogue. Do NOT reuse existing song lyrics or word-for-word structures. Use completely different metaphors, rhyming patterns, and vocabularies to guarantee 100% legal safety.
+2. CAST ALIGNMENT: You MUST ONLY use the following characters for the speaker roles and dialogue: ${characterNames}. Always assign the speaker roles correctly based on this cast.
 3. SUNO AI MUSIC PROMPTING: For all scenes with type "song", you MUST include a "sunoStylePrompt" key suggesting a musical style/prompt for Suno AI (e.g. "upbeat kids singalong, bright bells, acoustic ukulele, 120bpm").
 
 Return ONLY a valid JSON array of scenes without any markdown wrapping or preamble.
@@ -87,7 +127,7 @@ Note: For child boy character roles (like Jimmy), you must assign "en-US-Christo
                     },
                     {
                         role: "user",
-                        content: contentToProcess
+                        content: premiseOutline
                     }
                 ],
                 temperature: 0.7,
