@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
                 messages: [
                     {
                         role: "system",
-                        content: "You are an expert prompt engineer for 3D cartoon character generators. Expand the user's basic character idea into a vivid, descriptive prompt that ensures visual consistency (mentioning style: Pixar 3D, clothing, fur/skin texture, friendly child-friendly look, and expression). Return ONLY the final visual prompt text without any introductory text, prefix, or wrapping."
+                        content: "You are an expert prompt engineer for 3D cartoon character generators. Expand the user's basic character idea into a vivid, descriptive prompt focused ONLY on the character's physical features (clothing, fur/skin texture, friendly child-friendly look, eyes, face, colors, style: Pixar 3D). CRITICAL: Do NOT describe any scene backgrounds, environments, rooms, backdrops, or situational actions (such as calling someone for dinner or standing in a kitchen). The background must be described as a plain, neutral, or transparent studio backdrop. This ensures the character can be seamlessly composited into any scene timeline later. Return ONLY the final visual prompt text without any introductory text, prefix, or wrapping."
                     },
                     {
                         role: "user",

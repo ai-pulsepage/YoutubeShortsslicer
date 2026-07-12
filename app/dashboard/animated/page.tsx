@@ -94,12 +94,12 @@ const EDGE_TTS_VOICES = [
 ];
 
 const CHARACTER_PRESETS = [
-    { name: "Leo", prompt: "cheerful 3D cartoon boy with red hair, green eyes, yellow shirt, Pixar 3d style" },
-    { name: "Lily", prompt: "cheerful 3D cartoon girl with black hair, princess crown, pink dress, Pixar 3d style" },
-    { name: "Bingo", prompt: "cute anthropomorphic talking bunny, fluffy white fur, wearing a tiny blue vest, 3d cartoon style, Pixar look" },
-    { name: "Rex", prompt: "happy anthropomorphic baby green dinosaur, friendly expression, big round eyes, 3d cartoon style, Pixar look" },
-    { name: "Rusty", prompt: "cute shiny toy robot, smiling digital eyes, colorful buttons, friendly cartoon style, 3d look" },
-    { name: "Buddy", prompt: "adorable anthropomorphic golden retriever puppy, wearing a red collar, happy expression, 3d cartoon style, Pixar look" }
+    { name: "Leo", prompt: "A young 3D Pixar style cartoon boy with bright green eyes, a wide joyful smile, and messy red hair. He wears a yellow t-shirt and blue denim shorts. His features are soft, round, and friendly. Styled in Pixar 3D digital animation look, shown against a neutral studio backdrop." },
+    { name: "Lily", prompt: "A cheerful 3D Pixar style cartoon princess girl with round brown eyes, black hair, and a sparkling gold crown. She wears a warm pink dress. Features are soft and rounded. Beautiful 3D cartoon style, shown on a plain studio backdrop." },
+    { name: "Bingo", prompt: "A cute anthropomorphic 3D cartoon bunny with big, curious round eyes and fluffy white fur. He wears a tiny blue vest. Cute, child-friendly features in 3D Pixar style, shown on a neutral plain background." },
+    { name: "Rex", prompt: "A friendly 3D cartoon baby green dinosaur with big round eyes, a happy smile, and a soft, smooth green skin texture. Cute anthropomorphic styling, Pixar look, shown on a plain studio backdrop." },
+    { name: "Rusty", prompt: "A shiny 3D toy robot with smiling digital eyes, colorful control buttons, and rounded steel-blue joints. Friendly cartoon style, clean child-friendly Pixar look, shown on a neutral backdrop." },
+    { name: "Buddy", prompt: "An adorable anthropomorphic 3D golden retriever puppy with floppy ears and a red collar. Kind expression, happy smile, soft plush fur texture, Pixar cartoon style, shown on a plain studio background." }
 ];
 
 export default function KidsStoryBuilderPage() {
@@ -903,26 +903,26 @@ export default function KidsStoryBuilderPage() {
                         </select>
                     </div>
 
-                    {docId && (
-                        <div className="flex items-center gap-1 bg-gray-900 border border-gray-800 px-2 py-1.5 rounded-xl">
-                            <span className="text-[10px] font-bold text-gray-500 uppercase">Translate:</span>
-                            <select disabled={translating} onChange={e => {
-                                if (e.target.value) {
-                                    handleTranslateProject(e.target.value);
-                                    e.target.value = "";
-                                }
-                            }} className="bg-transparent text-[10px] text-violet-400 focus:outline-none font-bold cursor-pointer">
-                                <option value="" className="bg-gray-900 text-gray-500">Language...</option>
-                                <option value="Spanish" className="bg-gray-900 text-white">Spanish (Español)</option>
-                                <option value="French" className="bg-gray-900 text-white">French (Français)</option>
-                                <option value="German" className="bg-gray-900 text-white">German (Deutsch)</option>
-                                <option value="Italian" className="bg-gray-900 text-white">Italian (Italiano)</option>
-                                <option value="Korean" className="bg-gray-900 text-white">Korean (한국어)</option>
-                                <option value="Chinese" className="bg-gray-900 text-white">Chinese (中文)</option>
-                            </select>
-                            {translating && <Loader2 className="w-3 h-3 animate-spin text-violet-400 ml-1" />}
-                        </div>
-                    )}
+                    <div className="flex items-center gap-1 bg-gray-900 border border-gray-800 px-2 py-1.5 rounded-xl">
+                        <span className="text-[10px] font-bold text-gray-500 uppercase font-sans">Translate:</span>
+                        <select disabled={translating || !docId} onChange={e => {
+                            if (e.target.value) {
+                                handleTranslateProject(e.target.value);
+                                e.target.value = "";
+                            }
+                        }} className="bg-transparent text-[10px] text-violet-400 focus:outline-none font-bold cursor-pointer disabled:opacity-50">
+                            <option value="" className="bg-gray-900 text-gray-500">
+                                {!docId ? "Save draft first..." : "Language..."}
+                            </option>
+                            <option value="Spanish" className="bg-gray-900 text-white">Spanish (Español)</option>
+                            <option value="French" className="bg-gray-900 text-white">French (Français)</option>
+                            <option value="German" className="bg-gray-900 text-white">German (Deutsch)</option>
+                            <option value="Italian" className="bg-gray-900 text-white">Italian (Italiano)</option>
+                            <option value="Korean" className="bg-gray-900 text-white">Korean (한국어)</option>
+                            <option value="Chinese" className="bg-gray-900 text-white">Chinese (中文)</option>
+                        </select>
+                        {translating && <Loader2 className="w-3 h-3 animate-spin text-violet-400 ml-1" />}
+                    </div>
 
                     <button onClick={handleSaveProject} disabled={saving}
                         className="flex items-center gap-1.5 px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-55 text-white text-xs font-bold rounded-xl transition-all shadow-md font-sans">
