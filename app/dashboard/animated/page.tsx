@@ -705,7 +705,7 @@ export default function KidsStoryBuilderPage() {
     const addManualCharacter = () => {
         setCharacters(prev => [
             ...prev,
-            { id: `char-${Date.now()}`, name: "CharacterName", prompt: "description details..." }
+            { id: `char-${Date.now()}`, name: "", prompt: "" }
         ]);
     };
 
@@ -1075,9 +1075,9 @@ export default function KidsStoryBuilderPage() {
                                             </div>
 
                                             <div className="flex-1 space-y-2 min-w-0">
-                                                <input type="text" value={char.name} onChange={e => updateCharacterProfile(char.id, { name: e.target.value })}
+                                                <input type="text" placeholder="Character Name" value={char.name} onChange={e => updateCharacterProfile(char.id, { name: e.target.value })}
                                                     className="bg-gray-800 border border-gray-750 rounded-lg px-2 py-0.5 text-xs font-bold text-white focus:outline-none focus:border-violet-500" />
-                                                <textarea value={char.prompt} onChange={e => updateCharacterProfile(char.id, { prompt: e.target.value })} rows={2}
+                                                <textarea placeholder="Appearance prompt details..." value={char.prompt} onChange={e => updateCharacterProfile(char.id, { prompt: e.target.value })} rows={2}
                                                     className="w-full bg-gray-800 border border-gray-750 rounded-lg p-1.5 text-[10px] text-gray-350 focus:outline-none focus:border-violet-500 leading-normal font-sans" />
                                             </div>
                                         </div>
