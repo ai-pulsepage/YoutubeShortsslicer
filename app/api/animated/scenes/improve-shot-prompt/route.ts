@@ -17,15 +17,16 @@ export async function POST(req: NextRequest) {
         }
 
         if (!apiKey) {
-            return NextResponse.json({ rewrittenPrompt: visualPrompt });
+            return NextResponse.json({ error: "DEEPSEEK_KEY_MISSING", details: "DeepSeek API key is not configured. Please define process.env.DEEPSEEK_API_KEY or save it in settings." }, { status: 400 });
         }
 
         const systemPrompt = `You are a 3D animation director writing prompts for a video generation model.
-Your task is to rewrite the provided visual shot prompt so that the focus is on the new primary character/subject specified by the user.
+Your task is to rewrite, expand, and enrich the provided visual shot prompt so that the focus is on the new primary character/subject specified by the user.
 Make sure the description aligns naturally with the context of the scene.
 Do NOT change the art style (maintain a consistent 3D cartoon style).
 Ensure all references to the old primary character are replaced with the new primary character, and their actions/descriptions fit them correctly.
-Return ONLY the newly rewritten prompt text without quotes, notes, or preamble.`;
+Additionally, you MUST expand the prompt into a rich, detailed, high-quality visual description (specifying background setting, expressions, bright colors, whimsical 3D lighting, Pixar-like cartoon look, and details suitable for a high-fidelity video generator).
+Return ONLY the newly rewritten and expanded prompt text without quotes, notes, or preamble.`;
 
         const userPayload = `Original Prompt: "${visualPrompt}"
 New Primary Character: "${primaryCharacter}"
