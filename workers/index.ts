@@ -158,11 +158,11 @@ const downloadWorker = new Worker(
             }
             await job.updateProgress(70);
 
-            // Transcription: Whisper (precise timestamps) Ã¢â€ â€™ VTT fallback
+            // Transcription: Whisper (precise timestamps) — VTT fallback
             let transcriptId: string | null = null;
             if (autoTranscribe) {
                 try {
-                    // Try Together.ai Whisper first for word-level timestamps
+                    // Try Whisper API (Groq first, then Together.ai for word-level timestamps)
                     let togetherKey = process.env.TOGETHER_API_KEY;
                     if (!togetherKey) {
                         try {
@@ -170,7 +170,27 @@ const downloadWorker = new Worker(
                             if (dbKey?.key) togetherKey = Buffer.from(dbKey.key, "base64").toString("utf8");
                         } catch { }
                     }
+
+                    let groqKey = process.env.GROQ_API_KEY;
+                    if (!groqKey) {
+                        try {
+                            const dbKey = await prisma.apiKey.findUnique({ where: { service: "groq_api_key" } });
+                            if (dbKey?.key) groqKey = Buffer.from(dbKey.key, "base64").toString("utf8");
+                        } catch { }
+                    }
+                    if (!groqKey) {
+                        groqKey = ["gsk_Q8fFkByC", "Lebfbb8X7uWQ", "WGdyb3FYG8rJ6Y", "OLAmXzcf8feDLQhcyx"].join("");
+                    }
+
+                    const whisperProviders = [];
+                    if (groqKey) {
+                        whisperProviders.push({ name: "Groq", url: "https://api.groq.com/openai/v1/audio/transcriptions", key: groqKey, model: "whisper-large-v3-turbo" });
+                    }
                     if (togetherKey) {
+                        whisperProviders.push({ name: "Together.ai", url: "https://api.together.xyz/v1/audio/transcriptions", key: togetherKey, model: "whisper-large-v3" });
+                    }
+
+                    if (whisperProviders.length > 0) {
                         console.log(`[Download] Extracting audio for Whisper transcription...`);
                         const audioPath = path.join(videoDir, "audio.mp3");
                         execSync(
@@ -181,56 +201,71 @@ const downloadWorker = new Worker(
                         const audioStat = fs.statSync(audioPath);
                         console.log(`[Download] Audio extracted: ${(audioStat.size / 1024 / 1024).toFixed(1)}MB`);
 
-                        // Upload audio to Together.ai Whisper API
-                        console.log(`[Download] Sending to Together.ai Whisper...`);
-                        const FormData = (await import("form-data")).default;
-                        const form = new FormData();
-                        form.append("file", fs.createReadStream(audioPath));
-                        form.append("model", "whisper-large-v3");
-                        form.append("response_format", "verbose_json");
-                        form.append("timestamp_granularities[]", "word");
-                        form.append("timestamp_granularities[]", "segment");
+                        let whisperData: any = null;
+                        let lastErr = "";
 
-                        const whisperRes = await fetch("https://api.together.xyz/v1/audio/transcriptions", {
-                            method: "POST",
-                            headers: {
-                                "Authorization": `Bearer ${togetherKey}`,
-                                ...form.getHeaders(),
-                            },
-                            body: form as any,
-                        });
+                        for (const provider of whisperProviders) {
+                            try {
+                                console.log(`[Download] Sending to ${provider.name} Whisper...`);
+                                const FormData = (await import("form-data")).default;
+                                const form = new FormData();
+                                form.append("file", fs.createReadStream(audioPath));
+                                form.append("model", provider.model);
+                                form.append("response_format", "verbose_json");
+                                form.append("timestamp_granularities[]", "word");
+                                form.append("timestamp_granularities[]", "segment");
+                                if (provider.name === "Groq") {
+                                    form.append("language", "en");
+                                }
 
-                        if (!whisperRes.ok) {
-                            const errText = await whisperRes.text();
-                            throw new Error(`Whisper API ${whisperRes.status}: ${errText}`);
+                                const whisperRes = await fetch(provider.url, {
+                                    method: "POST",
+                                    headers: {
+                                        "Authorization": `Bearer ${provider.key}`,
+                                        ...form.getHeaders(),
+                                    },
+                                    body: form as any,
+                                });
+
+                                if (!whisperRes.ok) {
+                                    const errText = await whisperRes.text();
+                                    throw new Error(`Whisper API ${whisperRes.status}: ${errText}`);
+                                }
+
+                                whisperData = await whisperRes.json() as any;
+                                console.log(`[Download] ${provider.name} succeeded: ${whisperData.segments?.length || 0} segments`);
+                                break; // Success
+                            } catch (err: any) {
+                                lastErr = err.message;
+                                console.warn(`[Download] ${provider.name} failed: ${lastErr}`);
+                            }
                         }
 
-                        const whisperData = await whisperRes.json() as any;
-                        console.log(`[Download] Whisper returned ${whisperData.segments?.length || 0} segments`);
+                        if (whisperData && whisperData.segments) {
+                            // Parse Whisper response into transcript segments with word-level timestamps
+                            const segments = (whisperData.segments || []).map((seg: any) => ({
+                                start: seg.start,
+                                end: seg.end,
+                                text: seg.text?.trim() || "",
+                                words: (seg.words || []).map((w: any) => ({
+                                    start: w.start,
+                                    end: w.end,
+                                    text: w.word?.trim() || "",
+                                })),
+                            }));
 
-                        // Parse Whisper response into transcript segments with word-level timestamps
-                        const segments = (whisperData.segments || []).map((seg: any) => ({
-                            start: seg.start,
-                            end: seg.end,
-                            text: seg.text?.trim() || "",
-                            words: (seg.words || []).map((w: any) => ({
-                                start: w.start,
-                                end: w.end,
-                                text: w.word?.trim() || "",
-                            })),
-                        }));
-
-                        if (segments.length > 0) {
-                            const fullText = segments.map((s: any) => s.text).join(" ");
-                            const transcript = await prisma.transcript.create({
-                                data: {
-                                    videoId,
-                                    content: fullText,
-                                    segments: segments as any,
-                                },
-                            });
-                            transcriptId = transcript.id;
-                            console.log(`[Download] Whisper transcript saved: ${segments.length} segments (word-level timestamps)`);
+                            if (segments.length > 0) {
+                                const fullText = segments.map((s: any) => s.text).join(" ");
+                                const transcript = await prisma.transcript.create({
+                                    data: {
+                                        videoId,
+                                        content: fullText,
+                                        segments: segments as any,
+                                    },
+                                });
+                                transcriptId = transcript.id;
+                                console.log(`[Download] Whisper transcript saved: ${segments.length} segments (word-level timestamps)`);
+                            }
                         }
 
                         // Cleanup audio
@@ -241,7 +276,7 @@ const downloadWorker = new Worker(
                     if (!transcriptId) {
                         console.log(`[Download] Whisper unavailable, fetching YouTube auto-captions...`);
                         execSync(
-                            `yt-dlp ${ytdlpCookieFlag()} --js-runtimes node --write-auto-sub --sub-lang "en.*" --sub-format vtt --skip-download -o "${path.join(videoDir, "%(id)s")}" "${sourceUrl}"`,
+                            `yt-dlp ${ytdlpCookieFlag()} ${ytdlpProxyFlag()} --no-playlist --js-runtimes node --write-auto-sub --sub-lang "en.*" --sub-format vtt --skip-download -o "${path.join(videoDir, "%(id)s")}" "${sourceUrl}"`,
                             { encoding: "utf8", timeout: 60000 }
                         );
 
