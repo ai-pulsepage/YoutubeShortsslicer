@@ -116,6 +116,7 @@ export default function KidsStoryBuilderPage() {
     const [docId, setDocId] = useState<string | null>(null);
     const [scenes, setScenes] = useState<Scene[]>([]);
     const [characters, setCharacters] = useState<Character[]>([]);
+    const [libraryCharacters, setLibraryCharacters] = useState<Character[]>([]);
 
     // Voice preview audio state
     const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
@@ -141,6 +142,7 @@ export default function KidsStoryBuilderPage() {
     // Load projects and videos list
     useEffect(() => {
         loadProjects();
+        loadLibraryCharacters();
         setVideosLoading(true);
         fetch("/api/videos?status=READY&limit=50")
             .then(r => r.json())
@@ -259,6 +261,39 @@ export default function KidsStoryBuilderPage() {
 
         return () => clearInterval(interval);
     }, [scenes, characters]);
+
+    // Load global character library assets
+    const loadLibraryCharacters = async () => {
+        try {
+            const res = await fetch("/api/animated/characters/library");
+            if (res.ok) {
+                const data = await res.json();
+                setLibraryCharacters(data.characters || []);
+            }
+        } catch (err) {
+            console.error("Failed to load library characters:", err);
+        }
+    };
+
+    const handleSaveToLibrary = async (char: Character) => {
+        setError("");
+        try {
+            const res = await fetch("/api/animated/characters/library", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    name: char.name,
+                    prompt: char.prompt,
+                    imagePath: char.imagePath
+                })
+            });
+            if (!res.ok) throw new Error("Failed to save to library");
+            alert(`"${char.name}" has been saved to your global character library!`);
+            loadLibraryCharacters();
+        } catch (err: any) {
+            setError(err.message || "Error saving to library.");
+        }
+    };
 
     // Load Projects List
     const loadProjects = async () => {
@@ -1049,6 +1084,30 @@ export default function KidsStoryBuilderPage() {
                                             <option key={idx} value={idx} className="bg-gray-900 text-white">{preset.name} (Preset)</option>
                                         ))}
                                     </select>
+
+                                    <select onChange={e => {
+                                        if (e.target.value !== "") {
+                                            const selectedChar = libraryCharacters.find(c => c.id === e.target.value);
+                                            if (selectedChar) {
+                                                setCharacters(prev => [
+                                                    ...prev,
+                                                    {
+                                                        id: `char-lib-${Date.now()}`,
+                                                        name: selectedChar.name,
+                                                        prompt: selectedChar.prompt,
+                                                        imagePath: selectedChar.imagePath
+                                                    }
+                                                ]);
+                                            }
+                                            e.target.value = "";
+                                        }
+                                    }} className="bg-violet-600/10 border border-violet-500/25 text-violet-400 rounded-lg text-xs font-bold px-3 py-1.5 focus:outline-none cursor-pointer">
+                                        <option value="" className="bg-gray-900 text-gray-450">Add from Library...</option>
+                                        {libraryCharacters.map(char => (
+                                            <option key={char.id} value={char.id} className="bg-gray-900 text-white">{char.name}</option>
+                                        ))}
+                                    </select>
+
                                     <button onClick={addManualCharacter} className="flex items-center gap-1 px-3 py-1.5 bg-violet-600/10 border border-violet-500/25 text-violet-400 rounded-lg text-xs font-bold hover:bg-violet-600/20 transition-all font-sans">
                                         <Plus className="w-4 h-4" /> Add Character
                                     </button>
@@ -1091,6 +1150,11 @@ export default function KidsStoryBuilderPage() {
                                                 disabled={char.jobStatus === "QUEUED" || char.jobStatus === "PROCESSING"}
                                                 className="flex items-center gap-0.5 px-2.5 py-1 bg-emerald-600/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold rounded-lg hover:bg-emerald-600/20 transition-all disabled:opacity-50 font-sans">
                                                 <Tv className="w-3 h-3" /> Generate Avatar Face
+                                            </button>
+                                            <button onClick={() => handleSaveToLibrary(char)}
+                                                disabled={!char.name || !char.prompt}
+                                                className="flex items-center gap-0.5 px-2.5 py-1 bg-violet-600/10 border border-violet-500/20 text-violet-400 text-[10px] font-bold rounded-lg hover:bg-violet-600/20 transition-all font-sans disabled:opacity-40">
+                                                <Save className="w-3 h-3" /> Save to Library
                                             </button>
                                         </div>
                                     </div>
