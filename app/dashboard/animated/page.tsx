@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import {
     Wand2,
     Loader2,
@@ -27,6 +27,15 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+type Shot = {
+    id: string;
+    primaryCharacter: string;
+    visualPrompt: string;
+    visualPath?: string;      // R2 key of generated shot clip
+    jobId?: string;           // RunPod Job ID
+    jobStatus?: "IDLE" | "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED";
+};
+
 type Scene = {
     id: string;
     type: "dialogue" | "song";
@@ -34,21 +43,24 @@ type Scene = {
     voice: string;
     text: string;
     visualPrompt: string;
-    visualPath?: string;      // R2 key for generated video clip
-    jobId?: string;           // RunPod Job ID
+    visualPath?: string;       // Fallback for single clip or compiled path
+    jobId?: string;            // Fallback Job ID
     jobStatus?: "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED";
-    sunoAudioKey?: string;     // R2 key for uploaded Suno audio
-    sunoStylePrompt?: string;  // Suggested style prompt for Suno AI
-    narrationPath?: string;    // R2 key for pre-generated dialogue voice
+    sunoAudioKey?: string;      // R2 key for uploaded Suno audio
+    sunoStylePrompt?: string;   // Suggested style prompt for Suno AI
+    sunoDuration?: number;      // Resolved MP3 duration in seconds
+    narrationPath?: string;     // R2 key for pre-generated dialogue voice
     voiceStatus?: "IDLE" | "GENERATING" | "READY" | "FAILED";
+    visualShots?: Shot[];       // Multi-shot sequence
+    planningShots?: boolean;    // Loading state for AI planning
 };
 
 type Character = {
     id: string;
     name: string;
     prompt: string;
-    imagePath?: string;        // R2 avatar path
-    jobId?: string;           // Avatar generation job id
+    imagePath?: string;         // R2 avatar path
+    jobId?: string;            // Avatar generation job id
     jobStatus?: "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED";
 };
 
@@ -167,7 +179,18 @@ export default function KidsStoryBuilderPage() {
 
     // Poll RunPod Job Statuses
     useEffect(() => {
-        const pendingJobs = scenes.filter(s => s.jobId && s.jobStatus !== "COMPLETED" && s.jobStatus !== "FAILED");
+        // Collect all pending job ids from nested shots
+        const pendingJobs: { sceneId: string; shotId: string; jobId: string }[] = [];
+        scenes.forEach(s => {
+            if (s.visualShots) {
+                s.visualShots.forEach(shot => {
+                    if (shot.jobId && shot.jobStatus !== "COMPLETED" && shot.jobStatus !== "FAILED") {
+                        pendingJobs.push({ sceneId: s.id, shotId: shot.id, jobId: shot.jobId });
+                    }
+                });
+            }
+        });
+
         const pendingAvatars = characters.filter(c => c.jobId && c.jobStatus !== "COMPLETED" && c.jobStatus !== "FAILED");
         
         if (pendingJobs.length === 0 && pendingAvatars.length === 0) return;
@@ -185,22 +208,34 @@ export default function KidsStoryBuilderPage() {
                 const data = await res.json();
                 const updatedJobs = data.jobs || [];
 
+                // Update scene clips statuses
                 setScenes(prev =>
                     prev.map(scene => {
-                        const matchingJob = updatedJobs.find((j: any) => j.id === scene.jobId);
-                        if (!matchingJob) return scene;
+                        if (!scene.visualShots) return scene;
+                        const updatedShots = scene.visualShots.map(shot => {
+                            const matchingJob = updatedJobs.find((j: any) => j.id === shot.jobId);
+                            if (!matchingJob) return shot;
+                            return {
+                                ...shot,
+                                jobStatus: (matchingJob.status === "QUEUED" ? "QUEUED" 
+                                         : matchingJob.status === "PROCESSING" ? "PROCESSING"
+                                         : matchingJob.status === "COMPLETED" ? "COMPLETED"
+                                         : "FAILED") as Shot["jobStatus"],
+                                visualPath: matchingJob.outputPath || shot.visualPath
+                            };
+                        });
 
+                        const allDone = updatedShots.every(s => s.jobStatus === "COMPLETED");
                         return {
                             ...scene,
-                            jobStatus: matchingJob.status === "QUEUED" ? "QUEUED" 
-                                     : matchingJob.status === "PROCESSING" ? "PROCESSING"
-                                     : matchingJob.status === "COMPLETED" ? "COMPLETED"
-                                     : "FAILED",
-                            visualPath: matchingJob.outputPath || scene.visualPath
+                            visualShots: updatedShots,
+                            // Map the final compiled visual path or last clip path if done
+                            visualPath: allDone ? updatedShots[updatedShots.length - 1].visualPath : scene.visualPath
                         };
                     })
                 );
 
+                // Update characters
                 setCharacters(prev =>
                     prev.map(char => {
                         const matchingJob = updatedJobs.find((j: any) => j.id === char.jobId);
@@ -262,7 +297,7 @@ export default function KidsStoryBuilderPage() {
                 character: s.character || "Leo",
                 voice: s.voice || "en-US-AnaNeural-Female"
             })));
-            setCurrentStep(1); // load at step 1
+            setCurrentStep(1);
         }
     };
 
@@ -324,10 +359,19 @@ export default function KidsStoryBuilderPage() {
             if (!res.ok) throw new Error(data.error || "Failed to draft blueprint");
 
             if (data.scenes && Array.isArray(data.scenes)) {
-                setScenes(data.scenes);
-                // Save immediately so characters and scenes persist
+                setScenes(data.scenes.map((s: any) => ({
+                    ...s,
+                    visualShots: s.visualShots || [
+                        {
+                            id: `shot-${Date.now()}-default`,
+                            primaryCharacter: s.character || "Leo",
+                            visualPrompt: s.visualPrompt || "Cartoon style scenery background",
+                            jobStatus: "IDLE"
+                        }
+                    ]
+                })));
                 setTimeout(() => handleSaveProject(), 100);
-                setCurrentStep(4); // auto-navigate to storyboard card editor!
+                setCurrentStep(4);
             }
         } catch (err: any) {
             setError(err.message || "Error generating storyboard.");
@@ -430,9 +474,57 @@ export default function KidsStoryBuilderPage() {
                 narrationPath: data.narrationPath,
                 voiceStatus: "READY"
             });
+            // Auto plan shots based on EdgeTTS narration duration
+            setTimeout(() => probeAndPlanShots(sceneId, data.narrationPath, text), 100);
         } catch (err: any) {
             setError(err.message || "Failed to generate voiceover track.");
             updateScene(sceneId, { voiceStatus: "FAILED" });
+        }
+    };
+
+    // Probe Suno Duration and Plan Shots
+    const probeAndPlanShots = async (sceneId: string, audioKey: string, lyrics: string) => {
+        setError("");
+        updateScene(sceneId, { planningShots: true });
+        
+        try {
+            // 1. Probe duration using ffprobe
+            const durRes = await fetch("/api/animated/scenes/video/duration", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ audioKey })
+            });
+            const durData = await durRes.json();
+            if (!durRes.ok) throw new Error(durData.error || "Failed to resolve audio duration");
+
+            const duration = durData.duration || 5.0;
+            const numShots = Math.max(1, Math.ceil(duration / 5.0));
+
+            // 2. Plan visual prompts using DeepSeek
+            const planRes = await fetch("/api/animated/scenes/video/plan", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ lyrics, numShots, characters })
+            });
+            const planData = await planRes.json();
+            if (!planRes.ok) throw new Error(planData.error || "Failed to plan visual shots");
+
+            const plannedShots = planData.shots.map((s: any, idx: number) => ({
+                id: `shot-${idx}-${Date.now()}`,
+                primaryCharacter: s.primaryCharacter || "Narrator",
+                visualPrompt: s.visualPrompt || "Cartoon scene background",
+                jobStatus: "IDLE"
+            }));
+
+            updateScene(sceneId, {
+                sunoDuration: duration,
+                visualShots: plannedShots
+            });
+
+        } catch (err: any) {
+            setError(err.message || "Failed to plan visual shots sequence.");
+        } finally {
+            updateScene(sceneId, { planningShots: false });
         }
     };
 
@@ -477,8 +569,8 @@ export default function KidsStoryBuilderPage() {
         }
     };
 
-    // Dispatch Scene video generator
-    const generateSceneVideo = async (sceneId: string, visualPrompt: string, characterName: string) => {
+    // Dispatch Scene video generator (shot-level)
+    const generateShotVideo = async (sceneId: string, shotId: string, visualPrompt: string, characterName: string) => {
         setError("");
         
         let finalPrompt = visualPrompt;
@@ -512,11 +604,17 @@ export default function KidsStoryBuilderPage() {
 
             setScenes(prev =>
                 prev.map(s => {
-                    if (s.id !== sceneId) return s;
+                    if (s.id !== sceneId || !s.visualShots) return s;
                     return {
                         ...s,
-                        jobId: data.jobId,
-                        jobStatus: "QUEUED"
+                        visualShots: s.visualShots.map(shot => {
+                            if (shot.id !== shotId) return shot;
+                            return {
+                                ...shot,
+                                jobId: data.jobId,
+                                jobStatus: "QUEUED"
+                            };
+                        })
                     };
                 })
             );
@@ -525,18 +623,22 @@ export default function KidsStoryBuilderPage() {
         }
     };
 
-    // Assembly Line concurrent visual queuing
+    // Assembly Line concurrent visual queuing (shot-level)
     const handleQueueAllVisuals = async () => {
         setError("");
-        const pendingScenes = scenes.filter(s => s.jobStatus !== "COMPLETED" && s.jobStatus !== "PROCESSING");
-        if (pendingScenes.length === 0) return;
-
-        for (const s of pendingScenes) {
-            await generateSceneVideo(s.id, s.visualPrompt, s.character);
+        
+        for (const s of scenes) {
+            if (s.visualShots) {
+                for (const shot of s.visualShots) {
+                    if (shot.jobStatus !== "COMPLETED" && shot.jobStatus !== "PROCESSING" && shot.jobStatus !== "QUEUED") {
+                        await generateShotVideo(s.id, shot.id, shot.visualPrompt, shot.primaryCharacter);
+                    }
+                }
+            }
         }
     };
 
-    // Suno track MP3 upload
+    // Handle Custom Suno MP3 Upload
     const handleSunoUpload = async (sceneId: string, file: File) => {
         setError("");
         try {
@@ -552,15 +654,16 @@ export default function KidsStoryBuilderPage() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Upload failed");
 
-            setScenes(prev =>
-                prev.map(s => {
-                    if (s.id !== sceneId) return s;
-                    return {
-                        ...s,
-                        sunoAudioKey: data.path || data.key
-                    };
-                })
-            );
+            const sunoKey = data.path || data.key;
+            updateScene(sceneId, {
+                sunoAudioKey: sunoKey
+            });
+
+            // Automatically trigger ffprobe and AI shot planning based on lyrics
+            const sceneObj = scenes.find(s => s.id === sceneId);
+            if (sceneObj) {
+                probeAndPlanShots(sceneId, sunoKey, sceneObj.text);
+            }
         } catch (err: any) {
             setError(`Audio upload failed: ${err.message}`);
         }
@@ -580,7 +683,15 @@ export default function KidsStoryBuilderPage() {
             character: characters?.[0]?.name || "Narrator",
             voice: "en-US-AnaNeural-Female",
             text: "New dialogue script lines...",
-            visualPrompt: "Pixar style cartoon scene background"
+            visualPrompt: "Pixar style cartoon scene background",
+            visualShots: [
+                {
+                    id: `shot-${Date.now()}-default`,
+                    primaryCharacter: characters?.[0]?.name || "Narrator",
+                    visualPrompt: "Pixar style cartoon scene background",
+                    jobStatus: "IDLE"
+                }
+            ]
         };
         setScenes(prev => [...prev, newScene]);
     };
@@ -622,10 +733,66 @@ export default function KidsStoryBuilderPage() {
         setCharacters(prev => prev.filter(c => c.id !== id));
     };
 
+    // Edit shot values
+    const updateShot = (sceneId: string, shotId: string, updates: Partial<Shot>) => {
+        setScenes(prev =>
+            prev.map(s => {
+                if (s.id !== sceneId || !s.visualShots) return s;
+                return {
+                    ...s,
+                    visualShots: s.visualShots.map(shot => (shot.id === shotId ? { ...shot, ...updates } : shot))
+                };
+            })
+        );
+    };
+
+    // Add empty shot to scene
+    const addShotToScene = (sceneId: string) => {
+        const sceneObj = scenes.find(s => s.id === sceneId);
+        const nextIdx = (sceneObj?.visualShots?.length || 0) + 1;
+        const newShot: Shot = {
+            id: `shot-manual-${Date.now()}-${nextIdx}`,
+            primaryCharacter: characters?.[0]?.name || "Narrator",
+            visualPrompt: "3D animation Pixar style background",
+            jobStatus: "IDLE"
+        };
+
+        setScenes(prev =>
+            prev.map(s => {
+                if (s.id !== sceneId) return s;
+                return {
+                    ...s,
+                    visualShots: [...(s.visualShots || []), newShot]
+                };
+            })
+        );
+    };
+
+    // Delete shot from scene
+    const deleteShotFromScene = (sceneId: string, shotId: string) => {
+        setScenes(prev =>
+            prev.map(s => {
+                if (s.id !== sceneId || !s.visualShots) return s;
+                return {
+                    ...s,
+                    visualShots: s.visualShots.filter(shot => shot.id !== shotId)
+                };
+            })
+        );
+    };
+
     // Compile timeline output
     const handleCompile = async () => {
-        if (scenes.some(s => !s.visualPath)) {
-            setError("Cannot compile. Make sure all scenes have finished video clips generated.");
+        // Enforce all scenes have finished R2 clips
+        const missingClips = scenes.some(s => {
+            if (s.visualShots && s.visualShots.length > 0) {
+                return s.visualShots.some(shot => !shot.visualPath);
+            }
+            return !s.visualPath;
+        });
+
+        if (missingClips) {
+            setError("Cannot compile. Make sure all shots in the storyboard have generated visual clips.");
             return;
         }
 
@@ -687,7 +854,7 @@ export default function KidsStoryBuilderPage() {
                     </div>
 
                     <button onClick={handleSaveProject} disabled={saving}
-                        className="flex items-center gap-1.5 px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-55 text-white text-xs font-bold rounded-xl transition-all shadow-md">
+                        className="flex items-center gap-1.5 px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-55 text-white text-xs font-bold rounded-xl transition-all shadow-md font-sans">
                         {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                         Save Project
                     </button>
@@ -710,7 +877,7 @@ export default function KidsStoryBuilderPage() {
             )}
 
             {/* 5-Step Guided Wizard Nav bar */}
-            <div className="bg-gray-950/20 border border-gray-850 p-1.5 rounded-2xl flex items-center justify-between gap-1 overflow-x-auto">
+            <div className="bg-gray-955/20 border border-gray-850 p-1.5 rounded-2xl flex items-center justify-between gap-1 overflow-x-auto">
                 {[
                     { nr: 1, label: "Setup Premise" },
                     { nr: 2, label: "Cast Directory" },
@@ -721,8 +888,8 @@ export default function KidsStoryBuilderPage() {
                     <button key={step.nr} onClick={() => setCurrentStep(step.nr)}
                         className={cn("flex-1 min-w-[120px] flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold transition-all border",
                             currentStep === step.nr 
-                                ? "bg-violet-600 border-violet-500 text-white shadow-md" 
-                                : "bg-transparent border-transparent text-gray-500 hover:text-gray-300")}>
+                                ? "bg-violet-600 border-violet-500 text-white shadow-md font-sans" 
+                                : "bg-transparent border-transparent text-gray-500 hover:text-gray-300 font-sans")}>
                         <span className={cn("w-5 h-5 rounded-full flex items-center justify-center text-[10px]", 
                             currentStep === step.nr ? "bg-white text-violet-600" : "bg-gray-800 text-gray-400")}>{step.nr}</span>
                         <span>{step.label}</span>
@@ -775,7 +942,7 @@ export default function KidsStoryBuilderPage() {
                                             {filteredVideos.map(v => (
                                                 <button key={v.id} onClick={() => setSelectedVideoId(v.id)}
                                                     className={cn("w-full flex items-center gap-2 p-1.5 rounded-lg text-left transition-all text-[11px]",
-                                                        selectedVideoId === v.id ? "bg-violet-600/25 text-white" : "text-gray-400 hover:bg-gray-850/40")}>
+                                                        selectedVideoId === v.id ? "bg-violet-600/25 text-white" : "text-gray-400 hover:bg-gray-855/40")}>
                                                     <span className="truncate">{v.title}</span>
                                                 </button>
                                             ))}
@@ -783,7 +950,7 @@ export default function KidsStoryBuilderPage() {
                                         {selectedVideo && <p className="text-[10px] text-emerald-400 font-semibold">✓ Selected: {selectedVideo.title}</p>}
                                     </div>
                                 ) : (
-                                    <div className="bg-gray-950/20 border border-gray-850 p-4 rounded-2xl text-center text-xs text-gray-500 leading-relaxed">
+                                    <div className="bg-gray-955/20 border border-gray-850 p-4 rounded-2xl text-center text-xs text-gray-500 leading-relaxed font-sans">
                                         Using custom text premise. Type your story idea in the box to the left.
                                     </div>
                                 )}
@@ -811,7 +978,7 @@ export default function KidsStoryBuilderPage() {
                                             <option key={idx} value={idx} className="bg-gray-900 text-white">{preset.name} (Preset)</option>
                                         ))}
                                     </select>
-                                    <button onClick={addManualCharacter} className="flex items-center gap-1 px-3 py-1.5 bg-violet-600/10 border border-violet-500/25 text-violet-400 rounded-lg text-xs font-bold hover:bg-violet-600/20 transition-all">
+                                    <button onClick={addManualCharacter} className="flex items-center gap-1 px-3 py-1.5 bg-violet-600/10 border border-violet-500/25 text-violet-400 rounded-lg text-xs font-bold hover:bg-violet-600/20 transition-all font-sans">
                                         <Plus className="w-4 h-4" /> Add Character
                                     </button>
                                 </div>
@@ -819,7 +986,7 @@ export default function KidsStoryBuilderPage() {
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {characters.map(char => (
-                                    <div key={char.id} className="bg-gray-950/20 border border-gray-850 p-4 rounded-2xl flex flex-col justify-between space-y-3 relative group">
+                                    <div key={char.id} className="bg-gray-955/20 border border-gray-850 p-4 rounded-2xl flex flex-col justify-between space-y-3 relative group">
                                         <button onClick={() => deleteCharacterProfile(char.id)}
                                             className="absolute top-2 right-2 p-1.5 bg-gray-850 hover:bg-red-955/20 border border-gray-800 hover:border-red-900/30 text-gray-500 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all">
                                             <Trash className="w-3.5 h-3.5" />
@@ -832,7 +999,7 @@ export default function KidsStoryBuilderPage() {
                                                 ) : char.jobStatus === "QUEUED" || char.jobStatus === "PROCESSING" ? (
                                                     <Loader2 className="w-5 h-5 animate-spin text-violet-500" />
                                                 ) : (
-                                                    <Users className="w-6 h-6 text-gray-700" />
+                                                    <Users className="w-6 h-6 text-gray-750" />
                                                 )}
                                             </div>
 
@@ -840,18 +1007,18 @@ export default function KidsStoryBuilderPage() {
                                                 <input type="text" value={char.name} onChange={e => updateCharacterProfile(char.id, { name: e.target.value })}
                                                     className="bg-gray-800 border border-gray-750 rounded-lg px-2 py-0.5 text-xs font-bold text-white focus:outline-none focus:border-violet-500" />
                                                 <textarea value={char.prompt} onChange={e => updateCharacterProfile(char.id, { prompt: e.target.value })} rows={2}
-                                                    className="w-full bg-gray-800 border border-gray-750 rounded-lg p-1.5 text-[10px] text-gray-350 focus:outline-none focus:border-violet-500 leading-normal" />
+                                                    className="w-full bg-gray-800 border border-gray-750 rounded-lg p-1.5 text-[10px] text-gray-350 focus:outline-none focus:border-violet-500 leading-normal font-sans" />
                                             </div>
                                         </div>
 
                                         <div className="flex gap-2 pt-2 border-t border-gray-850/60 justify-end">
                                             <button onClick={() => handleExpandCharacterPrompt(char.id, char.prompt)}
-                                                className="flex items-center gap-0.5 px-2.5 py-1 bg-violet-600/10 border border-violet-500/20 text-violet-400 text-[10px] font-bold rounded-lg hover:bg-violet-600/20 transition-all">
+                                                className="flex items-center gap-0.5 px-2.5 py-1 bg-violet-600/10 border border-violet-500/20 text-violet-400 text-[10px] font-bold rounded-lg hover:bg-violet-600/20 transition-all font-sans">
                                                 <Sparkles className="w-3 h-3" /> AI Expand Prompt
                                             </button>
                                             <button onClick={() => handleGenerateAvatar(char.id, char.prompt)}
                                                 disabled={char.jobStatus === "QUEUED" || char.jobStatus === "PROCESSING"}
-                                                className="flex items-center gap-0.5 px-2.5 py-1 bg-emerald-600/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold rounded-lg hover:bg-emerald-600/20 transition-all disabled:opacity-50">
+                                                className="flex items-center gap-0.5 px-2.5 py-1 bg-emerald-600/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold rounded-lg hover:bg-emerald-600/20 transition-all disabled:opacity-50 font-sans">
                                                 <Tv className="w-3 h-3" /> Generate Avatar Face
                                             </button>
                                         </div>
@@ -867,14 +1034,14 @@ export default function KidsStoryBuilderPage() {
                             <Sparkles className="w-12 h-12 text-violet-400 mx-auto" />
                             <div>
                                 <h3 className="text-xl font-bold text-white">Draft Script Blueprint</h3>
-                                <p className="text-gray-400 text-xs mt-2 leading-relaxed">
+                                <p className="text-gray-400 text-xs mt-2 leading-relaxed font-sans">
                                     Ready to write the script? The AI will use your defined Cast list ({characters.map(c => c.name).join(", ") || "No characters added yet"})
                                     and premise to write completely original, legally distinct script dialogue lines, suggested song lyrics, and Suno AI prompts.
                                 </p>
                             </div>
 
                             <button onClick={handleAnalyze} disabled={summarizing || (sourceMode === "video" ? !selectedVideoId : !projectScript)}
-                                className="inline-flex items-center justify-center gap-2 px-8 py-3 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-bold text-sm rounded-xl transition-all shadow-lg">
+                                className="inline-flex items-center justify-center gap-2 px-8 py-3 bg-violet-600 hover:bg-violet-500 disabled:opacity-55 text-white font-bold text-sm rounded-xl transition-all shadow-lg font-sans">
                                 {summarizing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
                                 Draft Story Blueprint
                             </button>
@@ -888,30 +1055,30 @@ export default function KidsStoryBuilderPage() {
                                 <h3 className="text-sm font-bold text-white uppercase tracking-wider">Timeline Scenes List</h3>
                                 <div className="flex items-center gap-2">
                                     <button onClick={handleQueueAllVisuals}
-                                        className="flex items-center gap-1 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold rounded-lg transition-all shadow">
+                                        className="flex items-center gap-1 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold rounded-lg transition-all shadow font-sans">
                                         <Wand2 className="w-3.5 h-3.5" /> Queue All Visuals (Assembly Line)
                                     </button>
-                                    <button onClick={addScene} className="flex items-center gap-1 px-2.5 py-1 bg-violet-600/15 hover:bg-violet-600/30 border border-violet-500/20 text-violet-400 text-[11px] font-semibold rounded-lg transition-all">
+                                    <button onClick={addScene} className="flex items-center gap-1 px-2.5 py-1 bg-violet-600/15 hover:bg-violet-600/30 border border-violet-500/20 text-violet-400 text-[11px] font-semibold rounded-lg transition-all font-sans">
                                         <Plus className="w-3.5 h-3.5" /> Add Scene
                                     </button>
                                 </div>
                             </div>
 
-                            <div className="space-y-4">
+                            <div className="space-y-6">
                                 {scenes.map((scene, idx) => (
-                                    <div key={scene.id} className="bg-gray-950/20 border border-gray-850 p-5 rounded-2xl relative group">
+                                    <div key={scene.id} className="bg-gray-955/20 border border-gray-850 p-6 rounded-2xl relative group">
                                         
                                         {/* Delete Card trigger */}
                                         <button onClick={() => deleteScene(scene.id)}
-                                            className="absolute top-2 right-2 p-1 bg-gray-850 hover:bg-red-950/30 border border-gray-800 text-gray-500 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-10">
-                                            <Trash className="w-3 h-3" />
+                                            className="absolute top-2 right-2 p-1.5 bg-gray-850 hover:bg-red-950/30 border border-gray-800 text-gray-500 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-10">
+                                            <Trash className="w-3.5 h-3.5" />
                                         </button>
 
                                         {/* Two-Column Row layout */}
                                         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                                             
                                             {/* Left Inputs */}
-                                            <div className="lg:col-span-7 space-y-3">
+                                            <div className="lg:col-span-6 space-y-3">
                                                 
                                                 <div className="flex items-center gap-2 border-b border-gray-850/60 pb-1.5">
                                                     <span className="w-5 h-5 rounded bg-gray-800 border border-gray-700 flex items-center justify-center text-[10px] font-bold text-white">{idx + 1}</span>
@@ -952,18 +1119,34 @@ export default function KidsStoryBuilderPage() {
                                                     // Suno tracks upload row
                                                     <div className="grid grid-cols-2 gap-2">
                                                         <div>
-                                                            <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">Suggested Suno Prompts</label>
-                                                            <input type="text" readOnly value={scene.sunoStylePrompt || "upbeat kids show track"} 
-                                                                className="w-full bg-gray-850 border border-gray-750 rounded-lg px-2 py-1 text-[10px] text-gray-450 focus:outline-none" />
+                                                            <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">Suno Prompt Suggestion</label>
+                                                            <input type="text" readOnly value={scene.sunoStylePrompt || "upbeat kids singalong, bells, 120bpm"} 
+                                                                className="w-full bg-gray-850 border border-gray-750 rounded-lg px-2.5 py-1.5 text-[10px] text-gray-450 focus:outline-none font-sans" />
                                                         </div>
                                                         <div>
-                                                            <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">Upload Suno MP3</label>
-                                                            <label className="flex items-center justify-between bg-gray-850 border border-dashed border-gray-750 hover:bg-gray-800/80 px-2 py-1 rounded-lg cursor-pointer transition-colors text-[10px] text-gray-400">
-                                                                <span className="truncate">{scene.sunoAudioKey ? "✓ Uploaded" : "Upload MP3"}</span>
-                                                                <Music className="w-3.5 h-3.5 text-gray-500" />
+                                                            <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">Suno MP3 Audio Upload</label>
+                                                            <label className="flex items-center justify-between bg-gray-850 border border-dashed border-gray-750 hover:bg-gray-800/80 px-3 py-1.5 rounded-xl cursor-pointer transition-colors text-[10px] text-gray-400">
+                                                                <span className="truncate">{scene.sunoAudioKey ? "✓ Track uploaded" : "Upload Suno MP3"}</span>
+                                                                <Music className="w-3.5 h-3.5 text-gray-505" />
                                                                 <input type="file" accept="audio/mpeg" onChange={e => e.target.files?.[0] && handleSunoUpload(scene.id, e.target.files[0])} className="hidden" />
                                                             </label>
                                                         </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Audio settings details */}
+                                                {(scene.sunoDuration || scene.narrationPath) && (
+                                                    <div className="bg-violet-955/20 border border-violet-900/30 p-2 rounded-xl flex items-center justify-between">
+                                                        <span className="text-[10px] text-violet-300 font-semibold">
+                                                            Duration resolved: {scene.sunoDuration ? `${scene.sunoDuration.toFixed(1)}s` : "Dialogue voice track ready"}
+                                                            {scene.sunoDuration && ` (requires ${Math.max(1, Math.ceil(scene.sunoDuration / 5))} visual shots)`}
+                                                        </span>
+                                                        <button onClick={() => probeAndPlanShots(scene.id, scene.sunoAudioKey || scene.narrationPath || "", scene.text)}
+                                                            disabled={scene.planningShots}
+                                                            className="flex items-center gap-0.5 px-2 py-0.5 bg-violet-600 hover:bg-violet-500 text-white rounded text-[9px] font-bold transition-all disabled:opacity-50">
+                                                            {scene.planningShots ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Sparkles className="w-2.5 h-2.5" />}
+                                                            AI Plan Shots
+                                                        </button>
                                                     </div>
                                                 )}
 
@@ -980,13 +1163,6 @@ export default function KidsStoryBuilderPage() {
                                                     </div>
                                                     <textarea value={scene.text} onChange={e => updateScene(scene.id, { text: e.target.value })} rows={4}
                                                         className="w-full bg-gray-855 border border-gray-750 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-violet-500 font-mono leading-relaxed" />
-                                                </div>
-
-                                                {/* visual prompt mapping */}
-                                                <div>
-                                                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">RunPod Visual Prompt</label>
-                                                    <textarea value={scene.visualPrompt} onChange={e => updateScene(scene.id, { visualPrompt: e.target.value })} rows={2}
-                                                        className="w-full bg-gray-855 border border-gray-750 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-violet-500 leading-relaxed resize-none" />
                                                 </div>
 
                                                 {/* Action controls */}
@@ -1017,107 +1193,128 @@ export default function KidsStoryBuilderPage() {
                                                         </button>
                                                     )}
 
-                                                    <button onClick={() => generateSceneVideo(scene.id, scene.visualPrompt, scene.character)}
-                                                        disabled={scene.jobStatus === "QUEUED" || scene.jobStatus === "PROCESSING"}
-                                                        className={cn("flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-50",
-                                                            scene.jobStatus === "COMPLETED" ? "bg-gray-850 hover:bg-gray-805 text-gray-300 border border-gray-750" : "bg-violet-600 hover:bg-violet-500 text-white")}>
-                                                        {scene.jobStatus === "QUEUED" || scene.jobStatus === "PROCESSING" ? (
-                                                            <>
-                                                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                                                    <span>Generating Visual...</span>
-                                                                </>
-                                                            ) : (
-                                                                <>
-                                                                    <Wand2 className="w-3.5 h-3.5" />
-                                                                    <span>{scene.jobStatus === "COMPLETED" ? "Regenerate Visual" : "Generate Visual"}</span>
-                                                                </>
-                                                            )}
-                                                        </button>
-                                                    </div>
-
-                                                </div>
-
-                                                {/* Right Video Clip Output */}
-                                                <div className="lg:col-span-5 flex flex-col h-full min-h-[240px] bg-black/45 border border-gray-850 rounded-2xl overflow-hidden p-4 justify-between">
-                                                    <div className="flex-1 flex flex-col items-center justify-center">
-                                                        {scene.visualPath ? (
-                                                            <div className="w-full aspect-video flex items-center justify-center bg-black/50 rounded-xl overflow-hidden border border-gray-800">
-                                                                <video src={`/api/storage/signed?key=${scene.visualPath}`} controls className="max-h-full max-w-full" />
-                                                            </div>
-                                                        ) : (
-                                                            <div className="text-center space-y-2">
-                                                                {scene.jobStatus === "QUEUED" ? (
-                                                                    <div className="flex flex-col items-center gap-2 text-gray-450">
-                                                                        <RefreshCw className="w-8 h-8 animate-spin text-gray-600" />
-                                                                        <span className="text-xs font-semibold">Queued in RunPod...</span>
-                                                                    </div>
-                                                                ) : scene.jobStatus === "PROCESSING" ? (
-                                                                    <div className="flex flex-col items-center gap-2 text-violet-400">
-                                                                        <Loader2 className="w-8 h-8 animate-spin text-violet-500" />
-                                                                        <span className="text-xs font-semibold">Generating scene frames...</span>
-                                                                    </div>
-                                                                ) : scene.jobStatus === "FAILED" ? (
-                                                                    <div className="flex flex-col items-center gap-2 text-red-400">
-                                                                        <XCircle className="w-8 h-8 text-red-500" />
-                                                                        <span className="text-xs font-semibold">Generation failed</span>
-                                                                    </div>
-                                                                ) : (
-                                                                    <div className="text-gray-650 flex flex-col items-center gap-1.5">
-                                                                        <Film className="w-8 h-8 text-gray-800" />
-                                                                        <span className="text-[11px]">Video clip not generated</span>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        )}
-                                                    </div>
-
-                                                    <div className="pt-3 border-t border-gray-850 flex items-center justify-between">
-                                                        <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Preview Display</span>
-                                                        <span className="text-[10px] text-gray-400 font-mono">
-                                                            {scene.jobId ? `Job: ${scene.jobId.substring(0, 8)}` : "No job associated"}
-                                                        </span>
-                                                    </div>
+                                                    <button onClick={() => addShotToScene(scene.id)}
+                                                        className="flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-bold transition-all border border-violet-550/20 bg-violet-600/10 hover:bg-violet-600/20 text-violet-400">
+                                                        <Plus className="w-3.5 h-3.5" />
+                                                        <span>Add Visual Shot</span>
+                                                    </button>
                                                 </div>
 
                                             </div>
+
+                                            {/* Right Column: Visual Shots Sequence timeline list */}
+                                            <div className="lg:col-span-6 space-y-3.5">
+                                                <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block border-b border-gray-800/60 pb-1">Visual Progression Shots Sequence</label>
+                                                
+                                                <div className="space-y-3 max-h-[360px] overflow-y-auto pr-1">
+                                                    {scene.visualShots?.map((shot, sIdx) => (
+                                                        <div key={shot.id} className="bg-black/30 border border-gray-850/80 rounded-xl p-3 flex flex-col md:flex-row gap-3 relative group/shot">
+                                                            
+                                                            {/* Remove shot */}
+                                                            <button onClick={() => deleteShotFromScene(scene.id, shot.id)}
+                                                                className="absolute top-1 right-1 p-1 bg-gray-850 hover:bg-red-955/20 border border-gray-800 hover:border-red-900/30 text-gray-500 hover:text-red-400 rounded-lg opacity-0 group-hover/shot:opacity-100 transition-all">
+                                                                <Trash className="w-3 h-3" />
+                                                            </button>
+
+                                                            {/* left side prompt inputs */}
+                                                            <div className="flex-1 space-y-2">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-[10px] font-bold text-gray-400">Shot {sIdx + 1}</span>
+                                                                    
+                                                                    <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider block">Primary Subject:</span>
+                                                                    <select value={shot.primaryCharacter} onChange={e => updateShot(scene.id, shot.id, { primaryCharacter: e.target.value })}
+                                                                        className="bg-gray-850 border border-gray-750 text-[10px] text-white px-2 py-0.5 rounded focus:outline-none cursor-pointer">
+                                                                        <option value="Narrator font-sans">None (Landscape)</option>
+                                                                        {characters.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                                                    </select>
+                                                                </div>
+
+                                                                <textarea value={shot.visualPrompt} onChange={e => updateShot(scene.id, shot.id, { visualPrompt: e.target.value })} rows={2}
+                                                                    className="w-full bg-gray-800 border border-gray-750 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-violet-500 font-sans leading-normal resize-none" />
+                                                                
+                                                                <div className="flex items-center justify-between gap-2">
+                                                                    <span className="text-[10px] font-mono text-gray-500">
+                                                                        {shot.jobStatus === "QUEUED" ? (
+                                                                            <span className="flex items-center gap-1 text-gray-450"><RefreshCw className="w-3 h-3 animate-spin" /> Queued</span>
+                                                                        ) : shot.jobStatus === "PROCESSING" ? (
+                                                                            <span className="flex items-center gap-1 text-violet-400"><Loader2 className="w-3 h-3 animate-spin" /> Generating...</span>
+                                                                        ) : shot.jobStatus === "COMPLETED" ? (
+                                                                            <span className="flex items-center gap-1 text-emerald-400"><Check className="w-3 h-3" /> Ready</span>
+                                                                        ) : shot.jobStatus === "FAILED" ? (
+                                                                            <span className="flex items-center gap-1 text-red-400"><XCircle className="w-3 h-3" /> Failed</span>
+                                                                        ) : (
+                                                                            "Idle"
+                                                                        )}
+                                                                    </span>
+
+                                                                    <button onClick={() => generateShotVideo(scene.id, shot.id, shot.visualPrompt, shot.primaryCharacter)}
+                                                                        disabled={shot.jobStatus === "QUEUED" || shot.jobStatus === "PROCESSING"}
+                                                                        className="px-2 py-0.5 bg-violet-600 hover:bg-violet-550 disabled:opacity-50 text-[10px] text-white font-bold rounded transition-all font-sans">
+                                                                        {shot.jobStatus === "COMPLETED" ? "Regenerate" : "Generate"}
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+
+                                                            {/* right side visual preview */}
+                                                            <div className="w-28 aspect-video bg-black/40 border border-gray-850 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center">
+                                                                {shot.visualPath ? (
+                                                                    <video src={`/api/storage/signed?key=${shot.visualPath}`} controls className="w-full h-full object-cover" />
+                                                                ) : (
+                                                                    <Film className="w-5 h-5 text-gray-800" />
+                                                                )}
+                                                            </div>
+
+                                                        </div>
+                                                    ))}
+                                                    
+                                                    {(!scene.visualShots || scene.visualShots.length === 0) && (
+                                                        <div className="text-center py-6 text-xs text-gray-650 font-sans bg-black/10 border border-dashed border-gray-850 rounded-xl">
+                                                            No visual shots configured yet. Click "Add Visual Shot" or "AI Plan Shots" to start planning visuals.
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                            </div>
+
                                         </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* STEP 5: Stitch & Export compile */}
-                        {currentStep === 5 && (
-                            <div className="max-w-xl mx-auto space-y-6 py-6">
-                                <div className="text-center space-y-2">
-                                    <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto" />
-                                    <h3 className="text-lg font-bold text-white">Stitch & Export Timeline</h3>
-                                    <p className="text-gray-400 text-xs">Stitches pre-generated dialogue voice tracks, loops visual clips, overlays custom Suno music, and compiles your final kids movie.</p>
-                                </div>
-
-                                <button onClick={handleCompile} disabled={compiling || scenes.some(s => !s.visualPath)}
-                                    className="w-full flex items-center justify-center gap-1.5 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-bold text-sm rounded-xl transition-all shadow-md">
-                                    {compiling ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                                    Compile & Stitch Kids Video
-                                </button>
-
-                                {compiledVideoUrl && (
-                                    <div className="pt-4 border-t border-gray-800 flex flex-col items-center gap-3">
-                                        <video src={compiledVideoUrl} controls className="max-h-[360px] rounded-xl border border-gray-800 bg-black w-full" />
-                                        <a href={compiledVideoUrl} download className="w-full flex items-center justify-center gap-1.5 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-all">
-                                            <Play className="w-3.5 h-3.5" /> Download Stitched Kids Movie
-                                        </a>
                                     </div>
-                                )}
+                                ))}
                             </div>
-                        )}
+                        </div>
+                    )}
+
+                    {/* STEP 5: Stitch & Export compile */}
+                    {currentStep === 5 && (
+                        <div className="max-w-xl mx-auto space-y-6 py-6">
+                            <div className="text-center space-y-2">
+                                <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto" />
+                                <h3 className="text-lg font-bold text-white tracking-tight">Stitch & Export Timeline</h3>
+                                <p className="text-gray-400 text-xs font-sans">Stitches pre-generated dialogue voice tracks, loops visual shots, overlays custom Suno music, and compiles your final kids movie.</p>
+                            </div>
+
+                            <button onClick={handleCompile} disabled={compiling || scenes.some(s => !s.visualPath)}
+                                className="w-full flex items-center justify-center gap-1.5 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-bold text-sm rounded-xl transition-all shadow-md font-sans">
+                                {compiling ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                                Compile & Stitch Kids Video
+                            </button>
+
+                            {compiledVideoUrl && (
+                                <div className="pt-4 border-t border-gray-800 flex flex-col items-center gap-3">
+                                    <video src={compiledVideoUrl} controls className="max-h-[360px] rounded-xl border border-gray-800 bg-black w-full" />
+                                    <a href={compiledVideoUrl} download className="w-full flex items-center justify-center gap-1.5 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-all font-sans">
+                                        <Play className="w-3.5 h-3.5" /> Download Stitched Kids Movie
+                                    </a>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Footer Navigation Buttons */}
                 <div className="mt-8 pt-4 border-t border-gray-850 flex items-center justify-between">
                     <button onClick={() => setCurrentStep(prev => Math.max(1, prev - 1))}
                         disabled={currentStep === 1}
-                        className="flex items-center gap-1 px-4 py-2 bg-gray-850 hover:bg-gray-800 disabled:opacity-40 text-gray-300 font-bold text-xs rounded-xl transition-all border border-gray-750">
+                        className="flex items-center gap-1 px-4 py-2 bg-gray-850 hover:bg-gray-800 disabled:opacity-40 text-gray-300 font-bold text-xs rounded-xl transition-all border border-gray-750 font-sans">
                         <ArrowLeft className="w-3.5 h-3.5" /> Previous Step
                     </button>
 
@@ -1125,7 +1322,7 @@ export default function KidsStoryBuilderPage() {
 
                     <button onClick={() => setCurrentStep(prev => Math.min(5, prev + 1))}
                         disabled={currentStep === 5}
-                        className="flex items-center gap-1 px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white font-bold text-xs rounded-xl transition-all shadow">
+                        className="flex items-center gap-1 px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white font-bold text-xs rounded-xl transition-all shadow font-sans">
                         Next Step <ArrowRight className="w-3.5 h-3.5" />
                     </button>
                 </div>

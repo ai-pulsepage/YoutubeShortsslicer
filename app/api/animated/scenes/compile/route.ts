@@ -35,12 +35,40 @@ export async function POST(req: NextRequest) {
             const sceneVideoLoopedPath = path.join(tempDir, `scene-${idx}-video-looped.mp4`);
             const sceneFinalVideoPath = path.join(tempDir, `scene-${idx}-final.mp4`);
 
-            // A. Retrieve Visual Video Clip from R2
-            if (!scene.visualPath) {
-                throw new Error(`Scene ${idx + 1} has no generated video clip path`);
+            // A. Retrieve Visual Video Clip from R2 (Support Multi-Shot Sequence)
+            if (scene.visualShots && Array.isArray(scene.visualShots) && scene.visualShots.length > 0) {
+                console.log(`[Compile] Processing multi-shot sequence for scene ${idx + 1}: ${scene.visualShots.length} shots`);
+                const localShotPaths: string[] = [];
+
+                for (let sIdx = 0; sIdx < scene.visualShots.length; sIdx++) {
+                    const shot = scene.visualShots[sIdx];
+                    if (!shot.visualPath) {
+                        throw new Error(`Scene ${idx + 1} Shot ${sIdx + 1} has no generated video clip path`);
+                    }
+                    const localShotPath = path.join(tempDir, `scene-${idx}-shot-${sIdx}.mp4`);
+                    console.log(`[Compile] Downloading shot ${sIdx + 1}/${scene.visualShots.length}: ${shot.visualPath}`);
+                    await downloadFileFromR2(shot.visualPath, localShotPath);
+                    localShotPaths.push(localShotPath);
+                }
+
+                // Concatenate shots together first using concat demuxer
+                const shotsConcatTxtPath = path.join(tempDir, `scene-${idx}-shots-concat.txt`);
+                const concatContent = localShotPaths.map(p => `file '${p.replace(/\\/g, "/")}'`).join("\n");
+                fs.writeFileSync(shotsConcatTxtPath, concatContent);
+
+                console.log(`[Compile] Concatenating ${localShotPaths.length} shots for scene ${idx + 1}`);
+                execSync(
+                    `ffmpeg -f concat -safe 0 -i "${shotsConcatTxtPath}" -c copy "${sceneVideoInputPath}" -y`,
+                    { encoding: "utf8" }
+                );
+            } else {
+                // Fallback to single visual clip
+                if (!scene.visualPath) {
+                    throw new Error(`Scene ${idx + 1} has no generated video clip path`);
+                }
+                console.log(`[Compile] Downloading visual clip: ${scene.visualPath}`);
+                await downloadFileFromR2(scene.visualPath, sceneVideoInputPath);
             }
-            console.log(`[Compile] Downloading visual clip: ${scene.visualPath}`);
-            await downloadFileFromR2(scene.visualPath, sceneVideoInputPath);
 
             // B. Generate or Retrieve Audio for the Scene
             let duration = 5.0; // default fallback duration in seconds

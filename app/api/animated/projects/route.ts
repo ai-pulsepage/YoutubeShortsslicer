@@ -42,6 +42,7 @@ export async function GET(req: NextRequest) {
                 let type: "dialogue" | "song" = s.sceneIndex % 3 === 2 ? "song" : "dialogue";
                 let visualPrompt = s.searchQueries || "";
                 let sunoStylePrompt = "";
+                let visualShots: any[] = [];
 
                 try {
                     if (s.searchQueries && s.searchQueries.startsWith("{")) {
@@ -51,6 +52,7 @@ export async function GET(req: NextRequest) {
                         if (meta.type) type = meta.type;
                         if (meta.visualPrompt !== undefined) visualPrompt = meta.visualPrompt;
                         if (meta.sunoStylePrompt) sunoStylePrompt = meta.sunoStylePrompt;
+                        if (meta.visualShots) visualShots = meta.visualShots;
                     }
                 } catch (e) {
                     console.error("JSON parse searchQueries failed:", e);
@@ -64,6 +66,7 @@ export async function GET(req: NextRequest) {
                     text: s.narrationText || "",
                     visualPrompt,
                     sunoStylePrompt,
+                    visualShots,
                     visualPath: s.assembledPath || undefined,
                     narrationPath: s.narrationPath || undefined
                 };
@@ -132,7 +135,7 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        // 3. Sync scenes timeline with JSON serialized metadata
+        // 3. Sync scenes timeline with JSON serialized metadata including visualShots
         if (scenes && Array.isArray(scenes)) {
             // Delete old scenes first
             await prisma.docScene.deleteMany({
@@ -149,7 +152,8 @@ export async function POST(req: NextRequest) {
                     character: s.character,
                     voice: s.voice,
                     type: s.type,
-                    sunoStylePrompt: s.sunoStylePrompt || ""
+                    sunoStylePrompt: s.sunoStylePrompt || "",
+                    visualShots: s.visualShots || []
                 });
 
                 await prisma.docScene.create({
@@ -194,6 +198,7 @@ export async function POST(req: NextRequest) {
                     let type: "dialogue" | "song" = s.sceneIndex % 3 === 2 ? "song" : "dialogue";
                     let visualPrompt = s.searchQueries || "";
                     let sunoStylePrompt = "";
+                    let visualShots: any[] = [];
 
                     try {
                         if (s.searchQueries && s.searchQueries.startsWith("{")) {
@@ -203,6 +208,7 @@ export async function POST(req: NextRequest) {
                             if (meta.type) type = meta.type;
                             if (meta.visualPrompt !== undefined) visualPrompt = meta.visualPrompt;
                             if (meta.sunoStylePrompt) sunoStylePrompt = meta.sunoStylePrompt;
+                            if (meta.visualShots) visualShots = meta.visualShots;
                         }
                     } catch (e) {
                         console.error("JSON parse searchQueries failed:", e);
@@ -216,6 +222,7 @@ export async function POST(req: NextRequest) {
                         text: s.narrationText || "",
                         visualPrompt,
                         sunoStylePrompt,
+                        visualShots,
                         visualPath: s.assembledPath || undefined,
                         narrationPath: s.narrationPath || undefined
                     };
