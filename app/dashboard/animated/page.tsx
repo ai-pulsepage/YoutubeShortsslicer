@@ -23,7 +23,8 @@ import {
     Save,
     Sparkle,
     ArrowRight,
-    ArrowLeft
+    ArrowLeft,
+    Copy
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -120,6 +121,8 @@ export default function KidsStoryBuilderPage() {
     const [includeMusicals, setIncludeMusicals] = useState<boolean>(true);
     const [rewritingShotId, setRewritingShotId] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
+    const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+    const [librarySearchQuery, setLibrarySearchQuery] = useState("");
 
     const [docId, setDocId] = useState<string | null>(null);
     const [scenes, setScenes] = useState<Scene[]>([]);
@@ -860,6 +863,28 @@ export default function KidsStoryBuilderPage() {
         setCharacters(prev => prev.filter(c => c.id !== id));
     };
 
+    // Duplicate an existing character profile including their prompt and generated face R2 path
+    const cloneCharacter = (char: Character) => {
+        let updatedCharacters: typeof characters = [];
+        setCharacters(prev => {
+            const next = [
+                ...prev,
+                {
+                    id: `char-clone-${Date.now()}`,
+                    name: char.name ? `${char.name} (Copy)` : "Copy",
+                    prompt: char.prompt,
+                    imagePath: char.imagePath,
+                    jobStatus: char.imagePath ? "COMPLETED" as const : undefined
+                }
+            ];
+            updatedCharacters = next;
+            return next;
+        });
+        setTimeout(() => {
+            handleSaveProject(undefined, updatedCharacters);
+        }, 50);
+    };
+
     // Edit shot values
     const updateShot = (sceneId: string, shotId: string, updates: Partial<Shot>) => {
         setScenes(prev =>
@@ -1259,28 +1284,9 @@ export default function KidsStoryBuilderPage() {
                                         ))}
                                     </select>
 
-                                    <select onChange={e => {
-                                        if (e.target.value !== "") {
-                                            const selectedChar = libraryCharacters.find(c => c.id === e.target.value);
-                                            if (selectedChar) {
-                                                setCharacters(prev => [
-                                                    ...prev,
-                                                    {
-                                                        id: `char-lib-${Date.now()}`,
-                                                        name: selectedChar.name,
-                                                        prompt: selectedChar.prompt,
-                                                        imagePath: selectedChar.imagePath
-                                                    }
-                                                ]);
-                                            }
-                                            e.target.value = "";
-                                        }
-                                    }} className="bg-violet-600/10 border border-violet-500/25 text-violet-400 rounded-lg text-xs font-bold px-3 py-1.5 focus:outline-none cursor-pointer">
-                                        <option value="" className="bg-gray-900 text-gray-450">Add from Library...</option>
-                                        {libraryCharacters.map(char => (
-                                            <option key={char.id} value={char.id} className="bg-gray-900 text-white">{char.name}</option>
-                                        ))}
-                                    </select>
+                                    <button onClick={() => setIsLibraryOpen(true)} className="flex items-center gap-1 px-3 py-1.5 bg-violet-600/10 border border-violet-500/25 text-violet-400 rounded-lg text-xs font-bold hover:bg-violet-600/20 transition-all font-sans cursor-pointer">
+                                        <Search className="w-4 h-4" /> Browse Library
+                                    </button>
 
                                     <button onClick={addManualCharacter} className="flex items-center gap-1 px-3 py-1.5 bg-violet-600/10 border border-violet-500/25 text-violet-400 rounded-lg text-xs font-bold hover:bg-violet-600/20 transition-all font-sans">
                                         <Plus className="w-4 h-4" /> Add Character
@@ -1335,6 +1341,10 @@ export default function KidsStoryBuilderPage() {
                                                 disabled={!char.name || !char.prompt}
                                                 className="flex items-center gap-0.5 px-2.5 py-1 bg-violet-600/10 border border-violet-500/20 text-violet-400 text-[10px] font-bold rounded-lg hover:bg-violet-600/20 transition-all font-sans disabled:opacity-40">
                                                 <Save className="w-3 h-3" /> Save to Library
+                                            </button>
+                                            <button onClick={() => cloneCharacter(char)}
+                                                className="flex items-center gap-0.5 px-2.5 py-1 bg-violet-600/10 border border-violet-500/20 text-violet-400 text-[10px] font-bold rounded-lg hover:bg-violet-600/20 transition-all font-sans cursor-pointer">
+                                                <Copy className="w-3.5 h-3.5" /> Clone
                                             </button>
                                         </div>
                                     </div>
@@ -1697,8 +1707,93 @@ export default function KidsStoryBuilderPage() {
                         Next Step <ArrowRight className="w-3.5 h-3.5" />
                     </button>
                 </div>
+ 
+             </div>
+ 
+             {/* Global Character Library Browser Modal */}
+             {isLibraryOpen && (
+                 <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
+                     <div className="bg-gray-950 border border-gray-800 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh] animate-in fade-in-50 zoom-in-95 duration-150">
+                         {/* Modal Header */}
+                         <div className="p-5 border-b border-gray-850 flex items-center justify-between bg-gray-900/40">
+                             <div>
+                                 <h3 className="text-sm font-bold text-white flex items-center gap-2 uppercase tracking-wider">
+                                     <Users className="w-4 h-4 text-violet-400" /> Global Character Library
+                                 </h3>
+                                 <p className="text-[10px] text-gray-500 font-sans mt-0.5">Select a character to inject them directly into your project cast.</p>
+                             </div>
+                             <button onClick={() => { setIsLibraryOpen(false); setLibrarySearchQuery(""); }}
+                                 className="p-1.5 bg-gray-850 hover:bg-gray-800 text-gray-400 hover:text-white rounded-lg border border-gray-800 transition-all text-[10px] font-bold font-mono">
+                                 ESC
+                             </button>
+                         </div>
+ 
+                         {/* Search Bar */}
+                         <div className="p-4 border-b border-gray-850 bg-gray-955/10 flex items-center gap-3">
+                             <div className="flex-1 relative">
+                                 <Search className="w-4 h-4 text-gray-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                                 <input type="text" placeholder="Search saved characters by name..." value={librarySearchQuery} onChange={e => setLibrarySearchQuery(e.target.value)}
+                                     className="w-full bg-gray-900 border border-gray-800 focus:border-violet-500 rounded-xl pl-10 pr-4 py-2 text-xs text-white focus:outline-none placeholder-gray-600 transition-all font-sans" />
+                             </div>
+                         </div>
+ 
+                         {/* Grid / List */}
+                         <div className="p-5 overflow-y-auto flex-1 bg-gray-955/5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                             {libraryCharacters.filter(c => c.name.toLowerCase().includes(librarySearchQuery.toLowerCase())).length === 0 ? (
+                                 <div className="col-span-full text-center py-12 text-xs text-gray-500 font-sans">
+                                     No characters found matching "{librarySearchQuery}". Generate and save characters first!
+                                 </div>
+                             ) : (
+                                 libraryCharacters.filter(c => c.name.toLowerCase().includes(librarySearchQuery.toLowerCase())).map(c => (
+                                     <div key={c.id} className="bg-gray-900/60 border border-gray-850 hover:border-violet-500/30 p-3 rounded-2xl flex gap-3 transition-all group">
+                                         {/* Avatar Image */}
+                                         <div className="w-14 h-14 bg-black/40 border border-gray-850 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center">
+                                             {c.imagePath ? (
+                                                 <img src={`/api/storage/signed?key=${c.imagePath}`} alt="" className="w-full h-full object-cover" />
+                                             ) : (
+                                                 <Users className="w-5 h-5 text-gray-750" />
+                                             )}
+                                         </div>
+ 
+                                         {/* Details & Select button */}
+                                         <div className="flex-1 min-w-0 flex flex-col justify-between">
+                                             <div>
+                                                 <h4 className="text-xs font-bold text-white truncate">{c.name}</h4>
+                                                 <p className="text-[10px] text-gray-450 line-clamp-2 mt-0.5 leading-snug font-sans">{c.prompt}</p>
+                                             </div>
+                                             <button onClick={() => {
+                                                 let updatedCharacters: typeof characters = [];
+                                                 setCharacters(prev => {
+                                                     const next = [
+                                                         ...prev,
+                                                         {
+                                                             id: `char-lib-${Date.now()}`,
+                                                             name: c.name,
+                                                             prompt: c.prompt,
+                                                             imagePath: c.imagePath,
+                                                             jobStatus: c.imagePath ? "COMPLETED" as const : undefined
+                                                         }
+                                                     ];
+                                                     updatedCharacters = next;
+                                                     return next;
+                                                 });
+                                                 setIsLibraryOpen(false);
+                                                 setLibrarySearchQuery("");
+                                                 setTimeout(() => {
+                                                     handleSaveProject(undefined, updatedCharacters);
+                                                 }, 50);
+                                             }} className="mt-2 w-full py-1 bg-violet-600 hover:bg-violet-500 text-white text-[10px] font-bold rounded-lg transition-all font-sans cursor-pointer text-center">
+                                                 Add to Cast
+                                             </button>
+                                         </div>
+                                     </div>
+                                 ))
+                             )}
+                         </div>
+                     </div>
+                 </div>
+             )}
 
             </div>
-        </div>
     );
 }
