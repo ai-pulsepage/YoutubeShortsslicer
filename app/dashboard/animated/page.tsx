@@ -25,7 +25,8 @@ import {
     ArrowRight,
     ArrowLeft,
     Copy,
-    Upload
+    Upload,
+    Folder
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -129,6 +130,9 @@ export default function KidsStoryBuilderPage() {
     const [scenes, setScenes] = useState<Scene[]>([]);
     const [characters, setCharacters] = useState<Character[]>([]);
     const [libraryCharacters, setLibraryCharacters] = useState<Character[]>([]);
+    const [pickingAvatarCharId, setPickingAvatarCharId] = useState<string | null>(null);
+    const [r2Avatars, setR2Avatars] = useState<{ key: string; size: number }[]>([]);
+    const [loadingR2Avatars, setLoadingR2Avatars] = useState(false);
 
     // Voice preview audio state
     const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
@@ -915,6 +919,41 @@ export default function KidsStoryBuilderPage() {
         }
     };
 
+    // Scan avatars/ prefix in R2 and display file chooser popup
+    const openR2Picker = async (charId: string) => {
+        setPickingAvatarCharId(charId);
+        setLoadingR2Avatars(true);
+        try {
+            const res = await fetch("/api/storage/list?prefix=avatars/");
+            const data = await res.json();
+            if (res.ok) {
+                setR2Avatars(data.files || []);
+            }
+        } catch (err) {
+            console.error("Failed to load R2 avatars:", err);
+        } finally {
+            setLoadingR2Avatars(false);
+        }
+    };
+
+    // Link a chosen R2 image key to character card imagePath
+    const handleSelectR2Avatar = (key: string) => {
+        if (!pickingAvatarCharId) return;
+        const charId = pickingAvatarCharId;
+
+        let updatedCharacters: typeof characters = [];
+        setCharacters(prev => {
+            const next = prev.map(c => (c.id === charId ? { ...c, imagePath: key, jobStatus: "COMPLETED" as const } : c));
+            updatedCharacters = next;
+            return next;
+        });
+
+        setPickingAvatarCharId(null);
+        setTimeout(() => {
+            handleSaveProject(undefined, updatedCharacters);
+        }, 50);
+    };
+
     // Edit shot values
     const updateShot = (sceneId: string, shotId: string, updates: Partial<Shot>) => {
         setScenes(prev =>
@@ -1370,6 +1409,10 @@ export default function KidsStoryBuilderPage() {
                                                 className="flex items-center gap-0.5 px-2.5 py-1 bg-emerald-600/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold rounded-lg hover:bg-emerald-600/20 transition-all disabled:opacity-50 font-sans">
                                                 <Tv className="w-3 h-3" /> Generate Avatar Face
                                             </button>
+                                            <button onClick={() => openR2Picker(char.id)}
+                                                className="flex items-center gap-0.5 px-2.5 py-1 bg-violet-600/10 border border-violet-500/20 text-violet-400 text-[10px] font-bold rounded-lg hover:bg-violet-600/20 transition-all font-sans cursor-pointer">
+                                                <Folder className="w-3 h-3 text-violet-400" /> Pick from R2
+                                            </button>
                                             {(char.jobStatus === "QUEUED" || char.jobStatus === "PROCESSING") && (
                                                 <button onClick={() => resetCharacterStatus(char.id)}
                                                     className="px-2.5 py-1 bg-gray-850 hover:bg-gray-800 border border-gray-750 text-gray-400 hover:text-white text-[10px] font-bold rounded-lg transition-all font-sans cursor-pointer">
@@ -1728,7 +1771,57 @@ export default function KidsStoryBuilderPage() {
                             )}
                         </div>
                     )}
+
+            {/* R2 Avatar Picker Modal */}
+            {pickingAvatarCharId !== null && (
+                <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
+                    <div className="bg-gray-950 border border-gray-800 rounded-3xl w-full max-w-xl overflow-hidden shadow-2xl flex flex-col max-h-[80vh] animate-in fade-in-50 zoom-in-95 duration-150">
+                        {/* Header */}
+                        <div className="p-5 border-b border-gray-850 flex items-center justify-between bg-gray-900/40">
+                            <div>
+                                <h3 className="text-sm font-bold text-white flex items-center gap-2 uppercase tracking-wider">
+                                    <Folder className="w-4 h-4 text-violet-400" /> Select Avatar from R2
+                                </h3>
+                                <p className="text-[10px] text-gray-550 font-sans mt-0.5">Select a generated profile image already uploaded to your avatars/ folder.</p>
+                            </div>
+                            <button onClick={() => setPickingAvatarCharId(null)}
+                                className="p-1.5 bg-gray-850 hover:bg-gray-800 text-gray-400 hover:text-white rounded-lg border border-gray-800 transition-all text-[10px] font-bold font-mono">
+                                CANCEL
+                            </button>
+                        </div>
+
+                        {/* Content */}
+                        {loadingR2Avatars ? (
+                            <div className="flex flex-col items-center justify-center py-20 gap-3">
+                                <Loader2 className="w-8 h-8 animate-spin text-violet-500" />
+                                <span className="text-xs text-gray-500 font-sans">Scanning avatars/ directory...</span>
+                            </div>
+                        ) : r2Avatars.length === 0 ? (
+                            <div className="text-center py-20 space-y-2">
+                                <Folder className="w-10 h-10 text-gray-700 mx-auto" />
+                                <h4 className="text-xs font-bold text-gray-450">No R2 avatars found</h4>
+                                <p className="text-[10px] text-gray-550 font-sans max-w-xs mx-auto">No generated files are present inside the avatars/ folder. Generate some avatars first or upload them manually.</p>
+                            </div>
+                        ) : (
+                            <div className="p-5 overflow-y-auto flex-1 grid grid-cols-3 sm:grid-cols-4 gap-4 bg-gray-955/5">
+                                {r2Avatars.map((avatar, idx) => (
+                                    <button key={idx} onClick={() => handleSelectR2Avatar(avatar.key)}
+                                        className="bg-gray-900/60 border border-gray-850 hover:border-violet-500 hover:bg-gray-900 p-2 rounded-2xl flex flex-col items-center gap-2 transition-all cursor-pointer group text-center">
+                                        <div className="w-16 h-16 bg-black/40 border border-gray-800 rounded-xl overflow-hidden flex items-center justify-center flex-shrink-0">
+                                            <img src={`/api/storage/signed?key=${avatar.key}`} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-all" />
+                                        </div>
+                                        <span className="text-[9px] font-mono text-gray-500 group-hover:text-white truncate w-full block">
+                                            {avatar.key.split("/").pop()}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
+            )}
+
+            </div>
 
                 {/* Footer Navigation Buttons */}
                 <div className="mt-8 pt-4 border-t border-gray-850 flex items-center justify-between">

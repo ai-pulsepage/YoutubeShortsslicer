@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import {
-    ChevronLeft, Loader2, Plus, Trash2, Sparkles, Tv, Users, ArrowLeft,
+    ChevronLeft, Loader2, Plus, Trash2, Sparkles, Tv, Users, ArrowLeft, Folder, Copy, Upload
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -21,6 +21,11 @@ export default function AnimatedCastLibraryPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [insufficientFunds, setInsufficientFunds] = useState(false);
+
+    // R2 Pick Avatar states
+    const [pickingAvatarCharName, setPickingAvatarCharName] = useState<string | null>(null);
+    const [r2Avatars, setR2Avatars] = useState<{ key: string; size: number }[]>([]);
+    const [loadingR2Avatars, setLoadingR2Avatars] = useState(false);
 
     // Form state
     const [showForm, setShowForm] = useState(false);
@@ -116,6 +121,92 @@ export default function AnimatedCastLibraryPage() {
             setError(err.message || "Failed to create character.");
         } finally {
             setCreating(false);
+        }
+    };
+
+    const handleCloneCharacter = async (char: LibraryCharacter) => {
+        setError("");
+        try {
+            const res = await fetch("/api/animated/characters/library", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    name: `${char.name} (Copy)`,
+                    prompt: char.prompt,
+                    imagePath: char.imagePath
+                })
+            });
+            if (!res.ok) throw new Error("Failed to clone character");
+            await loadLibrary();
+        } catch (err: any) {
+            setError(err.message || "Failed to clone character.");
+        }
+    };
+
+    const handleUploadAvatarImage = async (charName: string, file: File) => {
+        setError("");
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("characterId", charName.replace(/\s+/g, "_"));
+
+        try {
+            const res = await fetch("/api/animated/characters/upload", {
+                method: "POST",
+                body: formData
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to upload custom avatar");
+
+            const res2 = await fetch("/api/animated/characters/library", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    name: charName,
+                    imagePath: data.imagePath
+                })
+            });
+            if (!res2.ok) throw new Error("Failed to update character image path");
+            await loadLibrary();
+        } catch (err: any) {
+            setError(err.message || "Error uploading avatar image.");
+        }
+    };
+
+    const openR2Picker = async (charName: string) => {
+        setPickingAvatarCharName(charName);
+        setLoadingR2Avatars(true);
+        try {
+            const res = await fetch("/api/storage/list?prefix=avatars/");
+            const data = await res.json();
+            if (res.ok) {
+                setR2Avatars(data.files || []);
+            }
+        } catch (err) {
+            console.error("Failed to load R2 avatars:", err);
+        } finally {
+            setLoadingR2Avatars(false);
+        }
+    };
+
+    const handleSelectR2Avatar = async (key: string) => {
+        if (!pickingAvatarCharName) return;
+        const charName = pickingAvatarCharName;
+
+        try {
+            const res = await fetch("/api/animated/characters/library", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    name: charName,
+                    imagePath: key
+                })
+            });
+            if (!res.ok) throw new Error("Failed to link selected avatar image");
+            await loadLibrary();
+        } catch (err: any) {
+            setError(err.message || "Error setting avatar.");
+        } finally {
+            setPickingAvatarCharName(null);
         }
     };
 
@@ -306,10 +397,8 @@ export default function AnimatedCastLibraryPage() {
                             <button onClick={() => handleDeleteCharacter(char.name)}
                                 className="absolute top-3 right-3 p-1.5 bg-gray-850 hover:bg-red-950/20 border border-gray-800 hover:border-red-900/30 text-gray-500 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all">
                                 <Trash2 className="w-4 h-4" />
-                            </button>
-
-                            <div className="flex gap-4">
-                                <div className="w-20 h-20 bg-black/40 border border-gray-800 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center relative">
+                            </button>                            <div className="flex gap-4">
+                                <div className="w-20 h-20 bg-black/40 border border-gray-850 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center relative group/avatar cursor-pointer">
                                     {char.imagePath ? (
                                         <img src={`/api/storage/signed?key=${char.imagePath}`} alt="" className="w-full h-full object-cover" />
                                     ) : char.jobStatus === "QUEUED" || char.jobStatus === "PROCESSING" ? (
@@ -317,15 +406,28 @@ export default function AnimatedCastLibraryPage() {
                                     ) : (
                                         <Users className="w-8 h-8 text-gray-750" />
                                     )}
+                                    <label className="absolute inset-0 bg-black/75 opacity-0 group-hover/avatar:opacity-100 flex flex-col items-center justify-center transition-all cursor-pointer text-center p-1 text-[9px] font-bold text-violet-400">
+                                        <Upload className="w-4 h-4 mb-0.5 text-violet-450" />
+                                        Upload
+                                        <input type="file" accept="image/*" className="hidden"
+                                            onChange={e => {
+                                                const file = e.target.files?.[0];
+                                                if (file) handleUploadAvatarImage(char.name, file);
+                                            }} />
+                                    </label>
                                 </div>
 
                                 <div className="flex-1 min-w-0 space-y-1">
                                     <h4 className="text-sm font-bold text-white">{char.name}</h4>
-                                    <p className="text-[11px] text-gray-400 leading-relaxed font-sans">{char.prompt || "No appearance details described yet."}</p>
+                                    <p className="text-[11px] text-gray-450 leading-relaxed font-sans">{char.prompt || "No appearance details described yet."}</p>
                                 </div>
                             </div>
 
                             <div className="flex gap-2 pt-3 border-t border-gray-850/60 justify-end">
+                                <button onClick={() => handleCloneCharacter(char)}
+                                    className="flex items-center gap-0.5 px-3 py-1.5 bg-gray-850 hover:bg-gray-800 border border-gray-750 text-gray-300 text-[10px] font-bold rounded-lg transition-all font-sans cursor-pointer">
+                                    <Copy className="w-3 h-3 text-gray-400" /> Clone
+                                </button>
                                 <button onClick={() => handleExpandPrompt(char.id, char.prompt)}
                                     disabled={expandingId === char.id}
                                     className="flex items-center gap-0.5 px-3 py-1.5 bg-violet-600/10 border border-violet-500/20 text-violet-400 text-[10px] font-bold rounded-lg hover:bg-violet-600/20 transition-all font-sans">
@@ -337,9 +439,62 @@ export default function AnimatedCastLibraryPage() {
                                     className="flex items-center gap-0.5 px-3 py-1.5 bg-emerald-600/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold rounded-lg hover:bg-emerald-600/20 transition-all disabled:opacity-50 font-sans">
                                     <Tv className="w-3 h-3" /> Generate Avatar Face
                                 </button>
+                                <button onClick={() => openR2Picker(char.name)}
+                                    className="flex items-center gap-0.5 px-3 py-1.5 bg-violet-600/10 border border-violet-500/20 text-violet-400 text-[10px] font-bold rounded-lg hover:bg-violet-600/20 transition-all font-sans cursor-pointer">
+                                    <Folder className="w-3 h-3 text-violet-400" /> Pick from R2
+                                </button>
                             </div>
                         </div>
                     ))}
+                </div>
+            )}
+
+            {/* R2 Avatar Picker Modal */}
+            {pickingAvatarCharName !== null && (
+                <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
+                    <div className="bg-gray-955 border border-gray-800 rounded-3xl w-full max-w-xl overflow-hidden shadow-2xl flex flex-col max-h-[80vh] animate-in fade-in-50 zoom-in-95 duration-150">
+                        {/* Header */}
+                        <div className="p-5 border-b border-gray-850 flex items-center justify-between bg-gray-900/40">
+                            <div>
+                                <h3 className="text-sm font-bold text-white flex items-center gap-2 uppercase tracking-wider">
+                                    <Folder className="w-4 h-4 text-violet-400" /> Select Avatar from R2
+                                </h3>
+                                <p className="text-[10px] text-gray-550 font-sans mt-0.5">Select a generated profile image already uploaded to your avatars/ folder.</p>
+                            </div>
+                            <button onClick={() => setPickingAvatarCharName(null)}
+                                className="p-1.5 bg-gray-850 hover:bg-gray-800 text-gray-400 hover:text-white rounded-lg border border-gray-800 transition-all text-[10px] font-bold font-mono">
+                                CANCEL
+                            </button>
+                        </div>
+
+                        {/* Content */}
+                        {loadingR2Avatars ? (
+                            <div className="flex flex-col items-center justify-center py-20 gap-3">
+                                <Loader2 className="w-8 h-8 animate-spin text-violet-500" />
+                                <span className="text-xs text-gray-500 font-sans">Scanning avatars/ directory...</span>
+                            </div>
+                        ) : r2Avatars.length === 0 ? (
+                            <div className="text-center py-20 space-y-2">
+                                <Folder className="w-10 h-10 text-gray-700 mx-auto" />
+                                <h4 className="text-xs font-bold text-gray-450">No R2 avatars found</h4>
+                                <p className="text-[10px] text-gray-550 font-sans max-w-xs mx-auto">No generated files are present inside the avatars/ folder. Generate some avatars first or upload them manually.</p>
+                            </div>
+                        ) : (
+                            <div className="p-5 overflow-y-auto flex-1 grid grid-cols-3 sm:grid-cols-4 gap-4 bg-gray-955/5">
+                                {r2Avatars.map((avatar, idx) => (
+                                    <button key={idx} onClick={() => handleSelectR2Avatar(avatar.key)}
+                                        className="bg-gray-900/60 border border-gray-850 hover:border-violet-500 hover:bg-gray-900 p-2 rounded-2xl flex flex-col items-center gap-2 transition-all cursor-pointer group text-center">
+                                        <div className="w-16 h-16 bg-black/40 border border-gray-800 rounded-xl overflow-hidden flex items-center justify-center flex-shrink-0">
+                                            <img src={`/api/storage/signed?key=${avatar.key}`} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-all" />
+                                        </div>
+                                        <span className="text-[9px] font-mono text-gray-500 group-hover:text-white truncate w-full block">
+                                            {avatar.key.split("/").pop()}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
         </div>
