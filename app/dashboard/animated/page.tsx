@@ -1010,6 +1010,9 @@ export default function KidsStoryBuilderPage() {
                 <Link href="/dashboard/animated" className="text-sm font-bold text-violet-400 border-b-2 border-violet-500 pb-1.5 font-sans">
                     Story Timeline
                 </Link>
+                <Link href="/dashboard/animated/projects" className="text-sm font-semibold text-gray-500 hover:text-gray-300 pb-1.5 font-sans">
+                    Projects Manager
+                </Link>
                 <Link href="/dashboard/animated/characters" className="text-sm font-semibold text-gray-500 hover:text-gray-300 pb-1.5 font-sans">
                     Cast Library
                 </Link>

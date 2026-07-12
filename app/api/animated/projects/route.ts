@@ -112,10 +112,23 @@ export async function POST(req: NextRequest) {
             });
         }
 
-        // 2. Upsert character assets
+        // 2. Sync character assets
         if (characters && Array.isArray(characters)) {
+            const activeDbIds = characters
+                .map(c => c.id)
+                .filter(id => id && !id.startsWith("char-"));
+
+            // Remove characters deleted in the frontend
+            await prisma.docAsset.deleteMany({
+                where: {
+                    documentaryId: activeId,
+                    type: "CHARACTER",
+                    id: { notIn: activeDbIds }
+                }
+            });
+
             for (const char of characters) {
-                const isTempId = char.id.startsWith("char-preset-") || char.id.startsWith("char-manual-") || char.id.length < 10;
+                const isTempId = char.id.startsWith("char-");
                 
                 await prisma.docAsset.upsert({
                     where: { id: isTempId ? "dummy-non-matching-id" : char.id },
