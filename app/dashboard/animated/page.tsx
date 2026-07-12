@@ -1284,8 +1284,8 @@ export default function KidsStoryBuilderPage() {
                                                             <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">Speaker Actor</label>
                                                             <select value={scene.character} onChange={e => updateScene(scene.id, { character: e.target.value })}
                                                                 className="w-full bg-gray-850 border border-gray-750 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-violet-500">
-                                                                <option value="Narrator">Narrator</option>
-                                                                {characters.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                                                <option value="Narrator" className="bg-gray-900 text-white">Narrator</option>
+                                                                {characters.map(c => <option key={c.id} value={c.name} className="bg-gray-900 text-white">{c.name}</option>)}
                                                             </select>
                                                         </div>
                                                         <div>
@@ -1293,7 +1293,7 @@ export default function KidsStoryBuilderPage() {
                                                             <div className="flex items-center gap-1">
                                                                 <select value={scene.voice} onChange={e => updateScene(scene.id, { voice: e.target.value })}
                                                                     className="flex-1 bg-gray-850 border border-gray-750 rounded-lg px-1.5 py-1 text-[10px] text-white focus:outline-none focus:border-violet-500">
-                                                                    {EDGE_TTS_VOICES.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
+                                                                    {EDGE_TTS_VOICES.map(v => <option key={v.id} value={v.id} className="bg-gray-900 text-white">{v.label}</option>)}
                                                                 </select>
                                                                 <button onClick={() => playVoicePreview(scene)}
                                                                     className={cn("p-1.5 rounded-lg border transition-all",
@@ -1412,8 +1412,8 @@ export default function KidsStoryBuilderPage() {
                                                                     <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider block">Primary Subject:</span>
                                                                     <select value={shot.primaryCharacter} onChange={e => updateShot(scene.id, shot.id, { primaryCharacter: e.target.value })}
                                                                         className="bg-gray-850 border border-gray-750 text-[10px] text-white px-2 py-0.5 rounded focus:outline-none cursor-pointer">
-                                                                        <option value="Narrator font-sans">None (Landscape)</option>
-                                                                        {characters.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                                                        <option value="None" className="bg-gray-900 text-white">None (Landscape)</option>
+                                                                        {characters.map(c => <option key={c.id} value={c.name} className="bg-gray-900 text-white">{c.name}</option>)}
                                                                     </select>
                                                                 </div>
 
