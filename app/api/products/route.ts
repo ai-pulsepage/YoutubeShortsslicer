@@ -8,6 +8,11 @@ export async function GET() {
 
     const products = await prisma.uGCProduct.findMany({
         where: { userId: session.user.id },
+        include: {
+            _count: {
+                select: { ugcJobs: true }
+            }
+        },
         orderBy: { createdAt: "desc" }
     });
     return NextResponse.json(products);

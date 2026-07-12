@@ -56,6 +56,16 @@ export async function POST(req: NextRequest) {
             console.log(`[Webhook]   Asset ${job.assetId} updated`);
         }
 
+        // Check if this job was for a UGC avatar
+        const meta = job.metadata as any;
+        if (meta && meta.ugcAvatarId) {
+            await prisma.uGCAvatar.update({
+                where: { id: meta.ugcAvatarId },
+                data: { referenceImageUrl: outputPath },
+            });
+            console.log(`[Webhook]   UGC Avatar ${meta.ugcAvatarId} updated with image path`);
+        }
+
         // Update shot (video clips)
         if (job.shotId && job.jobType === "shot_video") {
             const updateData: Record<string, string> = { clipPath: outputPath };

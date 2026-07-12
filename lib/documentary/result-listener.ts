@@ -59,6 +59,16 @@ async function processResult(result: ResultMessage): Promise<void> {
             console.log(`[ResultListener]   Asset ${job.assetId} updated with image`);
         }
 
+        // Check if this job was for a UGC avatar
+        const meta = job.metadata as any;
+        if (meta && meta.ugcAvatarId) {
+            await prisma.uGCAvatar.update({
+                where: { id: meta.ugcAvatarId },
+                data: { referenceImageUrl: outputPath },
+            });
+            console.log(`[ResultListener]   UGC Avatar ${meta.ugcAvatarId} updated with image path`);
+        }
+
         if (job.shotId && job.jobType === "shot_video") {
             const updateData: Record<string, string> = { clipPath: outputPath };
             if (lastFramePath) updateData.lastFramePath = lastFramePath;

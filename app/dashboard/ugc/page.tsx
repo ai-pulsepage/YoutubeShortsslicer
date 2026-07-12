@@ -2,22 +2,64 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
-    Sparkles, Plus, Upload, Trash2, Loader2, CheckCircle2,
-    XCircle, ExternalLink, Play, User, Package, Wand2, AlertCircle,
+    Sparkles,
+    Plus,
+    Upload,
+    Trash2,
+    Loader2,
+    CheckCircle2,
+    XCircle,
+    ExternalLink,
+    Play,
+    User,
+    Package,
+    Wand2,
+    AlertCircle,
+    Copy,
+    Folder,
+    ArrowLeft,
+    RefreshCw,
+    Search,
+    Eye
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 type Avatar = {
-    id: string; name: string; persona: string | null;
-    referenceImageUrl: string | null; voiceEngine: string; voiceId: string | null;
+    id: string;
+    name: string;
+    persona: string | null;
+    referenceImageUrl: string | null;
+    voiceEngine: string;
+    voiceId: string | null;
+    jobId?: string | null;
+    jobStatus?: string | null;
 };
+
 type Product = {
-    id: string; name: string; description: string | null;
-    price: string | null; imageUrls: string[]; sourceUrl: string; brand: string | null;
+    id: string;
+    name: string;
+    description: string | null;
+    price: string | null;
+    imageUrls: string[];
+    sourceUrl: string;
+    brand: string | null;
+    _count?: {
+        ugcJobs: number;
+    };
 };
+
 type UGCJob = {
-    id: string; status: string; script: string | null; outputUrl: string | null;
-    hookStyle: string; avatar: { name: string }; product: { name: string };
+    id: string;
+    status: string;
+    script: string | null;
+    outputUrl: string | null;
+    hookStyle: string;
+    avatarId: string;
+    productId: string;
+    avatar: { name: string };
+    product: { name: string };
+    createdAt: string;
 };
 
 const HOOK_STYLES = [
@@ -29,423 +71,832 @@ const HOOK_STYLES = [
 ];
 
 const STATUS_COLORS: Record<string, string> = {
-    PENDING: "text-gray-400",
-    GENERATING_SCRIPT: "text-blue-400",
-    GENERATING_VIDEO: "text-violet-400",
-    COMPOSITING: "text-cyan-400",
-    DONE: "text-emerald-400",
-    FAILED: "text-red-400",
+    PENDING: "text-gray-400 bg-gray-500/10 border-gray-500/20",
+    GENERATING_SCRIPT: "text-blue-400 bg-blue-500/10 border-blue-500/20",
+    GENERATING_VIDEO: "text-violet-400 bg-violet-500/10 border-violet-500/20",
+    COMPOSITING: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20",
+    DONE: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
+    FAILED: "text-red-400 bg-red-500/10 border-red-500/20",
 };
 
-// ─── Avatars Panel ────────────────────────────────────────
-function AvatarPanel() {
+export default function UGCStudioPage() {
+    // Left Cast Panel States
     const [avatars, setAvatars] = useState<Avatar[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [showForm, setShowForm] = useState(false);
-    const [creating, setCreating] = useState(false);
-    const [form, setForm] = useState({ name: "", persona: "", voiceEngine: "elevenlabs", voiceId: "" });
-    const [uploadingId, setUploadingId] = useState<string | null>(null);
-    const fileRef = useRef<HTMLInputElement>(null);
-    const activeAvatarId = useRef<string | null>(null);
+    const [loadingAvatars, setLoadingAvatars] = useState(true);
+    const [spawnerSuggestion, setSpawnerSuggestion] = useState("");
+    const [spawnerLoading, setSpawnerLoading] = useState(false);
+    
+    // Manual character form
+    const [showManualForm, setShowManualForm] = useState(false);
+    const [manualForm, setManualForm] = useState({ name: "", persona: "", voiceEngine: "elevenlabs", voiceId: "" });
+    const [manualCreating, setManualCreating] = useState(false);
 
-    const fetchAvatars = useCallback(async () => {
-        setLoading(true);
-        const res = await fetch("/api/avatars");
-        setAvatars(await res.json());
-        setLoading(false);
-    }, []);
+    // Right Campaign Panel States
+    const [products, setProducts] = useState<Product[]>([]);
+    const [loadingProducts, setLoadingProducts] = useState(true);
+    const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
+    const [scrapingUrl, setScrapingUrl] = useState("");
+    const [scrapingLoading, setScrapingLoading] = useState(false);
+    
+    // UGC Job Generation States
+    const [jobs, setJobs] = useState<UGCJob[]>([]);
+    const [loadingJobs, setLoadingJobs] = useState(true);
+    const [selectedAvatarId, setSelectedAvatarId] = useState("");
+    const [selectedHookStyle, setSelectedHookStyle] = useState("TESTIMONIAL");
+    const [useCustomScript, setUseCustomScript] = useState(false);
+    const [customScript, setCustomScript] = useState("");
+    const [generatingVideo, setGeneratingVideo] = useState(false);
+    const [activeJobId, setActiveJobId] = useState<string | null>(null);
+    
+    // Upload references
+    const [uploadingAvatarId, setUploadingAvatarId] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const activeUploadAvatarId = useRef<string | null>(null);
 
-    useEffect(() => { fetchAvatars(); }, [fetchAvatars]);
+    // R2 Picker modal states
+    const [pickingAvatarId, setPickingAvatarId] = useState<string | null>(null);
+    const [r2Avatars, setR2Avatars] = useState<{ key: string; size: number }[]>([]);
+    const [loadingR2Avatars, setLoadingR2Avatars] = useState(false);
 
-    const createAvatar = async () => {
-        if (!form.name.trim()) return;
-        setCreating(true);
-        await fetch("/api/avatars", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(form),
-        });
-        setForm({ name: "", persona: "", voiceEngine: "elevenlabs", voiceId: "" });
-        setShowForm(false);
-        setCreating(false);
-        fetchAvatars();
+    const [error, setError] = useState("");
+
+    // ─── Data Loaders ──────────────────────────────────────────
+    const fetchAvatars = async () => {
+        setLoadingAvatars(true);
+        try {
+            const res = await fetch("/api/avatars");
+            if (res.ok) setAvatars(await res.json());
+        } catch (err) {
+            console.error("Failed to load avatars:", err);
+        } finally {
+            setLoadingAvatars(false);
+        }
     };
 
-    const uploadImage = async (avatarId: string, file: File) => {
-        setUploadingId(avatarId);
+    const fetchProducts = async () => {
+        setLoadingProducts(true);
+        try {
+            const res = await fetch("/api/products");
+            if (res.ok) setProducts(await res.json());
+        } catch (err) {
+            console.error("Failed to load campaigns:", err);
+        } finally {
+            setLoadingProducts(false);
+        }
+    };
+
+    const fetchJobs = async () => {
+        setLoadingJobs(true);
+        try {
+            const res = await fetch("/api/ugc");
+            if (res.ok) setJobs(await res.json());
+        } catch (err) {
+            console.error("Failed to load jobs:", err);
+        } finally {
+            setLoadingJobs(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchAvatars();
+        fetchProducts();
+        fetchJobs();
+    }, []);
+
+    // ─── Reactive Polling loops ─────────────────────────────────
+    // 1. Poll active video jobs
+    useEffect(() => {
+        const activeJobs = jobs.filter(j => !["DONE", "FAILED"].includes(j.status));
+        if (activeJobs.length === 0 && !activeJobId) return;
+
+        const interval = setInterval(async () => {
+            try {
+                const res = await fetch("/api/ugc");
+                if (res.ok) {
+                    const latestJobs = await res.json();
+                    setJobs(latestJobs);
+
+                    // Check if active triggered job is done
+                    if (activeJobId) {
+                        const activeJob = latestJobs.find((j: any) => j.id === activeJobId);
+                        if (activeJob && ["DONE", "FAILED"].includes(activeJob.status)) {
+                            setActiveJobId(null);
+                            fetchProducts(); // Refresh job count badges
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to poll jobs:", err);
+            }
+        }, 4000);
+
+        return () => clearInterval(interval);
+    }, [jobs, activeJobId]);
+
+    // 2. Poll rendering avatar faces
+    useEffect(() => {
+        const pendingAvatars = avatars.filter(a => a.jobStatus === "QUEUED" || a.jobStatus === "PROCESSING");
+        if (pendingAvatars.length === 0) return;
+
+        const interval = setInterval(async () => {
+            try {
+                const res = await fetch("/api/avatars");
+                if (res.ok) {
+                    setAvatars(await res.json());
+                }
+            } catch (err) {
+                console.error("Failed to poll avatars:", err);
+            }
+        }, 3000);
+
+        return () => clearInterval(interval);
+    }, [avatars]);
+
+    // ─── Avatar Handlers ────────────────────────────────────────
+    const handleSpawnAvatar = async () => {
+        if (!spawnerSuggestion.trim()) return;
+        setSpawnerLoading(true);
+        setError("");
+        try {
+            const res = await fetch("/api/avatars/generate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ suggestion: spawnerSuggestion })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to spawn character");
+            
+            setSpawnerSuggestion("");
+            fetchAvatars();
+        } catch (err: any) {
+            setError(err.message || "Failed to spawn avatar.");
+        } finally {
+            setSpawnerLoading(false);
+        }
+    };
+
+    const handleCreateManualAvatar = async () => {
+        if (!manualForm.name.trim()) return;
+        setManualCreating(true);
+        try {
+            const res = await fetch("/api/avatars", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(manualForm)
+            });
+            if (res.ok) {
+                setManualForm({ name: "", persona: "", voiceEngine: "elevenlabs", voiceId: "" });
+                setShowManualForm(false);
+                fetchAvatars();
+            }
+        } catch (err) {
+            console.error("Manual avatar creation failed:", err);
+        } finally {
+            setManualCreating(false);
+        }
+    };
+
+    const handleCloneAvatar = async (avatar: Avatar) => {
+        try {
+            const res = await fetch("/api/avatars", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    name: `${avatar.name} (Copy)`,
+                    persona: avatar.persona,
+                    voiceEngine: avatar.voiceEngine,
+                    voiceId: avatar.voiceId
+                })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                
+                // If it had a face image, patch the copy with the same face key
+                if (avatar.referenceImageUrl) {
+                    await fetch(`/api/avatars/${data.id}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ referenceImageUrl: avatar.referenceImageUrl })
+                    });
+                }
+                fetchAvatars();
+            }
+        } catch (err) {
+            console.error("Failed to clone avatar:", err);
+        }
+    };
+
+    const handleUploadAvatarImage = async (avatarId: string, file: File) => {
+        setUploadingAvatarId(avatarId);
         const fd = new FormData();
         fd.append("file", file);
         fd.append("type", "image");
-        await fetch(`/api/avatars/${avatarId}/upload`, { method: "POST", body: fd });
-        setUploadingId(null);
-        fetchAvatars();
+        try {
+            const res = await fetch(`/api/avatars/${avatarId}/upload`, {
+                method: "POST",
+                body: fd
+            });
+            if (res.ok) {
+                fetchAvatars();
+            }
+        } catch (err) {
+            console.error("Upload failed:", err);
+        } finally {
+            setUploadingAvatarId(null);
+        }
     };
 
-    if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-violet-400" /></div>;
+    const handleDeleteAvatar = async (id: string, name: string) => {
+        if (!confirm(`Are you sure you want to delete AI Cast member "${name}"?`)) return;
+        try {
+            const res = await fetch(`/api/avatars/${id}`, {
+                method: "DELETE"
+            });
+            if (res.ok) fetchAvatars();
+        } catch (err) {
+            console.error("Failed to delete avatar:", err);
+        }
+    };
 
-    return (
-        <div className="space-y-4">
-            <div className="flex items-center justify-between">
-                <p className="text-sm text-gray-400">{avatars.length} avatar{avatars.length !== 1 ? "s" : ""}</p>
-                <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-violet-500/15 text-violet-400 text-sm font-medium hover:bg-violet-500/25 transition-colors">
-                    <Plus className="w-4 h-4" /> New avatar
-                </button>
-            </div>
+    // R2 Picker Handlers
+    const openR2Picker = async (id: string) => {
+        setPickingAvatarId(id);
+        setLoadingR2Avatars(true);
+        try {
+            const res = await fetch("/api/storage/list?prefix=avatars/");
+            const data = await res.json();
+            if (res.ok) {
+                setR2Avatars(data.files || []);
+            }
+        } catch (err) {
+            console.error("Failed to load R2 avatars:", err);
+        } finally {
+            setLoadingR2Avatars(false);
+        }
+    };
 
-            {showForm && (
-                <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-5 space-y-4">
-                    <h3 className="text-sm font-semibold text-white">Create avatar</h3>
-                    <input type="text" placeholder="Name (e.g. 'Sarah — fitness creator')" value={form.name}
-                        onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                        className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-violet-500" />
-                    <textarea placeholder="Persona (optional — tone, style, generation...)" value={form.persona}
-                        onChange={e => setForm(f => ({ ...f, persona: e.target.value }))} rows={2}
-                        className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-violet-500 resize-none" />
-                    <div className="grid grid-cols-2 gap-3">
-                        <select value={form.voiceEngine} onChange={e => setForm(f => ({ ...f, voiceEngine: e.target.value }))}
-                            className="bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500">
-                            <option value="elevenlabs">ElevenLabs</option>
-                            <option value="xtts">XTTS (self-hosted)</option>
-                            <option value="dia">Dia (RunPod)</option>
-                        </select>
-                        <input type="text" placeholder="Voice ID" value={form.voiceId}
-                            onChange={e => setForm(f => ({ ...f, voiceId: e.target.value }))}
-                            className="bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-violet-500" />
-                    </div>
-                    <div className="flex gap-3">
-                        <button onClick={createAvatar} disabled={creating || !form.name.trim()}
-                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 disabled:opacity-50 transition-colors">
-                            {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Create
-                        </button>
-                        <button onClick={() => setShowForm(false)} className="px-4 py-2 rounded-xl text-sm text-gray-400 hover:text-white">Cancel</button>
-                    </div>
-                </div>
-            )}
+    const handleSelectR2Avatar = async (key: string) => {
+        if (!pickingAvatarId) return;
+        const id = pickingAvatarId;
+        try {
+            const res = await fetch(`/api/avatars/${id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ referenceImageUrl: key })
+            });
+            if (res.ok) fetchAvatars();
+        } catch (err) {
+            console.error("Failed to link R2 image:", err);
+        } finally {
+            setPickingAvatarId(null);
+        }
+    };
 
-            {avatars.length === 0 ? (
-                <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-12 text-center">
-                    <User className="w-10 h-10 text-gray-600 mx-auto mb-3" />
-                    <p className="text-gray-400 text-sm">No avatars yet. Create one above.</p>
-                </div>
-            ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {avatars.map(avatar => (
-                        <div key={avatar.id} className="bg-gray-900/50 border border-gray-800 rounded-2xl p-4 space-y-3">
-                            <div className="relative w-full aspect-square rounded-xl overflow-hidden bg-gray-800 flex items-center justify-center">
-                                {avatar.referenceImageUrl ? (
-                                    <img src={`/api/storage/signed?key=${avatar.referenceImageUrl}`} alt={avatar.name} className="w-full h-full object-cover" />
-                                ) : (
-                                    <div className="flex flex-col items-center gap-2 text-gray-600"><User className="w-8 h-8" /><span className="text-xs">No photo</span></div>
-                                )}
-                                {uploadingId === avatar.id && (
-                                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-white" /></div>
-                                )}
-                            </div>
-                            <div>
-                                <p className="font-semibold text-white text-sm">{avatar.name}</p>
-                                {avatar.persona && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{avatar.persona}</p>}
-                                <span className="inline-block mt-2 text-xs px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-400">{avatar.voiceEngine}</span>
-                            </div>
-                            <button onClick={() => { activeAvatarId.current = avatar.id; fileRef.current?.click(); }}
-                                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-dashed border-gray-700 text-xs text-gray-400 hover:border-violet-500 hover:text-violet-400 transition-colors">
-                                <Upload className="w-3.5 h-3.5" />
-                                {avatar.referenceImageUrl ? "Replace photo" : "Upload photo"}
-                            </button>
-                        </div>
-                    ))}
-                </div>
-            )}
-
-            <input ref={fileRef} type="file" accept="image/*" className="hidden"
-                onChange={e => {
-                    const file = e.target.files?.[0];
-                    if (file && activeAvatarId.current) uploadImage(activeAvatarId.current, file);
-                }} />
-        </div>
-    );
-}
-
-// ─── Products Panel ───────────────────────────────────────
-function ProductPanel() {
-    const [products, setProducts] = useState<Product[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [url, setUrl] = useState("");
-    const [ingesting, setIngesting] = useState(false);
-    const [error, setError] = useState("");
-
-    const fetchProducts = useCallback(async () => {
-        setLoading(true);
-        const res = await fetch("/api/products");
-        setProducts(await res.json());
-        setLoading(false);
-    }, []);
-
-    useEffect(() => { fetchProducts(); }, [fetchProducts]);
-
-    const ingestProduct = async () => {
-        if (!url.trim()) return;
-        setIngesting(true);
+    // ─── Campaign Handlers ─────────────────────────────────────
+    const handleCreateCampaign = async () => {
+        if (!scrapingUrl.trim()) return;
+        setScrapingLoading(true);
         setError("");
         try {
             const res = await fetch("/api/products/ingest", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url }),
+                body: JSON.stringify({ url: scrapingUrl })
             });
-            if (!res.ok) throw new Error("Failed to scrape product");
-            setUrl("");
+            if (!res.ok) throw new Error("Failed to ingest product details");
+            setScrapingUrl("");
             fetchProducts();
         } catch (err: any) {
-            setError(err.message);
+            setError(err.message || "Failed to create product campaign.");
         } finally {
-            setIngesting(false);
+            setScrapingLoading(false);
         }
     };
 
-    return (
-        <div className="space-y-4">
-            <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-4">
-                <p className="text-sm text-gray-400 mb-3">Paste any product or affiliate URL to auto-fill details</p>
-                <div className="flex gap-3">
-                    <input type="url" placeholder="https://amzn.to/... or any product page" value={url}
-                        onChange={e => setUrl(e.target.value)} onKeyDown={e => e.key === "Enter" && ingestProduct()}
-                        className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-violet-500" />
-                    <button onClick={ingestProduct} disabled={ingesting || !url.trim()}
-                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 disabled:opacity-50 transition-colors whitespace-nowrap">
-                        {ingesting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Package className="w-4 h-4" />} Add product
-                    </button>
-                </div>
-                {error && <p className="text-red-400 text-xs mt-2">{error}</p>}
-            </div>
-
-            {loading ? (
-                <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-violet-400" /></div>
-            ) : products.length === 0 ? (
-                <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-12 text-center">
-                    <Package className="w-10 h-10 text-gray-600 mx-auto mb-3" />
-                    <p className="text-gray-400 text-sm">No products yet. Paste a URL above.</p>
-                </div>
-            ) : (
-                <div className="space-y-3">
-                    {products.map(product => (
-                        <div key={product.id} className="flex items-center gap-4 bg-gray-900/50 border border-gray-800 rounded-xl px-4 py-3 hover:border-gray-700 transition-colors">
-                            <div className="w-14 h-14 rounded-xl bg-gray-800 overflow-hidden flex-shrink-0">
-                                {product.imageUrls[0] ? <img src={product.imageUrls[0]} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Package className="w-5 h-5 text-gray-600" /></div>}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-white truncate">{product.name}</p>
-                                {product.price && <p className="text-xs text-emerald-400">{product.price}</p>}
-                                {product.brand && <p className="text-xs text-gray-500">{product.brand}</p>}
-                            </div>
-                            <a href={product.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-gray-600 hover:text-violet-400 transition-colors">
-                                <ExternalLink className="w-4 h-4" />
-                            </a>
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
-    );
-}
-
-// ─── Generate Panel ───────────────────────────────────────
-function GeneratePanel() {
-    const [avatars, setAvatars] = useState<Avatar[]>([]);
-    const [products, setProducts] = useState<Product[]>([]);
-    const [jobs, setJobs] = useState<UGCJob[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [selectedAvatar, setSelectedAvatar] = useState("");
-    const [selectedProduct, setSelectedProduct] = useState("");
-    const [hookStyle, setHookStyle] = useState("TESTIMONIAL");
-    const [customScript, setCustomScript] = useState("");
-    const [useCustomScript, setUseCustomScript] = useState(false);
-    const [generating, setGenerating] = useState(false);
-    const [lastJobId, setLastJobId] = useState<string | null>(null);
-    const [error, setError] = useState("");
-
-    const fetchData = useCallback(async () => {
-        setLoading(true);
-        const [avRes, prRes, jobRes] = await Promise.all([
-            fetch("/api/avatars"), fetch("/api/products"), fetch("/api/ugc"),
-        ]);
-        const [av, pr, jo] = await Promise.all([avRes.json(), prRes.json(), jobRes.json()]);
-        setAvatars(Array.isArray(av) ? av : []);
-        setProducts(Array.isArray(pr) ? pr : []);
-        setJobs(Array.isArray(jo) ? jo : []);
-        setLoading(false);
-    }, []);
-
-    useEffect(() => { fetchData(); }, [fetchData]);
-
-    useEffect(() => {
-        if (!lastJobId) return;
-        const interval = setInterval(async () => {
-            const res = await fetch(`/api/ugc/${lastJobId}`);
-            const job = await res.json();
-            if (job.status === "DONE" || job.status === "FAILED") {
-                setLastJobId(null);
-                fetchData();
-            }
-        }, 4000);
-        return () => clearInterval(interval);
-    }, [lastJobId, fetchData]);
-
-    const generate = async () => {
-        if (!selectedAvatar || !selectedProduct) return;
-        setGenerating(true);
+    const handleGenerateUGCVideo = async () => {
+        if (!selectedAvatarId || !selectedCampaignId) return;
+        setGeneratingVideo(true);
         setError("");
         try {
             const res = await fetch("/api/ugc/generate", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ avatarId: selectedAvatar, productId: selectedProduct, hookStyle, customScript: useCustomScript ? customScript : undefined }),
+                body: JSON.stringify({
+                    avatarId: selectedAvatarId,
+                    productId: selectedCampaignId,
+                    hookStyle: selectedHookStyle,
+                    customScript: useCustomScript ? customScript : undefined
+                })
             });
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error || "Generation failed");
-            setLastJobId(data.jobId);
-            fetchData();
+            if (!res.ok) throw new Error(data.error || "UGC Generation failed");
+            
+            setActiveJobId(data.jobId);
+            setCustomScript("");
+            setUseCustomScript(false);
+            fetchJobs();
         } catch (err: any) {
-            setError(err.message);
+            setError(err.message || "UGC Generation failed.");
         } finally {
-            setGenerating(false);
+            setGeneratingVideo(false);
         }
     };
 
-    if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-violet-400" /></div>;
+    // Find active product campaign details
+    const activeCampaign = products.find(p => p.id === selectedCampaignId);
+    // Find jobs nested in this campaign
+    const campaignJobs = jobs.filter(j => j.productId === selectedCampaignId);
 
     return (
-        <div className="space-y-6">
-            {(avatars.length === 0 || products.length === 0) && (
-                <div className="flex items-start gap-3 bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
-                    <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
-                    <p className="text-sm text-amber-300">
-                        {avatars.length === 0 && "Create an avatar in the Avatars tab first. "}
-                        {products.length === 0 && "Add a product in the Products tab first."}
+        <div className="space-y-6 pb-12">
+            {/* Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-gray-800 pb-4 gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-2">
+                        AI UGC Studio
+                    </h1>
+                    <p className="text-gray-400 mt-1 text-sm font-sans">
+                        Design consistent AI UGC characters, scrape product detail campaigns, and batch generate high-converting promotional videos.
                     </p>
                 </div>
+            </div>
+
+            {error && (
+                <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl text-red-400 text-xs leading-relaxed font-sans flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
+                    <span>{error}</span>
+                </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                    <label className="text-xs font-medium text-gray-400 uppercase tracking-wider">Avatar</label>
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
-                        {avatars.map(a => (
-                            <button key={a.id} onClick={() => setSelectedAvatar(a.id)}
-                                className={cn("flex items-center gap-3 w-full px-3 py-2.5 rounded-xl border text-left transition-all",
-                                    selectedAvatar === a.id ? "border-violet-500 bg-violet-500/10" : "border-gray-800 bg-gray-900/50 hover:border-gray-700")}>
-                                <div className="w-8 h-8 rounded-lg bg-gray-800 flex-shrink-0 overflow-hidden">
-                                    {a.referenceImageUrl ? <img src={`/api/storage/signed?key=${a.referenceImageUrl}`} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><User className="w-4 h-4 text-gray-600" /></div>}
-                                </div>
-                                <div><p className="text-sm font-medium text-white">{a.name}</p><p className="text-xs text-gray-500">{a.voiceEngine}</p></div>
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                <div className="space-y-2">
-                    <label className="text-xs font-medium text-gray-400 uppercase tracking-wider">Product</label>
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
-                        {products.map(p => (
-                            <button key={p.id} onClick={() => setSelectedProduct(p.id)}
-                                className={cn("flex items-center gap-3 w-full px-3 py-2.5 rounded-xl border text-left transition-all",
-                                    selectedProduct === p.id ? "border-violet-500 bg-violet-500/10" : "border-gray-800 bg-gray-900/50 hover:border-gray-700")}>
-                                <div className="w-8 h-8 rounded-lg bg-gray-800 flex-shrink-0 overflow-hidden">
-                                    {p.imageUrls[0] ? <img src={p.imageUrls[0]} alt="" className="w-full h-full object-cover" /> : <Package className="w-4 h-4 text-gray-600" />}
-                                </div>
-                                <div className="min-w-0"><p className="text-sm font-medium text-white truncate">{p.name}</p>{p.price && <p className="text-xs text-emerald-400">{p.price}</p>}</div>
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            </div>
-
-            <div className="space-y-2">
-                <label className="text-xs font-medium text-gray-400 uppercase tracking-wider">Hook style</label>
-                <div className="flex flex-wrap gap-2">
-                    {HOOK_STYLES.map(h => (
-                        <button key={h.value} onClick={() => setHookStyle(h.value)}
-                            className={cn("px-3 py-1.5 rounded-xl text-xs font-medium border transition-all",
-                                hookStyle === h.value ? "border-violet-500 bg-violet-500/15 text-violet-400" : "border-gray-800 text-gray-400 hover:border-gray-700")}>
-                            {h.label} <span className="text-gray-600">{h.desc}</span>
-                        </button>
-                    ))}
-                </div>
-            </div>
-
-            <div className="space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={useCustomScript} onChange={e => setUseCustomScript(e.target.checked)} className="rounded" />
-                    <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">Write my own script</span>
-                </label>
-                {useCustomScript && (
-                    <textarea placeholder="Write the exact words the avatar should say (30-45 seconds when spoken)..."
-                        value={customScript} onChange={e => setCustomScript(e.target.value)} rows={5}
-                        className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-violet-500 resize-none" />
-                )}
-            </div>
-
-            {error && <div className="flex items-center gap-2 text-red-400 text-sm"><XCircle className="w-4 h-4" /> {error}</div>}
-
-            <button onClick={generate} disabled={!selectedAvatar || !selectedProduct || generating}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-violet-500 text-white font-medium hover:bg-violet-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                {generating ? <><Loader2 className="w-5 h-5 animate-spin" /> Generating...</> : <><Wand2 className="w-5 h-5" /> Generate UGC video</>}
-            </button>
-
-            {jobs.length > 0 && (
-                <div className="space-y-3 pt-2">
-                    <h3 className="text-sm font-semibold text-white">Recent jobs</h3>
-                    {jobs.slice(0, 8).map(job => (
-                        <div key={job.id} className="flex items-center gap-4 bg-gray-900/50 border border-gray-800 rounded-xl px-4 py-3">
-                            <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-white truncate">{job.avatar.name} × {job.product.name}</p>
-                                <p className="text-xs text-gray-500">{job.hookStyle}</p>
-                            </div>
-                            <span className={cn("text-xs font-medium", STATUS_COLORS[job.status] || "text-gray-400")}>
-                                {["GENERATING_VIDEO", "COMPOSITING", "GENERATING_SCRIPT"].includes(job.status) && <Loader2 className="w-3 h-3 animate-spin inline mr-1" />}
-                                {job.status}
-                            </span>
-                            {job.status === "DONE" && job.outputUrl && (
-                                <a href={`/api/storage/signed?key=${job.outputUrl}`} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:text-violet-300">
-                                    <Play className="w-4 h-4" />
-                                </a>
-                            )}
+            {/* Split Page Workspace Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                
+                {/* ─── LEFT COLUMN: AI CAST DIRECTORY (30% width) ─── */}
+                <div className="lg:col-span-4 space-y-6">
+                    <div className="bg-gray-950 border border-gray-850 p-5 rounded-3xl space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-sm font-bold text-white flex items-center gap-2 uppercase tracking-wider">
+                                <User className="w-4 h-4 text-violet-400" /> AI UGC Cast
+                            </h2>
+                            <span className="text-[10px] text-gray-500 font-mono">{avatars.length} Active</span>
                         </div>
-                    ))}
+
+                        {/* AI Character Spawner Box */}
+                        <div className="bg-gray-900/60 border border-gray-850 p-3.5 rounded-2xl space-y-2">
+                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">AI Character Spawner</label>
+                            <div className="flex gap-2">
+                                <input type="text" placeholder="e.g. skincare aesthetician Sarah..." value={spawnerSuggestion} onChange={e => setSpawnerSuggestion(e.target.value)}
+                                    className="flex-1 bg-gray-950 border border-gray-800 focus:border-violet-500 rounded-xl px-3 py-1.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all font-sans" />
+                                <button onClick={handleSpawnAvatar} disabled={spawnerLoading || !spawnerSuggestion.trim()}
+                                    className="px-3 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-[10px] font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center whitespace-nowrap">
+                                    {spawnerLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-1">
+                            <button onClick={() => setShowManualForm(!showManualForm)}
+                                className="w-full text-center py-1.5 bg-gray-900 hover:bg-gray-850 text-gray-400 hover:text-white rounded-lg border border-gray-800 text-[10px] font-bold transition-all cursor-pointer uppercase tracking-wider">
+                                {showManualForm ? "Hide Advanced Form" : "+ Create Custom Avatar"}
+                            </button>
+                        </div>
+
+                        {/* Manual Form Toggle */}
+                        {showManualForm && (
+                            <div className="bg-gray-900/40 border border-gray-850 p-4 rounded-2xl space-y-3">
+                                <h3 className="text-xs font-bold text-white uppercase tracking-wider">Custom Profile Details</h3>
+                                <input type="text" placeholder="Character Name" value={manualForm.name} onChange={e => setManualForm(prev => ({ ...prev, name: e.target.value }))}
+                                    className="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-violet-500 font-sans" />
+                                <textarea placeholder="Describe Persona, tone of voice, style..." value={manualForm.persona} onChange={e => setManualForm(prev => ({ ...prev, persona: e.target.value }))} rows={2}
+                                    className="w-full bg-gray-950 border border-gray-800 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-violet-500 font-sans resize-none" />
+                                <div className="grid grid-cols-2 gap-2">
+                                    <select value={manualForm.voiceEngine} onChange={e => setManualForm(prev => ({ ...prev, voiceEngine: e.target.value }))}
+                                        className="bg-gray-955 border border-gray-800 rounded-xl px-2 py-2 text-[10px] text-white focus:outline-none focus:border-violet-500 font-sans">
+                                        <option value="elevenlabs">ElevenLabs</option>
+                                        <option value="xtts">XTTS (local)</option>
+                                    </select>
+                                    <input type="text" placeholder="Voice ID" value={manualForm.voiceId} onChange={e => setManualForm(prev => ({ ...prev, voiceId: e.target.value }))}
+                                        className="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-[10px] text-white focus:outline-none focus:border-violet-500 font-sans" />
+                                </div>
+                                <button onClick={handleCreateManualAvatar} disabled={manualCreating || !manualForm.name.trim()}
+                                    className="w-full py-1.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-[10px] font-bold rounded-xl transition-all cursor-pointer">
+                                    {manualCreating ? "Saving..." : "Save Character"}
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Cast Directory Scroll Loop */}
+                        {loadingAvatars ? (
+                            <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-violet-400" /></div>
+                        ) : avatars.length === 0 ? (
+                            <div className="text-center py-10 bg-black/10 border border-dashed border-gray-850 rounded-2xl">
+                                <User className="w-8 h-8 text-gray-700 mx-auto mb-2" />
+                                <p className="text-[11px] text-gray-500 font-sans">Spawner is empty. generate some characters above!</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+                                {avatars.map(avatar => (
+                                    <div key={avatar.id}
+                                        className={cn("bg-gray-900/60 border p-3 rounded-2xl flex gap-3 transition-all relative group/card",
+                                            selectedAvatarId === avatar.id ? "border-violet-500 bg-violet-500/[0.02]" : "border-gray-850 hover:border-gray-800"
+                                        )}>
+                                        
+                                        {/* Action buttons overlay visible on card hover */}
+                                        <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover/card:opacity-100 transition-all z-10">
+                                            <button onClick={() => handleCloneAvatar(avatar)} title="Clone Character"
+                                                className="p-1 bg-gray-850 hover:bg-gray-800 text-gray-400 hover:text-white rounded border border-gray-800 transition-all cursor-pointer">
+                                                <Copy className="w-3 h-3" />
+                                            </button>
+                                            <button onClick={() => handleDeleteAvatar(avatar.id, avatar.name)} title="Delete Character"
+                                                className="p-1 bg-red-955/20 hover:bg-red-955/40 text-red-400 rounded border border-red-900/20 transition-all cursor-pointer">
+                                                <Trash2 className="w-3 h-3" />
+                                            </button>
+                                        </div>
+
+                                        {/* Avatar Face Box */}
+                                        <div className="w-14 h-14 bg-black/40 border border-gray-850 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center relative group/avatar cursor-pointer">
+                                            {avatar.referenceImageUrl ? (
+                                                <img src={`/api/storage/signed?key=${avatar.referenceImageUrl}`} alt="" className="w-full h-full object-cover" />
+                                            ) : avatar.jobStatus === "QUEUED" || avatar.jobStatus === "PROCESSING" ? (
+                                                <Loader2 className="w-4 h-4 animate-spin text-violet-500" />
+                                            ) : (
+                                                <User className="w-5 h-5 text-gray-750" />
+                                            )}
+                                            
+                                            {/* Hover file upload overlay */}
+                                            {(!avatar.jobStatus || avatar.jobStatus === "FAILED" || avatar.referenceImageUrl) && (
+                                                <label className="absolute inset-0 bg-black/75 opacity-0 group-hover/avatar:opacity-100 flex flex-col items-center justify-center transition-all cursor-pointer text-center p-1 text-[7px] font-bold text-violet-400">
+                                                    <Upload className="w-3 h-3 mb-0.5 text-violet-450" />
+                                                    Upload
+                                                    <input type="file" accept="image/*" className="hidden"
+                                                        onChange={e => {
+                                                            const file = e.target.files?.[0];
+                                                            if (file) handleUploadAvatarImage(avatar.id, file);
+                                                        }} />
+                                                </label>
+                                            )}
+                                        </div>
+
+                                        {/* Character Profile Info */}
+                                        <div className="flex-1 min-w-0 flex flex-col justify-between">
+                                            <div className="min-w-0">
+                                                <h4 className="text-xs font-bold text-white truncate">{avatar.name}</h4>
+                                                <p className="text-[10px] text-gray-500 line-clamp-2 mt-0.5 leading-snug font-sans">{avatar.persona || "No persona details defined yet."}</p>
+                                            </div>
+                                            <div className="flex items-center justify-between mt-2 pt-1 border-t border-gray-850/40">
+                                                <span className="text-[9px] px-1.5 py-0.5 bg-violet-600/15 border border-violet-500/10 rounded-full text-violet-400 font-medium">
+                                                    {avatar.voiceEngine}
+                                                </span>
+                                                
+                                                <div className="flex items-center gap-1">
+                                                    <button onClick={() => openR2Picker(avatar.id)}
+                                                        className="px-2 py-0.5 bg-gray-850 hover:bg-gray-800 text-gray-400 hover:text-white rounded border border-gray-800 text-[8px] font-bold font-sans cursor-pointer transition-all">
+                                                        Browse R2
+                                                    </button>
+                                                    <button onClick={() => setSelectedAvatarId(avatar.id)}
+                                                        className={cn("px-2.5 py-0.5 rounded text-[8px] font-bold font-sans transition-all cursor-pointer",
+                                                            selectedAvatarId === avatar.id 
+                                                                ? "bg-violet-600 text-white" 
+                                                                : "bg-gray-900 border border-gray-800 text-gray-400 hover:text-white hover:bg-gray-850"
+                                                        )}>
+                                                        {selectedAvatarId === avatar.id ? "Selected" : "Select"}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* ─── RIGHT COLUMN: UGC CAMPAIGNS WORKSPACE (70% width) ─── */}
+                <div className="lg:col-span-8 space-y-6">
+
+                    {/* CAMPAIGN MODE 1: Directory List (Scraping URL and listing Campaigns) */}
+                    {selectedCampaignId === null ? (
+                        <div className="space-y-6">
+                            
+                            {/* Product URL Scraper Bar */}
+                            <div className="bg-gray-955 border border-gray-850 p-5 rounded-3xl space-y-4">
+                                <div>
+                                    <h2 className="text-sm font-bold text-white uppercase tracking-wider">Start Product Campaign</h2>
+                                    <p className="text-xs text-gray-500 font-sans mt-0.5">Scrape details from Amazon or any other ecommerce store page to auto-configure scripts.</p>
+                                </div>
+                                <div className="flex gap-3">
+                                    <input type="url" placeholder="https://amazon.com/... or any product link" value={scrapingUrl} onChange={e => setScrapingUrl(e.target.value)}
+                                        className="flex-1 bg-gray-900 border border-gray-800 focus:border-violet-500 rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all font-sans" />
+                                    <button onClick={handleCreateCampaign} disabled={scrapingLoading || !scrapingUrl.trim()}
+                                        className="flex items-center gap-1.5 px-5 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-xs font-bold rounded-xl transition-all shadow font-sans cursor-pointer">
+                                        {scrapingLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Package className="w-3.5 h-3.5" />}
+                                        Create Campaign
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Campaigns Directory Grid */}
+                            <div className="bg-gray-950 border border-gray-850 p-6 rounded-3xl space-y-4">
+                                <h3 className="text-sm font-bold text-white uppercase tracking-wider">Active Campaigns</h3>
+                                
+                                {loadingProducts ? (
+                                    <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-violet-400" /></div>
+                                ) : products.length === 0 ? (
+                                    <div className="text-center py-20 bg-black/10 border border-dashed border-gray-850 rounded-2xl space-y-2">
+                                        <Package className="w-10 h-10 text-gray-700 mx-auto" />
+                                        <h4 className="text-xs font-bold text-gray-400">No campaigns active</h4>
+                                        <p className="text-[11px] text-gray-550 font-sans max-w-xs mx-auto">Paste a product page URL in the creator bar above to initialize a campaign.</p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {products.map(product => (
+                                            <button key={product.id} onClick={() => setSelectedCampaignId(product.id)}
+                                                className="bg-gray-900/60 border border-gray-850 hover:border-violet-500/25 p-4 rounded-2xl flex gap-4 text-left transition-all group cursor-pointer">
+                                                
+                                                {/* Product Image */}
+                                                <div className="w-16 h-16 bg-black/40 border border-gray-850 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center">
+                                                    {product.imageUrls[0] ? (
+                                                        <img src={product.imageUrls[0]} alt="" className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        <Package className="w-6 h-6 text-gray-750" />
+                                                    )}
+                                                </div>
+
+                                                {/* Details */}
+                                                <div className="flex-1 min-w-0 flex flex-col justify-between">
+                                                    <div>
+                                                        <h4 className="text-xs font-bold text-white group-hover:text-violet-400 transition-all truncate">{product.name}</h4>
+                                                        <div className="flex items-center gap-2 mt-1">
+                                                            {product.brand && <span className="text-[9px] text-gray-500 truncate font-sans">{product.brand}</span>}
+                                                            {product.price && <span className="text-[9px] text-emerald-400 font-mono font-bold">{product.price}</span>}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex items-center justify-between border-t border-gray-850/40 pt-2 mt-2">
+                                                        <span className="text-[9px] text-gray-500 font-mono">Campaign ID: #{product.id.slice(-6)}</span>
+                                                        <span className="text-[9px] font-bold px-1.5 py-0.5 bg-violet-600/10 border border-violet-500/15 rounded text-violet-400">
+                                                            {product._count?.ugcJobs || 0} Shorts
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    ) : (
+                        
+                        /* CAMPAIGN MODE 2: Campaign Detail Workspace (When campaign active) */
+                        <div className="space-y-6">
+                            
+                            {/* Campaign Context Navigation */}
+                            <div className="bg-gray-950 border border-gray-850 p-4 rounded-2xl flex items-center justify-between">
+                                <button onClick={() => setSelectedCampaignId(null)}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-900 border border-gray-800 hover:bg-gray-850 text-gray-300 text-xs font-bold rounded-xl transition-all cursor-pointer">
+                                    <ArrowLeft className="w-3.5 h-3.5" /> Back to Directory
+                                </button>
+                                <span className="text-xs text-gray-500 font-mono font-bold">Active Workspace: {activeCampaign?.name.slice(0, 30)}...</span>
+                            </div>
+
+                            {/* Product details Banner */}
+                            {activeCampaign && (
+                                <div className="bg-gray-950 border border-gray-850 p-5 rounded-3xl flex flex-col md:flex-row gap-5">
+                                    <div className="w-24 h-24 bg-black/40 border border-gray-850 rounded-2xl overflow-hidden flex-shrink-0 flex items-center justify-center">
+                                        {activeCampaign.imageUrls[0] ? (
+                                            <img src={activeCampaign.imageUrls[0]} alt="" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <Package className="w-8 h-8 text-gray-700" />
+                                        )}
+                                    </div>
+                                    <div className="flex-1 space-y-2">
+                                        <div className="flex items-start justify-between gap-4">
+                                            <div>
+                                                <h3 className="text-sm font-bold text-white">{activeCampaign.name}</h3>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    {activeCampaign.brand && <span className="text-[10px] bg-gray-900 border border-gray-850 px-2 py-0.5 rounded text-gray-400 font-sans">{activeCampaign.brand}</span>}
+                                                    {activeCampaign.price && <span className="text-[10px] text-emerald-400 font-mono font-bold">{activeCampaign.price}</span>}
+                                                </div>
+                                            </div>
+                                            <a href={activeCampaign.sourceUrl} target="_blank" rel="noreferrer"
+                                                className="p-1.5 bg-gray-900 border border-gray-800 hover:bg-gray-850 text-gray-400 hover:text-white rounded-lg transition-all cursor-pointer">
+                                                <ExternalLink className="w-4 h-4" />
+                                            </a>
+                                        </div>
+                                        {activeCampaign.description && (
+                                            <p className="text-[10px] text-gray-500 leading-relaxed font-sans line-clamp-3">
+                                                {activeCampaign.description}
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Video Generation controls nested inside Campaign */}
+                            <div className="bg-gray-950 border border-gray-850 p-6 rounded-3xl space-y-5">
+                                <h3 className="text-xs font-bold text-white uppercase tracking-wider border-b border-gray-850 pb-2">Generate Video Segment</h3>
+                                
+                                {avatars.length === 0 ? (
+                                    <div className="bg-amber-600/10 border border-amber-500/20 p-4 rounded-xl text-amber-300 text-xs font-sans">
+                                        Please spawn an AI Cast character in the Left Panel before scripting a video campaign.
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        
+                                        {/* Character selection status */}
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Selected Character Voice</label>
+                                            <div className="p-3 bg-gray-900 border border-gray-850 rounded-2xl flex items-center justify-between">
+                                                {selectedAvatarId ? (
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-lg overflow-hidden bg-black border border-gray-800 flex items-center justify-center">
+                                                            {avatars.find(a => a.id === selectedAvatarId)?.referenceImageUrl ? (
+                                                                <img src={`/api/storage/signed?key=${avatars.find(a => a.id === selectedAvatarId)?.referenceImageUrl}`} alt="" className="w-full h-full object-cover" />
+                                                            ) : (
+                                                                <User className="w-4 h-4 text-gray-700" />
+                                                            )}
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs font-bold text-white">{avatars.find(a => a.id === selectedAvatarId)?.name}</p>
+                                                            <p className="text-[9px] text-gray-550 font-sans truncate max-w-xs">{avatars.find(a => a.id === selectedAvatarId)?.persona}</p>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-xs text-gray-650 font-sans">Click "Select" on a cast member in the Left panel</span>
+                                                )}
+                                                {selectedAvatarId && (
+                                                    <span className="text-[9px] px-1.5 py-0.5 bg-violet-600/10 text-violet-400 font-bold border border-violet-500/15 rounded">
+                                                        {avatars.find(a => a.id === selectedAvatarId)?.voiceEngine}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Hook selectors */}
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Hook Style Formula</label>
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                                {HOOK_STYLES.map(h => (
+                                                    <button key={h.value} onClick={() => setSelectedHookStyle(h.value)}
+                                                        className={cn("p-2.5 rounded-xl border text-left transition-all cursor-pointer font-sans",
+                                                            selectedHookStyle === h.value 
+                                                                ? "border-violet-500 bg-violet-500/[0.04]" 
+                                                                : "border-gray-850 hover:border-gray-800 bg-gray-900/20"
+                                                        )}>
+                                                        <div className="text-xs font-bold text-white">{h.label}</div>
+                                                        <div className="text-[9px] text-gray-550 font-mono mt-0.5">{h.desc}</div>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Custom Script text drawer */}
+                                        <div className="space-y-2">
+                                            <label className="flex items-center gap-2 cursor-pointer font-sans">
+                                                <input type="checkbox" checked={useCustomScript} onChange={e => setUseCustomScript(e.target.checked)}
+                                                    className="rounded bg-gray-900 border-gray-800 text-violet-600 focus:ring-0 focus:ring-offset-0" />
+                                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider select-none">Write custom UGC script (Optional)</span>
+                                            </label>
+                                            
+                                            {useCustomScript ? (
+                                                <textarea placeholder="Write the exact script dialog (e.g. Hey guys, Sarah here...)" value={customScript} onChange={e => setCustomScript(e.target.value)} rows={4}
+                                                    className="w-full bg-gray-900 border border-gray-800 focus:border-violet-500 rounded-2xl p-3.5 text-xs text-white focus:outline-none leading-relaxed font-sans resize-none" />
+                                            ) : (
+                                                <p className="text-[10px] text-gray-550 leading-relaxed font-sans italic bg-gray-900/30 border border-gray-850/50 p-3 rounded-xl">
+                                                    If custom script is unchecked, the AI assistance drafts a viral script dynamically matching the product scraped details and selected avatar persona.
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        {/* Dispatch batch button */}
+                                        <button onClick={handleGenerateUGCVideo} disabled={!selectedAvatarId || generatingVideo}
+                                            className="w-full flex items-center justify-center gap-1.5 py-3 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white font-bold text-xs rounded-2xl transition-all shadow-md font-sans cursor-pointer uppercase tracking-wider">
+                                            {generatingVideo ? (
+                                                <>
+                                                    <Loader2 className="w-4 h-4 animate-spin" /> Queuing Generation...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Wand2 className="w-4 h-4" /> Queue UGC Generation
+                                                </>
+                                            )}
+                                        </button>
+
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Campaign Nested Video Explorer */}
+                            <div className="bg-gray-950 border border-gray-850 p-6 rounded-3xl space-y-4">
+                                <h3 className="text-xs font-bold text-white uppercase tracking-wider border-b border-gray-850 pb-2">Campaign Video Hierarchy</h3>
+                                
+                                {campaignJobs.length === 0 ? (
+                                    <div className="text-center py-12 bg-black/10 border border-dashed border-gray-850 rounded-2xl">
+                                        <Play className="w-8 h-8 text-gray-700 mx-auto mb-2" />
+                                        <p className="text-[11px] text-gray-500 font-sans">No videos queued for this campaign yet.</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {campaignJobs.map(job => (
+                                            <div key={job.id} className="bg-gray-900/60 border border-gray-850 p-4 rounded-2xl flex flex-col md:flex-row gap-4 items-start md:items-center">
+                                                
+                                                {/* Left Details */}
+                                                <div className="flex-1 min-w-0 space-y-1">
+                                                    <div className="flex items-center gap-3">
+                                                        <h4 className="text-xs font-bold text-white">{job.avatar.name}</h4>
+                                                        <span className="text-[8px] font-mono text-gray-500">#{job.id.slice(-6)}</span>
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-2 items-center">
+                                                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-950 border border-gray-800 text-gray-400 font-bold">
+                                                            {job.hookStyle}
+                                                        </span>
+                                                        <span className={cn("text-[9px] font-bold px-1.5 py-0.5 border rounded uppercase font-mono", STATUS_COLORS[job.status] || "text-gray-400")}>
+                                                            {["GENERATING_VIDEO", "COMPOSITING", "GENERATING_SCRIPT"].includes(job.status) && (
+                                                                <Loader2 className="w-2.5 h-2.5 animate-spin inline mr-1" />
+                                                            )}
+                                                            {job.status}
+                                                        </span>
+                                                    </div>
+                                                    {job.script && (
+                                                        <p className="text-[10px] text-gray-450 leading-relaxed font-sans line-clamp-2 bg-black/25 border border-gray-950 p-2 rounded-lg mt-2">
+                                                            "{job.script}"
+                                                        </p>
+                                                    )}
+                                                </div>
+
+                                                {/* Right Video Preview Player */}
+                                                <div className="w-full md:w-36 aspect-video bg-black/40 border border-gray-850 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center">
+                                                    {job.status === "DONE" && job.outputUrl ? (
+                                                        <video src={`/api/storage/signed?key=${job.outputUrl}`} controls className="w-full h-full object-cover" />
+                                                    ) : job.status === "FAILED" ? (
+                                                        <div className="text-center p-2"><XCircle className="w-5 h-5 text-red-500 mx-auto" /><span className="text-[8px] text-red-400 mt-1 block font-sans">Failed</span></div>
+                                                    ) : (
+                                                        <div className="text-center p-2 text-gray-600"><Loader2 className="w-5 h-5 animate-spin mx-auto text-violet-500" /><span className="text-[8px] mt-1 block font-sans">Generating...</span></div>
+                                                    )}
+                                                </div>
+
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                        </div>
+                    )}
+                </div>
+
+            </div>
+
+            {/* R2 Avatar Picker Modal */}
+            {pickingAvatarId !== null && (
+                <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
+                    <div className="bg-gray-955 border border-gray-800 rounded-3xl w-full max-w-xl overflow-hidden shadow-2xl flex flex-col max-h-[80vh] animate-in fade-in-50 zoom-in-95 duration-150">
+                        {/* Header */}
+                        <div className="p-5 border-b border-gray-850 flex items-center justify-between bg-gray-900/40">
+                            <div>
+                                <h3 className="text-sm font-bold text-white flex items-center gap-2 uppercase tracking-wider">
+                                    <Folder className="w-4 h-4 text-violet-400" /> Select Avatar from R2
+                                </h3>
+                                <p className="text-[10px] text-gray-550 font-sans mt-0.5">Select a generated profile image already uploaded to your avatars/ folder.</p>
+                            </div>
+                            <button onClick={() => setPickingAvatarId(null)}
+                                className="p-1.5 bg-gray-850 hover:bg-gray-800 text-gray-400 hover:text-white rounded-lg border border-gray-800 transition-all text-[10px] font-bold font-mono">
+                                CANCEL
+                            </button>
+                        </div>
+
+                        {/* Content */}
+                        {loadingR2Avatars ? (
+                            <div className="flex flex-col items-center justify-center py-20 gap-3">
+                                <Loader2 className="w-8 h-8 animate-spin text-violet-500" />
+                                <span className="text-xs text-gray-500 font-sans">Scanning avatars/ directory...</span>
+                            </div>
+                        ) : r2Avatars.length === 0 ? (
+                            <div className="text-center py-20 space-y-2">
+                                <Folder className="w-10 h-10 text-gray-700 mx-auto" />
+                                <h4 className="text-xs font-bold text-gray-450">No R2 avatars found</h4>
+                                <p className="text-[10px] text-gray-550 font-sans max-w-xs mx-auto">No generated files are present inside the avatars/ folder. Generate some avatars first or upload them manually.</p>
+                            </div>
+                        ) : (
+                            <div className="p-5 overflow-y-auto flex-1 grid grid-cols-3 sm:grid-cols-4 gap-4 bg-gray-955/5">
+                                {r2Avatars.map((avatar, idx) => (
+                                    <button key={idx} onClick={() => handleSelectR2Avatar(avatar.key)}
+                                        className="bg-gray-900/60 border border-gray-850 hover:border-violet-500 hover:bg-gray-900 p-2 rounded-2xl flex flex-col items-center gap-2 transition-all cursor-pointer group text-center">
+                                        <div className="w-16 h-16 bg-black/40 border border-gray-800 rounded-xl overflow-hidden flex items-center justify-center flex-shrink-0">
+                                            <img src={`/api/storage/signed?key=${avatar.key}`} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-all" />
+                                        </div>
+                                        <span className="text-[9px] font-mono text-gray-500 group-hover:text-white truncate w-full block">
+                                            {avatar.key.split("/").pop()}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
-        </div>
-    );
-}
-
-// ─── Main Page ────────────────────────────────────────────
-export default function UGCStudioPage() {
-    const [tab, setTab] = useState<"avatars" | "products" | "generate">("avatars");
-    const tabs = [
-        { id: "avatars" as const, label: "Avatars", icon: User },
-        { id: "products" as const, label: "Products", icon: Package },
-        { id: "generate" as const, label: "Generate", icon: Wand2 },
-    ];
-
-    return (
-        <div className="space-y-6">
-            <div>
-                <h1 className="text-3xl font-bold text-white">UGC Studio</h1>
-                <p className="text-gray-400 mt-1">Create AI avatar videos for TikTok affiliate marketing</p>
-            </div>
-            <div className="flex gap-1 bg-gray-900/50 border border-gray-800 rounded-2xl p-1 w-fit">
-                {tabs.map(t => (
-                    <button key={t.id} onClick={() => setTab(t.id)}
-                        className={cn("flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all",
-                            tab === t.id ? "bg-violet-500/15 text-violet-400" : "text-gray-400 hover:text-white")}>
-                        <t.icon className="w-4 h-4" /> {t.label}
-                    </button>
-                ))}
-            </div>
-            <div>
-                {tab === "avatars" && <AvatarPanel />}
-                {tab === "products" && <ProductPanel />}
-                {tab === "generate" && <GeneratePanel />}
-            </div>
         </div>
     );
 }
