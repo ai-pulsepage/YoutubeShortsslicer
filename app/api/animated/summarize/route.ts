@@ -6,7 +6,7 @@ export async function POST(req: NextRequest) {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { videoId, premise, scriptText, characters, targetDuration } = await req.json();
+    const { videoId, premise, scriptText, characters, targetDuration, compositionMode, includeMusicals } = await req.json();
     if (!videoId && !premise && !scriptText) {
         return NextResponse.json({ error: "videoId, premise or scriptText is required" }, { status: 400 });
     }
@@ -37,25 +37,27 @@ export async function POST(req: NextRequest) {
 
         const durationMin = targetDuration ? parseFloat(targetDuration) : 2.0;
         const numScenes = Math.max(3, Math.min(25, Math.ceil(durationMin * 3)));
+        const useMusicals = includeMusicals !== false;
+        const isSpinOff = compositionMode !== "paraphrase";
 
         if (!apiKey) {
             // Fallback: build a default structured story from the transcript
             const sentences = contentToProcess.split(/[.!?。！？]/).filter(Boolean).slice(0, numScenes);
             const scenes = sentences.map((sentence: string, idx: number) => ({
                 id: `scene-${idx}`,
-                type: idx % 3 === 2 ? "song" : "dialogue",
+                type: idx % 3 === 2 && useMusicals ? "song" : "dialogue",
                 character: idx % 2 === 0 ? (characters?.[0]?.name || "Leo") : "Narrator",
                 voice: idx % 2 === 0 ? "en-US-AnaNeural-Female" : "en-US-GuyNeural-Male",
                 text: sentence.trim() + ".",
                 visualPrompt: `Cartoon ${idx % 2 === 0 ? "boy smiling" : "landscape background"}, 3d animation style, Pixar look`,
-                sunoStylePrompt: idx % 3 === 2 ? "upbeat children singalong, acoustic guitar, 120bpm" : ""
+                sunoStylePrompt: idx % 3 === 2 && useMusicals ? "upbeat children singalong, acoustic guitar, 120bpm" : ""
             }));
             return NextResponse.json({ scenes });
         }
 
-        // Phase 1: High-Level Concept Summary Extraction (if ingested video)
+        // Phase 1: High-Level Concept Summary Extraction (only in Spin-off Mode for Ingested Videos)
         let premiseOutline = contentToProcess;
-        if (videoId) {
+        if (videoId && isSpinOff) {
             console.log(`[Summarize] Performing Step 1 concept summary on long video transcript...`);
             const summaryPrompt = `You are a children's content director. Read the following ingested video transcript, and output ONLY a simple 1-paragraph summary outline of the core events, character actions, and themes (e.g. "Jimmy wakes up, Lily greets him, Buddy plays in a cape, mother Jenny serves juice, they sing together"). Do NOT output dialogues, verses or songs. Make it plain, descriptive prose.`;
             
@@ -90,21 +92,28 @@ export async function POST(req: NextRequest) {
         }
 
         // Phase 2: Creative Composition
-        const systemPrompt = `You are an expert children's content writer. Read the following simple premise outline of a story, and expand it into a highly original storyboard script consisting of exactly ${numScenes} scenes containing dialogue and sing-along songs.
+        const systemPrompt = `You are an expert children's content writer. Read the following input (which is ${isSpinOff ? "a simple narrative premise outline" : "a story script"}), and rewrite it into a highly original storyboard script consisting of exactly ${numScenes} scenes.
 
 CRITICAL COMPLIANCE RULES:
-1. COMPLETE ORIGINALITY: The input is a raw premise outline. You must compose all dialogue and song lyrics entirely from scratch. Write catchy, simple, newly composed rhyming song lyrics and warm, natural kids' dialogue. Do NOT reuse existing song lyrics or word-for-word structures. Use completely different metaphors, rhyming patterns, and vocabularies to guarantee 100% legal safety.
-2. CAST ALIGNMENT: You MUST ONLY use the following characters for the speaker roles and dialogue: ${characterNames}. Always assign the speaker roles correctly based on this cast.
-3. SUNO AI MUSIC PROMPTING: For all scenes with type "song", you MUST include a "sunoStylePrompt" key suggesting a musical style/prompt for Suno AI (e.g. "upbeat kids singalong, bright bells, acoustic ukulele, 120bpm").
+1. COMPLETE ORIGINALITY & COPYRIGHT PROTECTION: You must compose all dialogue and song lyrics entirely from scratch. Do NOT reuse existing song lyrics or word-for-word structures. Use completely different metaphors, rhyming patterns, and vocabularies to guarantee 100% legal safety.
+${isSpinOff 
+  ? `2. CREATIVE SPIN-OFF: The input is a raw premise outline. You are NOT bound to the scene counts or ordering of any original video. Write a completely fresh, organic children's story sequence. Decide naturally where to place song numbers (if musicals are enabled) to help narrate the outline's theme.`
+  : `2. DIRECT REWRITE / PARAPHRASE: Keep the exact same pacing, structure, and scene-by-scene sequence as the input script, but rephrase all dialogues and lyrics to be legally distinct.`
+}
+3. CAST ALIGNMENT: You MUST ONLY use the following characters for the speaker roles and dialogue: ${characterNames}. Always assign the speaker roles correctly based on this cast.
+${useMusicals 
+  ? `4. MUSIC SEGREGATION: You can include both "dialogue" and "song" scene types. For all scenes with type "song", you MUST write catchy kids song lyrics and include a "sunoStylePrompt" key suggesting a musical style/prompt for Suno AI (e.g. "upbeat kids singalong, bright bells, acoustic ukulele, 120bpm").` 
+  : `4. DIALOGUE ONLY: You must ONLY generate scenes of type "dialogue". DO NOT generate any "song" scenes or Suno prompts. The entire storyboard timeline must consist of character dialogues/narrations.`
+}
 
 Return ONLY a valid JSON array of scenes without any markdown wrapping or preamble.
 The JSON structure for each scene must follow this schema:
 [
   {
-    "type": "dialogue" | "song",
+    "type": "${useMusicals ? "dialogue | song" : "dialogue"}",
     "character": "One of: ${characterNames}",
     "voice": "en-US-AnaNeural-Female" | "en-US-ChristopherNeural-Male" | "zh-CN-XiaoyiNeural-Female" | "en-US-GuyNeural-Male" | "en-US-AriaNeural-Female",
-    "text": "The original polished dialogue spoken or song lyrics sung in this scene.",
+    "text": "The original polished dialogue spoken${useMusicals ? " or song lyrics sung" : ""} in this scene.",
     "visualPrompt": "Detailed scene generation prompt for a 3D cartoon video generator featuring the character.",
     "sunoStylePrompt": "Suno style suggestion (only for song types, empty string otherwise)"
   }

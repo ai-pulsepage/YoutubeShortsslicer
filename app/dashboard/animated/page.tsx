@@ -116,6 +116,8 @@ export default function KidsStoryBuilderPage() {
     const [projectTitle, setProjectTitle] = useState("");
     const [projectScript, setProjectScript] = useState("");
     const [targetDuration, setTargetDuration] = useState<number>(2); // Default to 2 minutes
+    const [compositionMode, setCompositionMode] = useState<"spin_off" | "paraphrase">("spin_off");
+    const [includeMusicals, setIncludeMusicals] = useState<boolean>(true);
     const [saving, setSaving] = useState(false);
 
     const [docId, setDocId] = useState<string | null>(null);
@@ -361,6 +363,8 @@ export default function KidsStoryBuilderPage() {
                 setSelectedVideoId("");
             }
             setTargetDuration(proj.sourceUrls ? (proj as any).targetDuration || 2 : 2);
+            setCompositionMode((proj as any).compositionMode || "spin_off");
+            setIncludeMusicals((proj as any).includeMusicals !== false);
             setCurrentStep(1);
         }
     };
@@ -380,7 +384,9 @@ export default function KidsStoryBuilderPage() {
                     characters,
                     scenes,
                     sourceUrls: selectedVideoId ? [selectedVideoId] : [],
-                    targetDuration
+                    targetDuration,
+                    compositionMode,
+                    includeMusicals
                 })
             });
 
@@ -406,8 +412,8 @@ export default function KidsStoryBuilderPage() {
         setInsufficientFunds(false);
         try {
             const bodyPayload = sourceMode === "video" 
-                ? { videoId: selectedVideoId, characters, targetDuration } 
-                : { premise: projectScript, characters, targetDuration };
+                ? { videoId: selectedVideoId, characters, targetDuration, compositionMode, includeMusicals } 
+                : { premise: projectScript, characters, targetDuration, compositionMode, includeMusicals };
 
             const res = await fetch("/api/animated/summarize", {
                 method: "POST",
@@ -1098,6 +1104,7 @@ export default function KidsStoryBuilderPage() {
                                             </select>
                                         </div>
                                     </div>
+
                                     <div>
                                         <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Premise Idea or Source Lyrics Concept</label>
                                         <textarea placeholder="Type a concept here (e.g. Busby the beaver has an oversized tail, but uses it to float his family safely during a sudden river flood)..." 
@@ -1253,6 +1260,31 @@ export default function KidsStoryBuilderPage() {
                                     Ready to write the script? The AI will use your defined Cast list ({characters.map(c => c.name).join(", ") || "No characters added yet"})
                                     and premise to write completely original, legally distinct script dialogue lines, suggested song lyrics, and Suno AI prompts.
                                 </p>
+                            </div>
+
+                            {/* Options panel in Step 3 */}
+                            <div className="bg-black/20 border border-gray-850 p-5 rounded-2xl text-left space-y-4 max-w-lg mx-auto">
+                                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-850 pb-2">AI Blueprint Composition Settings</h4>
+                                <div className="space-y-3.5">
+                                    <div>
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1.5">Story Composition Mode</label>
+                                        <select value={compositionMode} onChange={e => setCompositionMode(e.target.value as any)}
+                                            className="w-full bg-gray-850 border border-gray-750 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-violet-500 font-semibold cursor-pointer">
+                                            <option value="spin_off" className="bg-gray-900 text-white">Concept Spin-off (Original Story from Outline)</option>
+                                            <option value="paraphrase" className="bg-gray-900 text-white">Direct Paraphrase (Similar Pacing & Sequence)</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">Sing-Along Musicals</label>
+                                        <div className="flex items-center gap-2.5 mt-1.5">
+                                            <input type="checkbox" id="includeMusicalsCheckbox3" checked={includeMusicals} onChange={e => setIncludeMusicals(e.target.checked)}
+                                                className="w-4 h-4 text-violet-600 border-gray-700 bg-gray-800 rounded focus:ring-violet-500 cursor-pointer animate-none" />
+                                            <label htmlFor="includeMusicalsCheckbox3" className="text-xs text-gray-300 font-semibold cursor-pointer select-none">
+                                                Include Sing-Along Songs (adds Suno prompt lyrics)
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             <button onClick={handleAnalyze} disabled={summarizing || (sourceMode === "video" ? !selectedVideoId : !projectScript)}
