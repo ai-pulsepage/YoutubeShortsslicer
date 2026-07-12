@@ -235,3 +235,24 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Failed to save project draft", details: err.message }, { status: 500 });
     }
 }
+
+export async function DELETE(req: NextRequest) {
+    const session = await auth();
+    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const { id } = await req.json();
+    if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+
+    try {
+        await prisma.documentary.delete({
+            where: {
+                id,
+                userId: session.user.id
+            }
+        });
+        return NextResponse.json({ success: true });
+    } catch (err: any) {
+        console.error("[Delete Project] Error:", err.message);
+        return NextResponse.json({ error: "Failed to delete project", details: err.message }, { status: 500 });
+    }
+}

@@ -154,6 +154,19 @@ export default function KidsStoryBuilderPage() {
             .finally(() => setVideosLoading(false));
     }, []);
 
+    // Auto-load project from URL query parameter
+    useEffect(() => {
+        if (projects.length > 0) {
+            const params = new URLSearchParams(window.location.search);
+            const queryProjId = params.get("project");
+            if (queryProjId && queryProjId !== selectedProjectId) {
+                handleSelectProject(queryProjId);
+                // Clear query parameter
+                window.history.replaceState({}, "", "/dashboard/animated");
+            }
+        }
+    }, [projects]);
+
     // Load specific video transcript
     useEffect(() => {
         if (!selectedVideoId) {
@@ -662,16 +675,40 @@ export default function KidsStoryBuilderPage() {
 
     // Assembly Line concurrent visual queuing (shot-level)
     const handleQueueAllVisuals = async () => {
+        if (!docId) {
+            setError("Please save the project first before batch queuing visuals.");
+            return;
+        }
         setError("");
         
-        for (const s of scenes) {
-            if (s.visualShots) {
-                for (const shot of s.visualShots) {
-                    if (shot.jobStatus !== "COMPLETED" && shot.jobStatus !== "PROCESSING" && shot.jobStatus !== "QUEUED") {
-                        await generateShotVideo(s.id, shot.id, shot.visualPrompt, shot.primaryCharacter);
-                    }
+        try {
+            // First, trigger a save to ensure latest timeline matches database
+            await handleSaveProject();
+
+            // Run batch queue call
+            const res = await fetch("/api/animated/projects/batch-queue", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ projectId: docId })
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Batch queuing failed");
+
+            // Reload projects, select the updated project to refresh scenes list statuses
+            await loadProjects();
+            const freshRes = await fetch("/api/animated/projects");
+            if (freshRes.ok) {
+                const freshData = await freshRes.json();
+                const updatedProj = (freshData.projects || []).find((p: any) => p.id === docId);
+                if (updatedProj) {
+                    setCharacters(updatedProj.characters);
+                    setScenes(updatedProj.scenes);
                 }
             }
+            alert(`Queued ${data.queuedAvatarsCount} character avatars and ${data.queuedShotsCount} video scenes to Redis. Start your RunPod worker now to generate them!`);
+        } catch (err: any) {
+            setError(err.message || "Failed to batch queue visuals.");
         }
     };
 
