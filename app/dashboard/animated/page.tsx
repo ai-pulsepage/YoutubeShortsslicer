@@ -24,7 +24,8 @@ import {
     Sparkle,
     ArrowRight,
     ArrowLeft,
-    Copy
+    Copy,
+    Upload
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -885,6 +886,35 @@ export default function KidsStoryBuilderPage() {
         }, 50);
     };
 
+    // Client-side file uploader: Upload a custom character profile image directly to R2 and auto-save the draft
+    const handleUploadAvatarImage = async (charId: string, file: File) => {
+        setError("");
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("characterId", charId);
+
+        try {
+            const res = await fetch("/api/animated/characters/upload", {
+                method: "POST",
+                body: formData
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to upload custom avatar");
+
+            let updatedCharacters: typeof characters = [];
+            setCharacters(prev => {
+                const next = prev.map(c => (c.id === charId ? { ...c, imagePath: data.imagePath, jobStatus: "COMPLETED" as const } : c));
+                updatedCharacters = next;
+                return next;
+            });
+            setTimeout(() => {
+                handleSaveProject(undefined, updatedCharacters);
+            }, 50);
+        } catch (err: any) {
+            setError(err.message || "Error uploading avatar image.");
+        }
+    };
+
     // Edit shot values
     const updateShot = (sceneId: string, shotId: string, updates: Partial<Shot>) => {
         setScenes(prev =>
@@ -1303,7 +1333,7 @@ export default function KidsStoryBuilderPage() {
                                         </button>
 
                                         <div className="flex gap-3">
-                                            <div className="w-16 h-16 bg-black/40 border border-gray-800 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center relative">
+                                            <div className="w-16 h-16 bg-black/40 border border-gray-850 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center relative group/avatar cursor-pointer">
                                                 {char.imagePath ? (
                                                     <img src={`/api/storage/signed?key=${char.imagePath}`} alt="" className="w-full h-full object-cover" />
                                                 ) : char.jobStatus === "QUEUED" || char.jobStatus === "PROCESSING" ? (
@@ -1311,6 +1341,15 @@ export default function KidsStoryBuilderPage() {
                                                 ) : (
                                                     <Users className="w-6 h-6 text-gray-750" />
                                                 )}
+                                                <label className="absolute inset-0 bg-black/75 opacity-0 group-hover/avatar:opacity-100 flex flex-col items-center justify-center transition-all cursor-pointer text-center p-1 text-[8px] font-bold text-violet-400">
+                                                    <Upload className="w-3.5 h-3.5 mb-0.5 text-violet-450" />
+                                                    Upload
+                                                    <input type="file" accept="image/*" className="hidden"
+                                                        onChange={e => {
+                                                            const file = e.target.files?.[0];
+                                                            if (file) handleUploadAvatarImage(char.id, file);
+                                                        }} />
+                                                </label>
                                             </div>
 
                                             <div className="flex-1 space-y-2 min-w-0">
