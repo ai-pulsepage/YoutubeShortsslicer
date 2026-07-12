@@ -126,6 +126,7 @@ export default function KidsStoryBuilderPage() {
     const [compiledVideoUrl, setCompiledVideoUrl] = useState<string | null>(null);
     const [error, setError] = useState("");
     const [insufficientFunds, setInsufficientFunds] = useState(false);
+    const [translating, setTranslating] = useState(false);
 
     // Ingested videos state
     const [videos, setVideos] = useState<Video[]>([]);
@@ -781,6 +782,55 @@ export default function KidsStoryBuilderPage() {
         );
     };
 
+    // DeepSeek Storyboard Translation & Clone handler
+    const handleTranslateProject = async (lang: string) => {
+        if (!docId) return;
+        setTranslating(true);
+        setError("");
+        setInsufficientFunds(false);
+
+        try {
+            const res = await fetch("/api/animated/translate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ projectId: docId, targetLanguage: lang })
+            });
+
+            const data = await res.json();
+            if (res.status === 402 || data.error === "DEEPSEEK_OUT_OF_FUNDS") {
+                setInsufficientFunds(true);
+                throw new Error(data.details || "DeepSeek API: Insufficient Balance.");
+            }
+
+            if (!res.ok) throw new Error(data.error || "Translation failed");
+
+            // Reload projects, select the new translated copy
+            await loadProjects();
+            if (data.projectId) {
+                const freshRes = await fetch("/api/animated/projects");
+                if (freshRes.ok) {
+                    const freshData = await freshRes.json();
+                    setProjects(freshData.projects || []);
+                    
+                    const proj = (freshData.projects || []).find((p: any) => p.id === data.projectId);
+                    if (proj) {
+                        setSelectedProjectId(proj.id);
+                        setDocId(proj.id);
+                        setProjectTitle(proj.title);
+                        setProjectScript(proj.script);
+                        setCharacters(proj.characters);
+                        setScenes(proj.scenes);
+                        setCurrentStep(4); // Load directly at Step 4 editor
+                    }
+                }
+            }
+        } catch (err: any) {
+            setError(err.message || "Failed to translate project.");
+        } finally {
+            setTranslating(false);
+        }
+    };
+
     // Compile timeline output
     const handleCompile = async () => {
         // Enforce all scenes have finished R2 clips
@@ -852,6 +902,27 @@ export default function KidsStoryBuilderPage() {
                             {projects.map(p => <option key={p.id} value={p.id} className="bg-gray-900 text-white">{p.title}</option>)}
                         </select>
                     </div>
+
+                    {docId && (
+                        <div className="flex items-center gap-1 bg-gray-900 border border-gray-800 px-2 py-1.5 rounded-xl">
+                            <span className="text-[10px] font-bold text-gray-500 uppercase">Translate:</span>
+                            <select disabled={translating} onChange={e => {
+                                if (e.target.value) {
+                                    handleTranslateProject(e.target.value);
+                                    e.target.value = "";
+                                }
+                            }} className="bg-transparent text-[10px] text-violet-400 focus:outline-none font-bold cursor-pointer">
+                                <option value="" className="bg-gray-900 text-gray-500">Language...</option>
+                                <option value="Spanish" className="bg-gray-900 text-white">Spanish (Español)</option>
+                                <option value="French" className="bg-gray-900 text-white">French (Français)</option>
+                                <option value="German" className="bg-gray-900 text-white">German (Deutsch)</option>
+                                <option value="Italian" className="bg-gray-900 text-white">Italian (Italiano)</option>
+                                <option value="Korean" className="bg-gray-900 text-white">Korean (한국어)</option>
+                                <option value="Chinese" className="bg-gray-900 text-white">Chinese (中文)</option>
+                            </select>
+                            {translating && <Loader2 className="w-3 h-3 animate-spin text-violet-400 ml-1" />}
+                        </div>
+                    )}
 
                     <button onClick={handleSaveProject} disabled={saving}
                         className="flex items-center gap-1.5 px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-55 text-white text-xs font-bold rounded-xl transition-all shadow-md font-sans">
