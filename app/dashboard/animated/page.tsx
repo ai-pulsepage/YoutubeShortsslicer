@@ -18,7 +18,8 @@ import {
     Volume2,
     Music,
     RefreshCw,
-    Check
+    Check,
+    Users
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +34,12 @@ type Scene = {
     jobId?: string;           // RunPod Job ID
     jobStatus?: "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED";
     sunoAudioKey?: string;     // R2 key for uploaded Suno audio
+};
+
+type Character = {
+    id: string;
+    name: string;
+    prompt: string;
 };
 
 type Video = {
@@ -58,6 +65,12 @@ export default function KidsStoryBuilderPage() {
     const [sourceMode, setSourceMode] = useState<"text" | "video">("video");
     const [docId, setDocId] = useState<string | null>(null);
     const [scenes, setScenes] = useState<Scene[]>([]);
+    
+    // Character Consistency Profiles
+    const [characters, setCharacters] = useState<Character[]>([
+        { id: "1", name: "Leo", prompt: "cheerful 3D cartoon boy with red hair, green eyes, yellow shirt, Pixar 3d style" },
+        { id: "2", name: "Lily", prompt: "cheerful 3D cartoon girl with black hair, princess crown, pink dress, Pixar 3d style" }
+    ]);
 
     // Voice preview audio state
     const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
@@ -217,14 +230,25 @@ export default function KidsStoryBuilderPage() {
         }
     };
 
-    // Dispatch Scene video generator request to RunPod
+    // Dispatch Scene video generator request to RunPod (Injecting Character Consistency Profiles)
     const generateSceneVideo = async (sceneId: string, visualPrompt: string) => {
         setError("");
+        
+        // Inject character consistency descriptions into prompt
+        let finalPrompt = visualPrompt;
+        characters.forEach(char => {
+            if (!char.name.trim()) return;
+            const regex = new RegExp(`\\b${char.name}\\b`, 'gi');
+            if (regex.test(finalPrompt)) {
+                finalPrompt = finalPrompt.replace(regex, `${char.name} (${char.prompt})`);
+            }
+        });
+
         try {
             const res = await fetch("/api/animated/scenes/video", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ sceneId, visualPrompt, docId })
+                body: JSON.stringify({ sceneId, visualPrompt: finalPrompt, docId })
             });
 
             const data = await res.json();
@@ -255,7 +279,6 @@ export default function KidsStoryBuilderPage() {
             formData.append("file", file);
             formData.append("type", "voice");
 
-            // Re-use avatar asset upload path, storing to secure R2
             const res = await fetch("/api/cam-overlay/upload", {
                 method: "POST",
                 body: formData
@@ -292,8 +315,8 @@ export default function KidsStoryBuilderPage() {
             type: "dialogue",
             character: "Leo",
             voice: "en-US-AnaNeural-Female",
-            text: "New dialogue text...",
-            visualPrompt: "3D animation cartoon scenery"
+            text: "New dialogue script...",
+            visualPrompt: "Leo standing in a happy kids bedroom"
         };
         setScenes(prev => [...prev, newScene]);
     };
@@ -301,6 +324,24 @@ export default function KidsStoryBuilderPage() {
     // Delete scene
     const deleteScene = (id: string) => {
         setScenes(prev => prev.filter(s => s.id !== id));
+    };
+
+    // Character Profiles Actions
+    const addCharacterProfile = () => {
+        setCharacters(prev => [
+            ...prev,
+            { id: `char-${Date.now()}`, name: "CharacterName", prompt: "description details..." }
+        ]);
+    };
+
+    const updateCharacterProfile = (id: string, updates: Partial<Character>) => {
+        setCharacters(prev =>
+            prev.map(c => (c.id === id ? { ...c, ...updates } : c))
+        );
+    };
+
+    const deleteCharacterProfile = (id: string) => {
+        setCharacters(prev => prev.filter(c => c.id !== id));
     };
 
     // Final Stitch & Compile Video
@@ -325,7 +366,6 @@ export default function KidsStoryBuilderPage() {
             if (!res.ok) throw new Error(data.error || "Compilation failed");
 
             if (data.videoUrl) {
-                // Get absolute public url via presigned helper
                 const signedRes = await fetch(`/api/storage/signed?key=${data.videoUrl}`);
                 const signedData = await signedRes.json();
                 setCompiledVideoUrl(signedData.url || data.videoUrl);
@@ -416,9 +456,35 @@ export default function KidsStoryBuilderPage() {
                     </div>
                 )}
 
-                {/* Right Side: Interactive Storyboard Builder */}
+                {/* Right Side: Cast Profiles + Interactive Storyboard Timeline */}
                 <div className={cn("space-y-6", sourceMode === "video" ? "lg:col-span-8" : "lg:col-span-12")}>
                     
+                    {/* Character Consistency Profiles Box */}
+                    <div className="bg-gray-900/40 border border-gray-800 rounded-2xl p-5 space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                                <Users className="w-4 h-4 text-violet-400" /> Cast of Characters (Consistency Directory)
+                            </h3>
+                            <button onClick={addCharacterProfile} className="flex items-center gap-1 px-2 py-0.5 bg-violet-600/10 border border-violet-500/20 text-violet-400 rounded text-[10px] font-bold hover:bg-violet-600/20 transition-all">
+                                <Plus className="w-3 h-3" /> Add Character
+                            </button>
+                        </div>
+                        
+                        <div className="space-y-2.5 max-h-[160px] overflow-y-auto pr-1">
+                            {characters.map(char => (
+                                <div key={char.id} className="flex gap-2 items-center bg-gray-950/20 border border-gray-850 p-2 rounded-xl">
+                                    <input type="text" placeholder="Name" value={char.name} onChange={e => updateCharacterProfile(char.id, { name: e.target.value })}
+                                        className="w-24 bg-gray-800 border border-gray-750 rounded-lg px-2.5 py-1 text-xs font-semibold text-white focus:outline-none focus:border-violet-500" />
+                                    <input type="text" placeholder="Appearance description (injected into visual prompts)..." value={char.prompt} onChange={e => updateCharacterProfile(char.id, { prompt: e.target.value })}
+                                        className="flex-1 bg-gray-800 border border-gray-750 rounded-lg px-2.5 py-1 text-xs text-gray-300 focus:outline-none focus:border-violet-500" />
+                                    <button onClick={() => deleteCharacterProfile(char.id)} className="p-1 bg-gray-800 border border-gray-750 hover:bg-red-950/25 hover:border-red-900/30 text-gray-500 hover:text-red-400 rounded-lg transition-colors">
+                                        <Trash className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
                     {scenes.length === 0 ? (
                         <div className="bg-gray-900/10 border border-dashed border-gray-800 rounded-3xl p-12 text-center max-w-xl mx-auto flex flex-col items-center justify-center space-y-4">
                             <Tv className="w-12 h-12 text-gray-700" />
@@ -444,100 +510,149 @@ export default function KidsStoryBuilderPage() {
                                     </button>
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-4">
                                     {scenes.map((scene, idx) => (
-                                        <div key={scene.id} className="bg-gray-900/40 border border-gray-800 rounded-2xl p-4 flex flex-col space-y-3 relative group">
+                                        <div key={scene.id} className="bg-gray-900/40 border border-gray-800 rounded-2xl p-5 relative group">
                                             {/* Delete Button */}
                                             <button onClick={() => deleteScene(scene.id)}
-                                                className="absolute top-2 right-2 p-1.5 bg-gray-850 hover:bg-red-950/20 border border-gray-800 hover:border-red-900/30 text-gray-500 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all">
+                                                className="absolute top-3 right-3 p-1.5 bg-gray-850 hover:bg-red-950/20 border border-gray-800 hover:border-red-900/30 text-gray-500 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-10">
                                                 <Trash className="w-3.5 h-3.5" />
                                             </button>
 
-                                            {/* Header Info */}
-                                            <div className="flex items-center gap-2">
-                                                <span className="w-6 h-6 rounded-lg bg-gray-800 border border-gray-700 flex items-center justify-center text-xs font-bold text-white">{idx + 1}</span>
-                                                <select value={scene.type} onChange={e => updateScene(scene.id, { type: e.target.value as "dialogue" | "song" })}
-                                                    className="bg-gray-850 border border-gray-750 text-[10px] font-bold text-white px-2 py-0.5 rounded uppercase focus:outline-none">
-                                                    <option value="dialogue">Dialogue</option>
-                                                    <option value="song">Song / Lyric</option>
-                                                </select>
-                                            </div>
-
-                                            {/* Speaker controls (Dialogue type) */}
-                                            {scene.type === "dialogue" ? (
-                                                <div className="grid grid-cols-2 gap-2">
-                                                    <div>
-                                                        <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">Speaker Actor</label>
-                                                        <input type="text" value={scene.character} onChange={e => updateScene(scene.id, { character: e.target.value })}
-                                                            className="w-full bg-gray-800 border border-gray-750 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-violet-500" />
-                                                    </div>
-                                                    <div>
-                                                        <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">Voice Tone</label>
-                                                        <div className="flex items-center gap-1">
-                                                            <select value={scene.voice} onChange={e => updateScene(scene.id, { voice: e.target.value })}
-                                                                className="flex-1 bg-gray-800 border border-gray-750 rounded-lg px-1.5 py-1.5 text-[10px] text-white focus:outline-none focus:border-violet-500">
-                                                                {EDGE_TTS_VOICES.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
-                                                            </select>
-                                                            <button onClick={() => playVoicePreview(scene.id, scene.text, scene.voice)}
-                                                                className={cn("p-1.5 rounded-lg border transition-all",
-                                                                    playingAudioId === scene.id ? "bg-violet-500/10 border-violet-500/30 text-violet-400" : "bg-gray-800 border-gray-750 text-gray-400 hover:text-white")}>
-                                                                {playingAudioId === scene.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Volume2 className="w-3.5 h-3.5" />}
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                // Song controls (Song type)
-                                                <div className="space-y-1.5">
-                                                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block">Suno Song Audio track (.mp3)</label>
-                                                    <div className="flex items-center gap-2">
-                                                        <label className="flex-1 flex items-center justify-between bg-gray-800 border border-dashed border-gray-750 hover:bg-gray-800/80 px-3 py-1.5 rounded-xl cursor-pointer transition-colors text-xs text-gray-400">
-                                                            <span className="truncate">{scene.sunoAudioKey ? "✓ Audio uploaded" : "Upload Suno MP3"}</span>
-                                                            <Music className="w-3.5 h-3.5 text-gray-500" />
-                                                            <input type="file" accept="audio/mpeg" onChange={e => e.target.files?.[0] && handleSunoUpload(scene.id, e.target.files[0])} className="hidden" />
-                                                        </label>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Text block */}
-                                            <div>
-                                                <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">
-                                                    {scene.type === "song" ? "Song Lyrics" : "Dialogue Spoken Text"}
-                                                </label>
-                                                <textarea value={scene.text} onChange={e => updateScene(scene.id, { text: e.target.value })} rows={2}
-                                                    className="w-full bg-gray-800 border border-gray-750 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500 resize-none font-sans" />
-                                            </div>
-
-                                            {/* Visual prompt generation */}
-                                            <div>
-                                                <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">RunPod Visual Prompt</label>
-                                                <input type="text" value={scene.visualPrompt} onChange={e => updateScene(scene.id, { visualPrompt: e.target.value })}
-                                                    className="w-full bg-gray-800 border border-gray-750 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500" />
-                                            </div>
-
-                                            {/* RunPod Generator Status Control */}
-                                            <div className="pt-2 border-t border-gray-850 flex items-center justify-between gap-2">
-                                                <span className="text-[10px] text-gray-500 font-mono">
-                                                    {scene.jobStatus === "QUEUED" ? (
-                                                        <span className="flex items-center gap-1 text-gray-400"><RefreshCw className="w-3 h-3 animate-spin" /> Queued</span>
-                                                    ) : scene.jobStatus === "PROCESSING" ? (
-                                                        <span className="flex items-center gap-1 text-violet-400"><Loader2 className="w-3 h-3 animate-spin" /> Rendering...</span>
-                                                    ) : scene.jobStatus === "COMPLETED" ? (
-                                                        <span className="flex items-center gap-1 text-emerald-400"><Check className="w-3 h-3" /> Ready</span>
-                                                    ) : scene.jobStatus === "FAILED" ? (
-                                                        <span className="flex items-center gap-1 text-red-400"><XCircle className="w-3 h-3" /> Failed</span>
-                                                    ) : (
-                                                        "Not Generated"
-                                                    )}
-                                                </span>
+                                            {/* Grid layout inside card - Left (Inputs) and Right (Video clip display) */}
+                                            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
                                                 
-                                                <button onClick={() => generateSceneVideo(scene.id, scene.visualPrompt)}
-                                                    disabled={scene.jobStatus === "QUEUED" || scene.jobStatus === "PROCESSING"}
-                                                    className={cn("px-2.5 py-1 rounded-md text-[10px] font-bold transition-all disabled:opacity-50",
-                                                        scene.jobStatus === "COMPLETED" ? "bg-gray-850 hover:bg-gray-800 text-gray-300" : "bg-violet-600 hover:bg-violet-500 text-white")}>
-                                                    {scene.jobStatus === "COMPLETED" ? "Regenerate Clip" : "Generate Clip"}
-                                                </button>
+                                                {/* Left Column - Inputs */}
+                                                <div className="md:col-span-7 space-y-3">
+                                                    
+                                                    {/* Row Header */}
+                                                    <div className="flex items-center gap-2 pb-1 border-b border-gray-800/50">
+                                                        <span className="w-6 h-6 rounded-lg bg-gray-800 border border-gray-700 flex items-center justify-center text-xs font-bold text-white">{idx + 1}</span>
+                                                        <select value={scene.type} onChange={e => updateScene(scene.id, { type: e.target.value as "dialogue" | "song" })}
+                                                            className="bg-gray-850 border border-gray-750 text-[10px] font-bold text-white px-2 py-0.5 rounded uppercase focus:outline-none">
+                                                            <option value="dialogue">Dialogue</option>
+                                                            <option value="song">Song / Lyric</option>
+                                                        </select>
+                                                    </div>
+
+                                                    {/* Dialogue type controls */}
+                                                    {scene.type === "dialogue" ? (
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            <div>
+                                                                <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">Speaker Actor</label>
+                                                                <input type="text" value={scene.character} onChange={e => updateScene(scene.id, { character: e.target.value })}
+                                                                    className="w-full bg-gray-850 border border-gray-750 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-violet-500" />
+                                                            </div>
+                                                            <div>
+                                                                <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">Voice Tone</label>
+                                                                <div className="flex items-center gap-1">
+                                                                    <select value={scene.voice} onChange={e => updateScene(scene.id, { voice: e.target.value })}
+                                                                        className="flex-1 bg-gray-850 border border-gray-750 rounded-lg px-1.5 py-1.5 text-[10px] text-white focus:outline-none focus:border-violet-500">
+                                                                        {EDGE_TTS_VOICES.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
+                                                                    </select>
+                                                                    <button onClick={() => playVoicePreview(scene.id, scene.text, scene.voice)}
+                                                                        className={cn("p-1.5 rounded-lg border transition-all",
+                                                                            playingAudioId === scene.id ? "bg-violet-500/10 border-violet-500/30 text-violet-400" : "bg-gray-800 border-gray-750 text-gray-400 hover:text-white")}>
+                                                                        {playingAudioId === scene.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Volume2 className="w-3.5 h-3.5" />}
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        // Song type Suno Audio controls
+                                                        <div className="space-y-1.5">
+                                                            <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block">Suno Song Audio track (.mp3)</label>
+                                                            <div className="flex items-center gap-2">
+                                                                <label className="flex-1 flex items-center justify-between bg-gray-850 border border-dashed border-gray-750 hover:bg-gray-800/80 px-3 py-1.5 rounded-xl cursor-pointer transition-colors text-xs text-gray-400">
+                                                                    <span className="truncate">{scene.sunoAudioKey ? "✓ Audio uploaded" : "Upload Suno MP3"}</span>
+                                                                    <Music className="w-3.5 h-3.5 text-gray-500" />
+                                                                    <input type="file" accept="audio/mpeg" onChange={e => e.target.files?.[0] && handleSunoUpload(scene.id, e.target.files[0])} className="hidden" />
+                                                                </label>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Textarea for Script/Lyrics */}
+                                                    <div>
+                                                        <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">
+                                                            {scene.type === "song" ? "Song Lyrics" : "Dialogue Spoken Text"}
+                                                        </label>
+                                                        <textarea value={scene.text} onChange={e => updateScene(scene.id, { text: e.target.value })} rows={4}
+                                                            className="w-full bg-gray-850 border border-gray-750 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500 font-sans leading-relaxed" />
+                                                    </div>
+
+                                                    {/* Visual prompt input */}
+                                                    <div>
+                                                        <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">RunPod Visual Prompt</label>
+                                                        <textarea value={scene.visualPrompt} onChange={e => updateScene(scene.id, { visualPrompt: e.target.value })} rows={2}
+                                                            className="w-full bg-gray-850 border border-gray-750 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500 leading-relaxed resize-none" />
+                                                    </div>
+
+                                                    {/* Generate Trigger */}
+                                                    <div className="pt-2">
+                                                        <button onClick={() => generateSceneVideo(scene.id, scene.visualPrompt)}
+                                                            disabled={scene.jobStatus === "QUEUED" || scene.jobStatus === "PROCESSING"}
+                                                            className={cn("w-full flex items-center justify-center gap-1 py-2 rounded-xl text-xs font-bold transition-all disabled:opacity-50",
+                                                                scene.jobStatus === "COMPLETED" ? "bg-gray-850 hover:bg-gray-800 text-gray-300 border border-gray-750" : "bg-violet-600 hover:bg-violet-500 text-white")}>
+                                                            {scene.jobStatus === "QUEUED" || scene.jobStatus === "PROCESSING" ? (
+                                                                <>
+                                                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                                    <span>Generating Clip...</span>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <Wand2 className="w-3.5 h-3.5" />
+                                                                    <span>{scene.jobStatus === "COMPLETED" ? "Regenerate Visual Clip" : "Generate Visual Clip"}</span>
+                                                                </>
+                                                            )}
+                                                        </button>
+                                                    </div>
+
+                                                </div>
+
+                                                {/* Right Column - Video Preview Window */}
+                                                <div className="md:col-span-5 flex flex-col h-full min-h-[220px] bg-black/30 border border-gray-850 rounded-2xl overflow-hidden p-4 justify-between">
+                                                    <div className="flex-1 flex flex-col items-center justify-center">
+                                                        {scene.visualPath ? (
+                                                            <div className="w-full aspect-video flex items-center justify-center relative bg-black/40 rounded-xl overflow-hidden border border-gray-800">
+                                                                {/* Map output key to a temporary public url */}
+                                                                <video src={`/api/storage/signed?key=${scene.visualPath}`} controls className="max-h-full max-w-full" />
+                                                            </div>
+                                                        ) : (
+                                                            <div className="text-center space-y-2">
+                                                                {scene.jobStatus === "QUEUED" ? (
+                                                                    <div className="flex flex-col items-center gap-2 text-gray-400">
+                                                                        <RefreshCw className="w-8 h-8 animate-spin text-gray-500" />
+                                                                        <span className="text-xs font-semibold">Queued in RunPod channel...</span>
+                                                                    </div>
+                                                                ) : scene.jobStatus === "PROCESSING" ? (
+                                                                    <div className="flex flex-col items-center gap-2 text-violet-400">
+                                                                        <Loader2 className="w-8 h-8 animate-spin text-violet-500" />
+                                                                        <span className="text-xs font-semibold">Generating scene GPU frames...</span>
+                                                                    </div>
+                                                                ) : scene.jobStatus === "FAILED" ? (
+                                                                    <div className="flex flex-col items-center gap-2 text-red-400">
+                                                                        <XCircle className="w-8 h-8 text-red-500" />
+                                                                        <span className="text-xs font-semibold">Generation failed</span>
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="text-gray-600 flex flex-col items-center gap-1.5">
+                                                                        <Film className="w-8 h-8 text-gray-800" />
+                                                                        <span className="text-[11px]">Video clip not generated</span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="pt-3 border-t border-gray-850 flex items-center justify-between">
+                                                        <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Preview Display</span>
+                                                        <span className="text-[10px] text-gray-400 font-mono">
+                                                            {scene.jobId ? `Job: ${scene.jobId.substring(0, 8)}` : "No job associated"}
+                                                        </span>
+                                                    </div>
+                                                </div>
+
                                             </div>
                                         </div>
                                     ))}
