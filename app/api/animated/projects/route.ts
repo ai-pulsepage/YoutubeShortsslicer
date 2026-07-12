@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
             script: p.script,
             status: p.status,
             finalVideoPath: p.finalVideoPath,
+            sourceUrls: p.sourceUrls || [],
             characters: p.assets.map(a => ({
                 id: a.id,
                 name: a.label,
@@ -85,7 +86,7 @@ export async function POST(req: NextRequest) {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { id, title, script, characters, scenes } = await req.json();
+    const { id, title, script, characters, scenes, sourceUrls } = await req.json();
 
     try {
         let activeId = id;
@@ -98,7 +99,8 @@ export async function POST(req: NextRequest) {
                     title: title || "New Kids Story Project",
                     script: script || "",
                     genre: "children",
-                    status: "DRAFT"
+                    status: "DRAFT",
+                    sourceUrls: sourceUrls || []
                 }
             });
             activeId = doc.id;
@@ -107,7 +109,8 @@ export async function POST(req: NextRequest) {
                 where: { id: activeId },
                 data: {
                     title: title,
-                    script: script
+                    script: script,
+                    sourceUrls: sourceUrls || []
                 }
             });
         }
@@ -199,6 +202,7 @@ export async function POST(req: NextRequest) {
                 id: updated?.id,
                 title: updated?.title,
                 script: updated?.script,
+                sourceUrls: updated?.sourceUrls || [],
                 characters: updated?.assets.map(a => ({
                     id: a.id,
                     name: a.label,

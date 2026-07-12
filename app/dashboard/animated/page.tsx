@@ -73,6 +73,7 @@ type Project = {
     characters: Character[];
     scenes: Scene[];
     finalVideoPath?: string;
+    sourceUrls?: string[];
 };
 
 type Video = {
@@ -349,6 +350,15 @@ export default function KidsStoryBuilderPage() {
                 character: s.character || "Leo",
                 voice: s.voice || "en-US-AnaNeural-Female"
             })));
+            
+            // Restore video ingestion source mode and ID
+            if (proj.sourceUrls && proj.sourceUrls.length > 0) {
+                setSourceMode("video");
+                setSelectedVideoId(proj.sourceUrls[0]);
+            } else {
+                setSourceMode("text");
+                setSelectedVideoId("");
+            }
             setCurrentStep(1);
         }
     };
@@ -366,7 +376,8 @@ export default function KidsStoryBuilderPage() {
                     title: projectTitle || "New Story Project",
                     script: projectScript,
                     characters,
-                    scenes
+                    scenes,
+                    sourceUrls: selectedVideoId ? [selectedVideoId] : []
                 })
             });
 
