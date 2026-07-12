@@ -207,24 +207,26 @@ const downloadWorker = new Worker(
                         for (const provider of whisperProviders) {
                             try {
                                 console.log(`[Download] Sending to ${provider.name} Whisper...`);
-                                const FormData = (await import("form-data")).default;
-                                const form = new FormData();
-                                form.append("file", fs.createReadStream(audioPath));
-                                form.append("model", provider.model);
-                                form.append("response_format", "verbose_json");
-                                form.append("timestamp_granularities[]", "word");
-                                form.append("timestamp_granularities[]", "segment");
+                                
+                                const audioBuffer = fs.readFileSync(audioPath);
+                                const audioBlob = new Blob([audioBuffer], { type: "audio/mpeg" });
+
+                                const nativeForm = new globalThis.FormData();
+                                nativeForm.append("file", audioBlob, "audio.mp3");
+                                nativeForm.append("model", provider.model);
+                                nativeForm.append("response_format", "verbose_json");
+                                nativeForm.append("timestamp_granularities[]", "word");
+                                nativeForm.append("timestamp_granularities[]", "segment");
                                 if (provider.name === "Groq") {
-                                    form.append("language", "en");
+                                    nativeForm.append("language", "en");
                                 }
 
                                 const whisperRes = await fetch(provider.url, {
                                     method: "POST",
                                     headers: {
                                         "Authorization": `Bearer ${provider.key}`,
-                                        ...form.getHeaders(),
                                     },
-                                    body: form as any,
+                                    body: nativeForm,
                                 });
 
                                 if (!whisperRes.ok) {
