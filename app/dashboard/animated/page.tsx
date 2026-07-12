@@ -12,9 +12,28 @@ import {
     CheckCircle2,
     XCircle,
     Search,
-    Tv
+    Tv,
+    Plus,
+    Trash,
+    Volume2,
+    Music,
+    RefreshCw,
+    Check
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+type Scene = {
+    id: string;
+    type: "dialogue" | "song";
+    character: string;
+    voice: string;
+    text: string;
+    visualPrompt: string;
+    visualPath?: string;      // R2 key for generated video clip
+    jobId?: string;           // RunPod Job ID
+    jobStatus?: "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED";
+    sunoAudioKey?: string;     // R2 key for uploaded Suno audio
+};
 
 type Video = {
     id: string;
@@ -25,7 +44,6 @@ type Video = {
 };
 
 const EDGE_TTS_VOICES = [
-    { id: "", label: "Auto-detect (Recommended)" },
     { id: "en-US-AnaNeural-Female", label: "Ana (US Child Female)" },
     { id: "zh-CN-XiaoyiNeural-Female", label: "Xiaoyi (CN Child Female)" },
     { id: "en-US-AriaNeural-Female", label: "Aria (US Female)" },
@@ -36,18 +54,19 @@ const EDGE_TTS_VOICES = [
     { id: "zh-CN-YunxiNeural-Male", label: "Yunxi (CN Male)" },
 ];
 
-export default function AnimatedShortsPage() {
-    const [sourceMode, setSourceMode] = useState<"text" | "video">("text");
-    const [topic, setTopic] = useState("");
-    const [aspectRatio, setAspectRatio] = useState("9:16");
-    const [voiceName, setVoiceName] = useState("");
-    const [bgmType, setBgmType] = useState("random");
-    const [subtitleEnabled, setSubtitleEnabled] = useState(true);
+export default function KidsStoryBuilderPage() {
+    const [sourceMode, setSourceMode] = useState<"text" | "video">("video");
+    const [docId, setDocId] = useState<string | null>(null);
+    const [scenes, setScenes] = useState<Scene[]>([]);
 
-    const [loading, setLoading] = useState(false);
+    // Voice preview audio state
+    const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+    const [previewAudio, setPreviewAudio] = useState<HTMLAudioElement | null>(null);
+
+    // Compilation states
+    const [compiling, setCompiling] = useState(false);
+    const [compiledVideoUrl, setCompiledVideoUrl] = useState<string | null>(null);
     const [error, setError] = useState("");
-    const [taskId, setTaskId] = useState<string | null>(null);
-    const [taskStatus, setTaskStatus] = useState<any>(null);
 
     // Ingested videos state
     const [videos, setVideos] = useState<Video[]>([]);
@@ -98,35 +117,45 @@ export default function AnimatedShortsPage() {
             .finally(() => setTranscriptLoading(false));
     }, [selectedVideoId, videos]);
 
-    // Poll MoneyPrinterTask status
+    // Poll RunPod Job Statuses
     useEffect(() => {
-        if (!taskId) return;
+        const pendingJobs = scenes.filter(s => s.jobId && s.jobStatus !== "COMPLETED" && s.jobStatus !== "FAILED");
+        if (pendingJobs.length === 0) return;
 
         const interval = setInterval(async () => {
+            const jobIds = pendingJobs.map(s => s.jobId).join(",");
             try {
-                const res = await fetch(`/api/animated/tasks/${taskId}`);
+                const res = await fetch(`/api/animated/scenes/video/status?jobIds=${jobIds}`);
                 if (!res.ok) return;
-                const data = await res.json();
-                
-                const task = data.data || data;
-                setTaskStatus(task);
 
-                if (task.state === 1 || task.state === -1) {
-                    setTaskId(null);
-                    setLoading(false);
-                    if (task.state === -1) {
-                        setError(task.message || "Video generation failed.");
-                    }
-                }
+                const data = await res.json();
+                const updatedJobs = data.jobs || [];
+
+                setScenes(prev =>
+                    prev.map(scene => {
+                        const matchingJob = updatedJobs.find((j: any) => j.id === scene.jobId);
+                        if (!matchingJob) return scene;
+
+                        return {
+                            ...scene,
+                            jobStatus: matchingJob.status === "QUEUED" ? "QUEUED" 
+                                     : matchingJob.status === "PROCESSING" ? "PROCESSING"
+                                     : matchingJob.status === "COMPLETED" ? "COMPLETED"
+                                     : "FAILED",
+                            visualPath: matchingJob.outputPath || scene.visualPath
+                        };
+                    })
+                );
             } catch (err) {
-                console.error("Poller error:", err);
+                console.error("Job poller error:", err);
             }
         }, 3000);
 
         return () => clearInterval(interval);
-    }, [taskId]);
+    }, [scenes]);
 
-    const handleSummarize = async () => {
+    // Ingest & draft new kids storyboard scenes
+    const handleAnalyze = async () => {
         if (!selectedVideoId) return;
         setSummarizing(true);
         setError("");
@@ -139,53 +168,172 @@ export default function AnimatedShortsPage() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to summarize transcript");
 
-            if (data.summary) {
-                setTopic(data.summary);
+            if (data.scenes && Array.isArray(data.scenes)) {
+                setScenes(data.scenes);
+                setDocId(null); // Reset parent reference for new compilation
             }
         } catch (err: any) {
-            setError(err.message || "Error generating summary.");
+            setError(err.message || "Error generating storyboard.");
         } finally {
             setSummarizing(false);
         }
     };
 
-    const handleUseRawTranscript = () => {
-        if (!transcriptText) return;
-        setTopic(transcriptText.substring(0, 1800)); // safety characters clamp
-    };
+    // Voice Preview Synthesizer
+    const playVoicePreview = async (sceneId: string, text: string, voice: string) => {
+        if (!text || !voice) return;
 
-    const generate = async () => {
-        if (!topic.trim()) return;
-        setLoading(true);
+        if (playingAudioId === sceneId && previewAudio) {
+            previewAudio.pause();
+            setPlayingAudioId(null);
+            return;
+        }
+
         setError("");
-        setTaskId(null);
-        setTaskStatus(null);
+        setPlayingAudioId(sceneId);
 
         try {
-            const res = await fetch("/api/animated/generate", {
+            const res = await fetch("/api/animated/voice/preview", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    topic,
-                    aspectRatio,
-                    voiceName,
-                    bgmType,
-                    subtitleEnabled
-                }),
+                body: JSON.stringify({ text, voice })
             });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || "Generation request failed");
 
-            const task = data.data || data;
-            if (task && task.task_id) {
-                setTaskId(task.task_id);
-                setTaskStatus(task);
-            } else {
-                throw new Error("Invalid task response from MoneyPrinterTurbo");
+            if (!res.ok) throw new Error("Voice synthesis preview failed");
+
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+
+            const audio = new Audio(url);
+            setPreviewAudio(audio);
+            audio.play();
+
+            audio.onended = () => {
+                setPlayingAudioId(null);
+            };
+        } catch (err: any) {
+            setError(err.message || "Failed to preview voice.");
+            setPlayingAudioId(null);
+        }
+    };
+
+    // Dispatch Scene video generator request to RunPod
+    const generateSceneVideo = async (sceneId: string, visualPrompt: string) => {
+        setError("");
+        try {
+            const res = await fetch("/api/animated/scenes/video", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ sceneId, visualPrompt, docId })
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to start video generation");
+
+            if (data.docId) setDocId(data.docId);
+
+            setScenes(prev =>
+                prev.map(s => {
+                    if (s.id !== sceneId) return s;
+                    return {
+                        ...s,
+                        jobId: data.jobId,
+                        jobStatus: "QUEUED"
+                    };
+                })
+            );
+        } catch (err: any) {
+            setError(err.message || "Failed to dispatch video task.");
+        }
+    };
+
+    // Handle Custom Suno MP3 Upload for song scenes
+    const handleSunoUpload = async (sceneId: string, file: File) => {
+        setError("");
+        try {
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("type", "voice");
+
+            // Re-use avatar asset upload path, storing to secure R2
+            const res = await fetch("/api/cam-overlay/upload", {
+                method: "POST",
+                body: formData
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Upload failed");
+
+            setScenes(prev =>
+                prev.map(s => {
+                    if (s.id !== sceneId) return s;
+                    return {
+                        ...s,
+                        sunoAudioKey: data.path || data.key
+                    };
+                })
+            );
+        } catch (err: any) {
+            setError(`Audio upload failed: ${err.message}`);
+        }
+    };
+
+    // Edit scene values dynamically
+    const updateScene = (id: string, updates: Partial<Scene>) => {
+        setScenes(prev =>
+            prev.map(s => (s.id === id ? { ...s, ...updates } : s))
+        );
+    };
+
+    // Add empty scene
+    const addScene = () => {
+        const newScene: Scene = {
+            id: `scene-manual-${Date.now()}`,
+            type: "dialogue",
+            character: "Leo",
+            voice: "en-US-AnaNeural-Female",
+            text: "New dialogue text...",
+            visualPrompt: "3D animation cartoon scenery"
+        };
+        setScenes(prev => [...prev, newScene]);
+    };
+
+    // Delete scene
+    const deleteScene = (id: string) => {
+        setScenes(prev => prev.filter(s => s.id !== id));
+    };
+
+    // Final Stitch & Compile Video
+    const handleCompile = async () => {
+        if (scenes.some(s => !s.visualPath)) {
+            setError("Cannot compile. Make sure all scenes have finished video clips generated.");
+            return;
+        }
+
+        setCompiling(true);
+        setError("");
+        setCompiledVideoUrl(null);
+
+        try {
+            const res = await fetch("/api/animated/scenes/compile", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ scenes, docId })
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Compilation failed");
+
+            if (data.videoUrl) {
+                // Get absolute public url via presigned helper
+                const signedRes = await fetch(`/api/storage/signed?key=${data.videoUrl}`);
+                const signedData = await signedRes.json();
+                setCompiledVideoUrl(signedData.url || data.videoUrl);
             }
         } catch (err: any) {
-            setError(err.message);
-            setLoading(false);
+            setError(err.message || "Failed to compile merged video.");
+        } finally {
+            setCompiling(false);
         }
     };
 
@@ -203,253 +351,233 @@ export default function AnimatedShortsPage() {
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div>
-                <h1 className="text-3xl font-bold text-white">Animated Shorts</h1>
-                <p className="text-gray-400 mt-1">Generate fully animated YouTube Shorts — script, voiceover, visuals, all from a topic or video source</p>
+            <div className="flex items-center justify-between border-b border-gray-800 pb-4">
+                <div>
+                    <h1 className="text-3xl font-bold text-white">Kids Story Storyboard Builder</h1>
+                    <p className="text-gray-400 mt-1">Ingest transcripts, create multi-character dialogs, upload Suno music, and generate scenes with RunPod.</p>
+                </div>
+                <div className="flex gap-2">
+                    <button onClick={() => setSourceMode(sourceMode === "video" ? "text" : "video")}
+                        className="px-4 py-2 bg-gray-900 border border-gray-800 rounded-xl text-xs font-semibold text-gray-300 hover:text-white transition-all">
+                        {sourceMode === "video" ? "Hide Video Ingest Panel" : "Show Video Ingest Panel"}
+                    </button>
+                </div>
             </div>
 
-            {/* Source Mode Selector */}
-            <div className="flex gap-1 bg-gray-900/50 border border-gray-800 rounded-2xl p-1 w-fit">
-                <button onClick={() => setSourceMode("text")}
-                    className={cn("flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all",
-                        sourceMode === "text" ? "bg-violet-500/15 text-violet-400" : "text-gray-400 hover:text-white")}>
-                    <Wand2 className="w-4 h-4" /> Custom Topic Prompt
-                </button>
-                <button onClick={() => setSourceMode("video")}
-                    className={cn("flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all",
-                        sourceMode === "video" ? "bg-violet-500/15 text-violet-400" : "text-gray-400 hover:text-white")}>
-                    <Film className="w-4 h-4" /> Ingested Video Source
-                </button>
-            </div>
-
-            {/* Main Area */}
+            {/* Layout Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                 
-                {/* Left Section (Source Control - switches depending on mode) */}
-                <div className="lg:col-span-8 space-y-6">
-                    {sourceMode === "text" ? (
-                        <div className="bg-gray-900/20 border border-gray-800 rounded-2xl p-8 flex flex-col justify-center min-h-[460px] text-center space-y-4">
-                            <div className="mx-auto w-12 h-12 rounded-xl bg-violet-500/10 flex items-center justify-center">
-                                <Wand2 className="w-6 h-6 text-violet-400" />
-                            </div>
-                            <div>
-                                <h3 className="text-lg font-semibold text-white">Generate from Topic</h3>
-                                <p className="text-gray-400 text-xs mt-1 max-w-sm mx-auto">
-                                    Type your video theme directly in the prompt editor on the right, or switch to "Ingested Video Source" to repurpose an existing video transcript.
-                                </p>
-                            </div>
-                            
-                            {/* Idea Templates */}
-                            <div className="grid grid-cols-2 gap-3 max-w-lg mx-auto pt-4">
-                                {[
-                                    "5 Mind-Blowing Facts About the Deep Ocean",
-                                    "Why Did the Roman Empire Actually Collapse?",
-                                    "The Dark History Behind Common Fairy Tales",
-                                    "How Coffee Affects Your Brain in the Morning",
-                                ].map((idea) => (
-                                    <button key={idea} onClick={() => setTopic(idea)}
-                                        className="p-3 text-left bg-gray-850/40 hover:bg-gray-800/60 border border-gray-800 rounded-xl text-xs text-gray-300 transition-colors">
-                                        {idea}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 h-[460px] border border-gray-800 rounded-2xl overflow-hidden bg-gray-900/20">
-                            {/* Left List */}
-                            <div className="md:col-span-5 flex flex-col border-r border-gray-800 h-full">
-                                <div className="p-3 border-b border-gray-800 space-y-2">
-                                    <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Ready Videos</span>
-                                    <div className="relative">
-                                        <Search className="absolute left-2.5 top-2 w-3.5 h-3.5 text-gray-500" />
-                                        <input type="text" placeholder="Search..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                                            className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-8 pr-3 py-1 text-xs text-white placeholder:text-gray-500 focus:outline-none focus:border-violet-500" />
-                                    </div>
-                                </div>
-                                <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                                    {videosLoading ? (
-                                        <div className="flex justify-center py-8"><Loader2 className="w-4 h-4 animate-spin text-violet-400" /></div>
-                                    ) : filteredVideos.length === 0 ? (
-                                        <div className="text-center py-8 text-xs text-gray-500">No ready videos.</div>
-                                    ) : (
-                                        filteredVideos.map(v => (
-                                            <button key={v.id} onClick={() => setSelectedVideoId(v.id)}
-                                                className={cn("w-full flex items-center gap-2 p-2 rounded-xl text-left transition-all border text-xs",
-                                                    selectedVideoId === v.id ? "bg-violet-500/10 border-violet-500/30" : "border-transparent hover:bg-gray-850/40")}>
-                                                <div className="w-12 aspect-video bg-gray-800 rounded overflow-hidden flex-shrink-0 relative">
-                                                    {v.thumbnail ? <img src={v.thumbnail} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center bg-gray-850"><Film className="w-3.5 h-3.5 text-gray-600" /></div>}
-                                                </div>
-                                                <div className="min-w-0 flex-1">
-                                                    <p className="font-medium text-white truncate text-[11px]">{v.title}</p>
-                                                    <p className="text-[9px] text-gray-500 mt-0.5">{v.duration ? formatTime(v.duration) : "--:--"}</p>
-                                                </div>
-                                            </button>
-                                        ))
-                                    )}
+                {/* Left Side: Video Ingester */}
+                {sourceMode === "video" && (
+                    <div className="lg:col-span-4 space-y-4">
+                        <div className="bg-gray-900/40 border border-gray-800 rounded-2xl p-4 flex flex-col h-[520px]">
+                            <div className="border-b border-gray-800 pb-3 space-y-2">
+                                <h3 className="text-xs font-bold text-white uppercase tracking-wider">Ingested Library Videos</h3>
+                                <div className="relative">
+                                    <Search className="absolute left-2.5 top-2 w-3.5 h-3.5 text-gray-500" />
+                                    <input type="text" placeholder="Search..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                                        className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-8 pr-3 py-1 text-xs text-white focus:outline-none focus:border-violet-500" />
                                 </div>
                             </div>
 
-                            {/* Right Review */}
-                            <div className="md:col-span-7 flex flex-col p-4 h-full">
-                                {selectedVideo ? (
-                                    <div className="flex flex-col h-full space-y-3">
-                                        <div className="flex items-center justify-between border-b border-gray-800 pb-2">
-                                            <h3 className="text-xs font-semibold text-white truncate max-w-[200px]">{selectedVideo.title}</h3>
-                                            <div className="flex gap-1.5">
-                                                <button onClick={handleSummarize} disabled={summarizing || transcriptLoading || !transcriptText}
-                                                    className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-medium bg-violet-600 hover:bg-violet-500 text-white transition-colors disabled:opacity-50">
-                                                    {summarizing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-                                                    Summarize to Prompt
-                                                </button>
-                                                <button onClick={handleUseRawTranscript} disabled={transcriptLoading || !transcriptText}
-                                                    className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-medium border border-gray-750 text-gray-300 hover:bg-gray-800 transition-colors disabled:opacity-50">
-                                                    <FileText className="w-3 h-3" />
-                                                    Use Raw Script
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex-1 grid grid-rows-2 gap-3 min-h-0">
-                                            <div className="bg-black/30 rounded-xl overflow-hidden border border-gray-800 flex items-center justify-center">
-                                                <video src={`/api/videos/${selectedVideoId}/stream`} controls className="max-h-full max-w-full" />
-                                            </div>
-                                            <div className="flex flex-col min-h-0 bg-gray-950/20 border border-gray-800 rounded-xl p-2.5">
-                                                <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider mb-1 flex items-center gap-1">
-                                                    <FileText className="w-2.5 h-2.5 text-violet-400" /> Transcription
-                                                </span>
-                                                <div className="flex-1 overflow-y-auto text-[11px] text-gray-300 leading-relaxed font-mono pr-1">
-                                                    {transcriptLoading ? (
-                                                        <div className="flex items-center justify-center h-full"><Loader2 className="w-3 h-3 animate-spin text-violet-400" /></div>
-                                                    ) : transcriptText}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
+                            <div className="flex-1 overflow-y-auto py-2 space-y-1">
+                                {videosLoading ? (
+                                    <div className="flex justify-center py-8"><Loader2 className="w-4 h-4 animate-spin text-violet-400" /></div>
+                                ) : filteredVideos.length === 0 ? (
+                                    <div className="text-center py-8 text-xs text-gray-500">No ready videos.</div>
                                 ) : (
-                                    <div className="flex-1 flex flex-col items-center justify-center text-center text-gray-600">
-                                        <Tv className="w-10 h-10 text-gray-850 mb-2" />
-                                        <p className="text-xs">Select an ingested video from the list on the left to review its video stream and transcription.</p>
-                                    </div>
+                                    filteredVideos.map(v => (
+                                        <button key={v.id} onClick={() => setSelectedVideoId(v.id)}
+                                            className={cn("w-full flex items-center gap-2.5 p-2 rounded-xl text-left transition-all border text-xs",
+                                                selectedVideoId === v.id ? "bg-violet-500/10 border-violet-500/30" : "border-transparent hover:bg-gray-850/40")}>
+                                            <div className="w-12 aspect-video bg-gray-800 rounded overflow-hidden flex-shrink-0 relative">
+                                                {v.thumbnail ? <img src={v.thumbnail} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center bg-gray-850"><Film className="w-3.5 h-3.5 text-gray-600" /></div>}
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <p className="font-medium text-white truncate text-[11px]">{v.title}</p>
+                                                <p className="text-[9px] text-gray-500 mt-0.5">{v.duration ? formatTime(v.duration) : "--:--"}</p>
+                                            </div>
+                                        </button>
+                                    ))
                                 )}
                             </div>
-                        </div>
-                    )}
-                </div>
 
-                {/* Right Section (Generator Controls - ALWAYS VISIBLE) */}
-                <div className="lg:col-span-4 space-y-6">
-                    <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-5 space-y-4">
-                        <h3 className="text-xs font-bold text-white uppercase tracking-wider">Generator Setup</h3>
-                        
-                        <div className="space-y-2">
-                            <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Video Subject / Script Source</label>
-                            <textarea placeholder="e.g. '5 things you didn't know about Rome' or paste custom narration script..." value={topic}
-                                onChange={e => setTopic(e.target.value)} rows={5}
-                                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-xs text-white placeholder:text-gray-500 focus:outline-none focus:border-violet-500 resize-none font-sans" />
+                            {selectedVideo && (
+                                <div className="border-t border-gray-800 pt-3 space-y-2 mt-auto">
+                                    <video src={`/api/videos/${selectedVideoId}/stream`} controls className="w-full aspect-video rounded-xl bg-black/40 border border-gray-850" />
+                                    <button onClick={handleAnalyze} disabled={summarizing || transcriptLoading || !transcriptText}
+                                        className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold disabled:opacity-50 transition-all">
+                                        {summarizing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                                        Analyze & Draft Script
+                                    </button>
+                                </div>
+                            )}
                         </div>
+                    </div>
+                )}
 
-                        {/* Settings Grid */}
-                        <div className="space-y-3 pt-2 border-t border-gray-850">
+                {/* Right Side: Interactive Storyboard Builder */}
+                <div className={cn("space-y-6", sourceMode === "video" ? "lg:col-span-8" : "lg:col-span-12")}>
+                    
+                    {scenes.length === 0 ? (
+                        <div className="bg-gray-900/10 border border-dashed border-gray-800 rounded-3xl p-12 text-center max-w-xl mx-auto flex flex-col items-center justify-center space-y-4">
+                            <Tv className="w-12 h-12 text-gray-700" />
                             <div>
-                                <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5 block">Aspect Ratio</label>
-                                <div className="flex gap-1.5">
-                                    {[
-                                        { id: "9:16", label: "Portrait" },
-                                        { id: "16:9", label: "Landscape" },
-                                        { id: "1:1", label: "Square" },
-                                    ].map(ar => (
-                                        <button key={ar.id} onClick={() => setAspectRatio(ar.id)}
-                                            className={cn("flex-1 py-1 rounded-md text-[10px] font-semibold border transition-all",
-                                                aspectRatio === ar.id ? "border-violet-500 bg-violet-500/10 text-violet-400" : "border-gray-850 bg-gray-800/40 text-gray-400 hover:border-gray-750")}>
-                                            {ar.label}
-                                        </button>
+                                <h3 className="text-lg font-semibold text-white">Storyboard is empty</h3>
+                                <p className="text-gray-400 text-xs mt-1">
+                                    Select an ingested kids video on the left list and click "Analyze & Draft Script" to automatically plan storyboard scenes, or add manual cards below.
+                                </p>
+                            </div>
+                            <button onClick={addScene} className="flex items-center gap-1.5 px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold rounded-xl transition-all">
+                                <Plus className="w-4 h-4" /> Create Manual Scene
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="space-y-6">
+                            
+                            {/* Scenes Timeline */}
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">Storyboard Timeline</h3>
+                                    <button onClick={addScene} className="flex items-center gap-1 px-2.5 py-1 bg-violet-600/15 hover:bg-violet-600/30 border border-violet-500/20 text-violet-400 text-[11px] font-semibold rounded-lg transition-all">
+                                        <Plus className="w-3.5 h-3.5" /> Add Scene Card
+                                    </button>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {scenes.map((scene, idx) => (
+                                        <div key={scene.id} className="bg-gray-900/40 border border-gray-800 rounded-2xl p-4 flex flex-col space-y-3 relative group">
+                                            {/* Delete Button */}
+                                            <button onClick={() => deleteScene(scene.id)}
+                                                className="absolute top-2 right-2 p-1.5 bg-gray-850 hover:bg-red-950/20 border border-gray-800 hover:border-red-900/30 text-gray-500 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all">
+                                                <Trash className="w-3.5 h-3.5" />
+                                            </button>
+
+                                            {/* Header Info */}
+                                            <div className="flex items-center gap-2">
+                                                <span className="w-6 h-6 rounded-lg bg-gray-800 border border-gray-700 flex items-center justify-center text-xs font-bold text-white">{idx + 1}</span>
+                                                <select value={scene.type} onChange={e => updateScene(scene.id, { type: e.target.value as "dialogue" | "song" })}
+                                                    className="bg-gray-850 border border-gray-750 text-[10px] font-bold text-white px-2 py-0.5 rounded uppercase focus:outline-none">
+                                                    <option value="dialogue">Dialogue</option>
+                                                    <option value="song">Song / Lyric</option>
+                                                </select>
+                                            </div>
+
+                                            {/* Speaker controls (Dialogue type) */}
+                                            {scene.type === "dialogue" ? (
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <div>
+                                                        <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">Speaker Actor</label>
+                                                        <input type="text" value={scene.character} onChange={e => updateScene(scene.id, { character: e.target.value })}
+                                                            className="w-full bg-gray-800 border border-gray-750 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-violet-500" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">Voice Tone</label>
+                                                        <div className="flex items-center gap-1">
+                                                            <select value={scene.voice} onChange={e => updateScene(scene.id, { voice: e.target.value })}
+                                                                className="flex-1 bg-gray-800 border border-gray-750 rounded-lg px-1.5 py-1.5 text-[10px] text-white focus:outline-none focus:border-violet-500">
+                                                                {EDGE_TTS_VOICES.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
+                                                            </select>
+                                                            <button onClick={() => playVoicePreview(scene.id, scene.text, scene.voice)}
+                                                                className={cn("p-1.5 rounded-lg border transition-all",
+                                                                    playingAudioId === scene.id ? "bg-violet-500/10 border-violet-500/30 text-violet-400" : "bg-gray-800 border-gray-750 text-gray-400 hover:text-white")}>
+                                                                {playingAudioId === scene.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Volume2 className="w-3.5 h-3.5" />}
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                // Song controls (Song type)
+                                                <div className="space-y-1.5">
+                                                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block">Suno Song Audio track (.mp3)</label>
+                                                    <div className="flex items-center gap-2">
+                                                        <label className="flex-1 flex items-center justify-between bg-gray-800 border border-dashed border-gray-750 hover:bg-gray-800/80 px-3 py-1.5 rounded-xl cursor-pointer transition-colors text-xs text-gray-400">
+                                                            <span className="truncate">{scene.sunoAudioKey ? "✓ Audio uploaded" : "Upload Suno MP3"}</span>
+                                                            <Music className="w-3.5 h-3.5 text-gray-500" />
+                                                            <input type="file" accept="audio/mpeg" onChange={e => e.target.files?.[0] && handleSunoUpload(scene.id, e.target.files[0])} className="hidden" />
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Text block */}
+                                            <div>
+                                                <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">
+                                                    {scene.type === "song" ? "Song Lyrics" : "Dialogue Spoken Text"}
+                                                </label>
+                                                <textarea value={scene.text} onChange={e => updateScene(scene.id, { text: e.target.value })} rows={2}
+                                                    className="w-full bg-gray-800 border border-gray-750 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500 resize-none font-sans" />
+                                            </div>
+
+                                            {/* Visual prompt generation */}
+                                            <div>
+                                                <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">RunPod Visual Prompt</label>
+                                                <input type="text" value={scene.visualPrompt} onChange={e => updateScene(scene.id, { visualPrompt: e.target.value })}
+                                                    className="w-full bg-gray-800 border border-gray-750 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500" />
+                                            </div>
+
+                                            {/* RunPod Generator Status Control */}
+                                            <div className="pt-2 border-t border-gray-850 flex items-center justify-between gap-2">
+                                                <span className="text-[10px] text-gray-500 font-mono">
+                                                    {scene.jobStatus === "QUEUED" ? (
+                                                        <span className="flex items-center gap-1 text-gray-400"><RefreshCw className="w-3 h-3 animate-spin" /> Queued</span>
+                                                    ) : scene.jobStatus === "PROCESSING" ? (
+                                                        <span className="flex items-center gap-1 text-violet-400"><Loader2 className="w-3 h-3 animate-spin" /> Rendering...</span>
+                                                    ) : scene.jobStatus === "COMPLETED" ? (
+                                                        <span className="flex items-center gap-1 text-emerald-400"><Check className="w-3 h-3" /> Ready</span>
+                                                    ) : scene.jobStatus === "FAILED" ? (
+                                                        <span className="flex items-center gap-1 text-red-400"><XCircle className="w-3 h-3" /> Failed</span>
+                                                    ) : (
+                                                        "Not Generated"
+                                                    )}
+                                                </span>
+                                                
+                                                <button onClick={() => generateSceneVideo(scene.id, scene.visualPrompt)}
+                                                    disabled={scene.jobStatus === "QUEUED" || scene.jobStatus === "PROCESSING"}
+                                                    className={cn("px-2.5 py-1 rounded-md text-[10px] font-bold transition-all disabled:opacity-50",
+                                                        scene.jobStatus === "COMPLETED" ? "bg-gray-850 hover:bg-gray-800 text-gray-300" : "bg-violet-600 hover:bg-violet-500 text-white")}>
+                                                    {scene.jobStatus === "COMPLETED" ? "Regenerate Clip" : "Generate Clip"}
+                                                </button>
+                                            </div>
+                                        </div>
                                     ))}
                                 </div>
                             </div>
 
-                            <div>
-                                <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1 block">EdgeTTS Voice</label>
-                                <select value={voiceName} onChange={e => setVoiceName(e.target.value)}
-                                    className="w-full bg-gray-800 border border-gray-750 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500">
-                                    {EDGE_TTS_VOICES.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1 block">Background Music</label>
-                                <select value={bgmType} onChange={e => setBgmType(e.target.value)}
-                                    className="w-full bg-gray-800 border border-gray-750 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500">
-                                    <option value="random">Random BGM Track</option>
-                                    <option value="none">No Background Music</option>
-                                </select>
-                            </div>
-
-                            <div className="flex items-center justify-between pt-1">
-                                <label className="flex items-center gap-1.5 cursor-pointer">
-                                    <input type="checkbox" checked={subtitleEnabled} onChange={e => setSubtitleEnabled(e.target.checked)} className="rounded accent-violet-500" />
-                                    <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Burn-in Subtitles</span>
-                                </label>
-                            </div>
-                        </div>
-
-                        {error && (
-                            <div className="flex items-center gap-1 text-red-400 text-[10px] bg-red-950/20 border border-red-900/30 p-2 rounded-lg">
-                                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                                <span>{error}</span>
-                            </div>
-                        )}
-
-                        <button onClick={generate} disabled={loading || !topic.trim()}
-                            className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold hover:scale-[1.01] active:scale-100 disabled:opacity-50 disabled:scale-100 disabled:cursor-not-allowed transition-all shadow-lg">
-                            {loading ? (
-                                <>
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                    <span>
-                                        {taskStatus?.progress !== undefined 
-                                            ? `Generating (${taskStatus.progress}%)` 
-                                            : "Generating Short..."}
-                                    </span>
-                                </>
-                            ) : (
-                                <>
-                                    <Wand2 className="w-4 h-4" />
-                                    <span>Generate Animated Short</span>
-                                </>
-                            )}
-                        </button>
-                    </div>
-
-                    {/* Progress tracking block */}
-                    {taskStatus && (
-                        <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-5 space-y-3">
-                            <div className="flex items-center justify-between">
-                                <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-                                    {taskStatus.state === 1 ? (
-                                        <span className="flex items-center gap-1 text-emerald-400"><CheckCircle2 className="w-3.5 h-3.5" /> Finished</span>
-                                    ) : taskStatus.state === -1 ? (
-                                        <span className="flex items-center gap-1 text-red-400"><XCircle className="w-3.5 h-3.5" /> Failed</span>
-                                    ) : (
-                                        <span className="flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin text-violet-400" /> Synthesizing...</span>
-                                    )}
-                                </h3>
-                                <span className="text-[10px] text-gray-500 font-mono">Task ID: {taskStatus.task_id?.substring(0, 8)}</span>
-                            </div>
-
-                            {/* Progress bar */}
-                            <div className="w-full bg-gray-800 h-2 rounded-full overflow-hidden">
-                                <div className="bg-violet-500 h-full transition-all duration-500" style={{ width: `${taskStatus.progress || 0}%` }} />
-                            </div>
-
-                            {taskStatus.state === 1 && taskStatus.videos && taskStatus.videos[0] && (
-                                <div className="pt-2 flex flex-col items-center gap-3">
-                                    <video src={taskStatus.videos[0]} controls className="max-h-[300px] rounded-xl border border-gray-800" style={{ aspectRatio: aspectRatio === "16:9" ? "16/9" : aspectRatio === "1:1" ? "1/1" : "9/16" }} />
-                                    <a href={taskStatus.videos[0]} download className="flex items-center justify-center gap-1.5 w-full py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-all">
-                                        <Play className="w-3 h-3" /> Download Generated Short
-                                    </a>
+                            {/* Compilation panel */}
+                            <div className="bg-gray-900/40 border border-gray-800 rounded-2xl p-5 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h3 className="text-sm font-semibold text-white">Assemble Final Story</h3>
+                                        <p className="text-gray-400 text-xs mt-0.5">This will loop scene visual clips, synthesize voice dialogue overlays, and stitch the timeline.</p>
+                                    </div>
+                                    <button onClick={handleCompile} disabled={compiling || scenes.some(s => !s.visualPath)}
+                                        className="flex items-center gap-1.5 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-bold text-xs rounded-xl transition-all shadow-md">
+                                        {compiling ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                                        Compile & Stitch Kids Video
+                                    </button>
                                 </div>
-                            )}
+
+                                {error && (
+                                    <div className="flex items-center gap-1.5 text-red-400 text-xs bg-red-950/20 border border-red-900/30 p-3 rounded-xl">
+                                        <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                                        <span>{error}</span>
+                                    </div>
+                                )}
+
+                                {compiledVideoUrl && (
+                                    <div className="pt-4 border-t border-gray-800 flex flex-col items-center gap-3">
+                                        <video src={compiledVideoUrl} controls className="max-h-[360px] rounded-xl border border-gray-800 bg-black" />
+                                        <a href={compiledVideoUrl} download className="flex items-center justify-center gap-1.5 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-all">
+                                            <Play className="w-3.5 h-3.5" /> Download Stitched Kids Movie
+                                        </a>
+                                    </div>
+                                )}
+                            </div>
+
                         </div>
                     )}
+
                 </div>
 
             </div>

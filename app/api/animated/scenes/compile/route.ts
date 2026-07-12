@@ -1,0 +1,179 @@
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { downloadFileFromR2, uploadFileToR2 } from "@/lib/storage";
+import { execSync } from "child_process";
+import fs from "fs";
+import path from "path";
+import os from "os";
+
+export async function POST(req: NextRequest) {
+    const session = await auth();
+    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const { scenes, docId, customAudioUrl } = await req.json();
+    if (!scenes || !Array.isArray(scenes) || scenes.length === 0) {
+        return NextResponse.json({ error: "Scenes list is required" }, { status: 400 });
+    }
+
+    const moneyPrinterUrl = process.env.MONEY_PRINTER_URL || "http://localhost:8080";
+    const tempDir = path.join(os.tmpdir(), `story-compile-${Date.now()}`);
+    fs.mkdirSync(tempDir, { recursive: true });
+
+    try {
+        console.log(`[Compile] Starting compilation for docId ${docId || "new"} with ${scenes.length} scenes`);
+        
+        const sceneFinalVideos: string[] = [];
+
+        // 1. Process each scene
+        for (let idx = 0; idx < scenes.length; idx++) {
+            const scene = scenes[idx];
+            console.log(`[Compile] Processing scene ${idx + 1}/${scenes.length} (${scene.type})`);
+
+            const sceneAudioPath = path.join(tempDir, `scene-${idx}-audio.mp3`);
+            const sceneVideoInputPath = path.join(tempDir, `scene-${idx}-video-in.mp4`);
+            const sceneVideoLoopedPath = path.join(tempDir, `scene-${idx}-video-looped.mp4`);
+            const sceneFinalVideoPath = path.join(tempDir, `scene-${idx}-final.mp4`);
+
+            // A. Retrieve Visual Video Clip from R2
+            if (!scene.visualPath) {
+                throw new Error(`Scene ${idx + 1} has no generated video clip path`);
+            }
+            console.log(`[Compile] Downloading visual clip: ${scene.visualPath}`);
+            await downloadFileFromR2(scene.visualPath, sceneVideoInputPath);
+
+            // B. Generate or Retrieve Audio for the Scene
+            let duration = 5.0; // default fallback duration in seconds
+
+            if (scene.type === "song" && scene.sunoAudioKey) {
+                // If it is a song segment and user uploaded a custom Suno audio key, download it
+                console.log(`[Compile] Downloading Suno audio: ${scene.sunoAudioKey}`);
+                await downloadFileFromR2(scene.sunoAudioKey, sceneAudioPath);
+                
+                // Get audio duration using ffprobe
+                const ffprobeRes = execSync(
+                    `ffprobe -i "${sceneAudioPath}" -show_entries format=duration -v quiet -of csv="p=0"`,
+                    { encoding: "utf8" }
+                );
+                duration = parseFloat(ffprobeRes.trim()) || 5.0;
+            } else {
+                // Synthesize EdgeTTS audio using MoneyPrinterTurbo
+                console.log(`[Compile] Synthesizing speech via EdgeTTS: "${scene.text}" (${scene.voice})`);
+                const audioRes = await fetch(`${moneyPrinterUrl}/api/v1/audio`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        video_script: scene.text,
+                        voice_name: scene.voice,
+                        bgm_type: "none",
+                        bgm_file: "",
+                        bgm_volume: 0,
+                        voice_volume: 1.0,
+                        voice_rate: 1.2
+                    })
+                });
+
+                if (!audioRes.ok) {
+                    throw new Error(`EdgeTTS synthesis failed for scene ${idx + 1}: ${await audioRes.text()}`);
+                }
+
+                const createData = await audioRes.json();
+                const task = createData.data || createData;
+                const taskId = task.task_id;
+
+                // Poll for audio synthesis task completion
+                let attempts = 0;
+                let isDone = false;
+                while (attempts < 15 && !isDone) {
+                    await new Promise(r => setTimeout(r, 1000));
+                    attempts++;
+                    const statusRes = await fetch(`${moneyPrinterUrl}/api/v1/tasks/${taskId}`);
+                    if (statusRes.ok) {
+                        const statusData = await statusRes.json();
+                        const statusTask = statusData.data || statusData;
+                        if (statusTask.state === 1) isDone = true;
+                    }
+                }
+
+                if (!isDone) {
+                    throw new Error(`TTS synthesis timed out for scene ${idx + 1}`);
+                }
+
+                // Download synthesized audio file
+                const audioUrl = `${moneyPrinterUrl}/tasks/${taskId}/audio.mp3`;
+                const audioFetch = await fetch(audioUrl);
+                if (!audioFetch.ok) {
+                    throw new Error(`Failed to download audio for scene ${idx + 1}`);
+                }
+                const audioBuffer = await audioFetch.arrayBuffer();
+                fs.writeFileSync(sceneAudioPath, Buffer.from(audioBuffer));
+
+                // Get audio duration using ffprobe
+                const ffprobeRes = execSync(
+                    `ffprobe -i "${sceneAudioPath}" -show_entries format=duration -v quiet -of csv="p=0"`,
+                    { encoding: "utf8" }
+                );
+                duration = parseFloat(ffprobeRes.trim()) || 5.0;
+            }
+
+            console.log(`[Compile] Scene ${idx + 1} audio duration resolved: ${duration.toFixed(2)}s`);
+
+            // C. Loop the visual clip to match the audio duration
+            // -stream_loop -1 loops the video infinitely, capped at the duration length
+            execSync(
+                `ffmpeg -stream_loop -1 -i "${sceneVideoInputPath}" -t ${duration} -c:v libx264 -preset fast -crf 23 -an "${sceneVideoLoopedPath}" -y`,
+                { encoding: "utf8" }
+            );
+
+            // D. Combine the looped video and voiceover/song audio track, muting the original video track completely
+            execSync(
+                `ffmpeg -i "${sceneVideoLoopedPath}" -i "${sceneAudioPath}" -map 0:v:0 -map 1:a:0 -c:v copy -c:a aac -b:a 128k "${sceneFinalVideoPath}" -y`,
+                { encoding: "utf8" }
+            );
+
+            sceneFinalVideos.push(sceneFinalVideoPath);
+        }
+
+        // 2. Concatenate all scene final videos
+        const concatTxtPath = path.join(tempDir, "concat.txt");
+        const concatContent = sceneFinalVideos.map(v => `file '${v.replace(/\\/g, "/")}'`).join("\n");
+        fs.writeFileSync(concatTxtPath, concatContent);
+
+        const mergedVideoPath = path.join(tempDir, "merged.mp4");
+        console.log(`[Compile] Merging ${sceneFinalVideos.length} scene videos...`);
+        execSync(
+            `ffmpeg -f concat -safe 0 -i "${concatTxtPath}" -c copy "${mergedVideoPath}" -y`,
+            { encoding: "utf8" }
+        );
+
+        // 3. Upload compiled video to R2
+        const finalR2Key = `animated/renders/${session.user.id}/${docId || Date.now()}/final.mp4`;
+        console.log(`[Compile] Uploading final output to R2: ${finalR2Key}`);
+        await uploadFileToR2(mergedVideoPath, finalR2Key, "video/mp4");
+
+        // Clean up temporary workspace directory
+        fs.rmSync(tempDir, { recursive: true, force: true });
+
+        // Update target Documentary status if present
+        if (docId) {
+            await prisma.documentary.update({
+                where: { id: docId },
+                data: {
+                    status: "APPROVED",
+                    finalVideoPath: finalR2Key,
+                    totalDuration: scenes.length * 5.0 // approximate default, actual matches duration sum
+                }
+            });
+        }
+
+        return NextResponse.json({
+            success: true,
+            videoUrl: finalR2Key
+        });
+
+    } catch (err: any) {
+        console.error("[Compile] Process failed:", err.message);
+        fs.rmSync(tempDir, { recursive: true, force: true });
+        return NextResponse.json({ error: "Compilation failed", details: err.message }, { status: 500 });
+    }
+}
