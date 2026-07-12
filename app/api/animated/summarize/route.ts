@@ -6,15 +6,23 @@ export async function POST(req: NextRequest) {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { videoId } = await req.json();
-    if (!videoId) return NextResponse.json({ error: "Video ID is required" }, { status: 400 });
+    const { videoId, premise, scriptText } = await req.json();
+    if (!videoId && !premise && !scriptText) {
+        return NextResponse.json({ error: "videoId, premise or scriptText is required" }, { status: 400 });
+    }
 
     try {
-        const transcript = await prisma.transcript.findUnique({
-            where: { videoId: videoId }
-        });
-        if (!transcript || !transcript.content) {
-            return NextResponse.json({ error: "No transcript content found for this video" }, { status: 404 });
+        let contentToProcess = "";
+        if (videoId) {
+            const transcript = await prisma.transcript.findUnique({
+                where: { videoId: videoId }
+            });
+            if (!transcript || !transcript.content) {
+                return NextResponse.json({ error: "No transcript content found for this video" }, { status: 404 });
+            }
+            contentToProcess = transcript.content;
+        } else {
+            contentToProcess = premise || scriptText || "";
         }
 
         let apiKey = process.env.DEEPSEEK_API_KEY;
@@ -25,8 +33,8 @@ export async function POST(req: NextRequest) {
 
         if (!apiKey) {
             // Fallback: build a default structured story from the transcript
-            const sentences = transcript.content.split(/[.!?。！？]/).filter(Boolean).slice(0, 4);
-            const scenes = sentences.map((sentence, idx) => ({
+            const sentences = contentToProcess.split(/[.!?。！？]/).filter(Boolean).slice(0, 4);
+            const scenes = sentences.map((sentence: string, idx: number) => ({
                 id: `scene-${idx}`,
                 type: idx % 3 === 2 ? "song" : "dialogue",
                 character: idx % 2 === 0 ? "Leo" : "Narrator",
@@ -63,16 +71,19 @@ The JSON structure for each scene must follow this schema:
                     },
                     {
                         role: "user",
-                        content: transcript.content
+                        content: contentToProcess
                     }
                 ],
                 temperature: 0.7,
-                max_tokens: 1000
+                max_tokens: 3000
             })
         });
 
         if (!res.ok) {
             const errText = await res.text();
+            if (res.status === 402 || errText.toLowerCase().includes("insufficient_balance") || errText.toLowerCase().includes("balance") || errText.toLowerCase().includes("credit")) {
+                return NextResponse.json({ error: "DEEPSEEK_OUT_OF_FUNDS", details: "DeepSeek API: Insufficient Balance. Please check your funds at console.deepseek.com." }, { status: 402 });
+            }
             throw new Error(`DeepSeek API returned ${res.status}: ${errText}`);
         }
 

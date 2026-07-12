@@ -45,7 +45,18 @@ export async function POST(req: NextRequest) {
             // B. Generate or Retrieve Audio for the Scene
             let duration = 5.0; // default fallback duration in seconds
 
-            if (scene.type === "song" && scene.sunoAudioKey) {
+            if (scene.narrationPath) {
+                // If a card-level voiceover was pre-generated (Option B), download it
+                console.log(`[Compile] Downloading pre-generated voice: ${scene.narrationPath}`);
+                await downloadFileFromR2(scene.narrationPath, sceneAudioPath);
+
+                // Get audio duration using ffprobe
+                const ffprobeRes = execSync(
+                    `ffprobe -i "${sceneAudioPath}" -show_entries format=duration -v quiet -of csv="p=0"`,
+                    { encoding: "utf8" }
+                );
+                duration = parseFloat(ffprobeRes.trim()) || 5.0;
+            } else if (scene.type === "song" && scene.sunoAudioKey) {
                 // If it is a song segment and user uploaded a custom Suno audio key, download it
                 console.log(`[Compile] Downloading Suno audio: ${scene.sunoAudioKey}`);
                 await downloadFileFromR2(scene.sunoAudioKey, sceneAudioPath);
@@ -58,7 +69,7 @@ export async function POST(req: NextRequest) {
                 duration = parseFloat(ffprobeRes.trim()) || 5.0;
             } else {
                 // Synthesize EdgeTTS audio using MoneyPrinterTurbo
-                console.log(`[Compile] Synthesizing speech via EdgeTTS: "${scene.text}" (${scene.voice})`);
+                console.log(`[Compile] Synthesizing speech via EdgeTTS fallback: "${scene.text}" (${scene.voice})`);
                 const audioRes = await fetch(`${moneyPrinterUrl}/api/v1/audio`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -107,6 +118,7 @@ export async function POST(req: NextRequest) {
                 }
                 const audioBuffer = await audioFetch.arrayBuffer();
                 fs.writeFileSync(sceneAudioPath, Buffer.from(audioBuffer));
+
 
                 // Get audio duration using ffprobe
                 const ffprobeRes = execSync(
