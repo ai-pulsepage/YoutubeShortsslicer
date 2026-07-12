@@ -84,6 +84,7 @@ export default function UGCStudioPage() {
     const [avatars, setAvatars] = useState<Avatar[]>([]);
     const [loadingAvatars, setLoadingAvatars] = useState(true);
     const [spawnerSuggestion, setSpawnerSuggestion] = useState("");
+    const [spawnerVoiceEngine, setSpawnerVoiceEngine] = useState("xtts");
     const [spawnerLoading, setSpawnerLoading] = useState(false);
     
     // Manual character form
@@ -221,7 +222,7 @@ export default function UGCStudioPage() {
             const res = await fetch("/api/avatars/generate", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ suggestion: spawnerSuggestion })
+                body: JSON.stringify({ suggestion: spawnerSuggestion, voiceEngine: spawnerVoiceEngine })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to spawn character");
@@ -315,6 +316,22 @@ export default function UGCStudioPage() {
             if (res.ok) fetchAvatars();
         } catch (err) {
             console.error("Failed to delete avatar:", err);
+        }
+    };
+
+    // Update avatar voice engine and voice ID dynamically from card
+    const handleUpdateAvatarVoice = async (avatarId: string, engine: string, voiceId: string) => {
+        setAvatars(prev => prev.map(a => (a.id === avatarId ? { ...a, voiceEngine: engine, voiceId } : a)));
+        try {
+            const res = await fetch(`/api/avatars/${avatarId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ voiceEngine: engine, voiceId })
+            });
+            if (!res.ok) throw new Error("Failed to update voice settings");
+        } catch (err) {
+            console.error("Failed to update voice settings:", err);
+            fetchAvatars();
         }
     };
 
@@ -452,6 +469,16 @@ export default function UGCStudioPage() {
                                     {spawnerLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
                                 </button>
                             </div>
+                            
+                            <div className="flex items-center justify-between text-[9px] pt-1">
+                                <span className="text-gray-550 font-sans">Default Voice Engine:</span>
+                                <select value={spawnerVoiceEngine} onChange={e => setSpawnerVoiceEngine(e.target.value)}
+                                    className="bg-gray-950 border border-gray-800 rounded-lg px-2 py-0.5 text-violet-400 font-bold focus:outline-none focus:border-violet-500">
+                                    <option value="xtts">XTTS (Free)</option>
+                                    <option value="dia">Dia (Free)</option>
+                                    <option value="elevenlabs">ElevenLabs</option>
+                                </select>
+                            </div>
                         </div>
 
                         <div className="flex items-center justify-between pt-1">
@@ -541,14 +568,25 @@ export default function UGCStudioPage() {
                                         <div className="flex-1 min-w-0 flex flex-col justify-between">
                                             <div className="min-w-0">
                                                 <h4 className="text-xs font-bold text-white truncate">{avatar.name}</h4>
-                                                <p className="text-[10px] text-gray-500 line-clamp-2 mt-0.5 leading-snug font-sans">{avatar.persona || "No persona details defined yet."}</p>
+                                                <p className="text-[10px] text-gray-550 line-clamp-2 mt-0.5 leading-snug font-sans">{avatar.persona || "No persona details defined yet."}</p>
                                             </div>
-                                            <div className="flex items-center justify-between mt-2 pt-1 border-t border-gray-850/40">
-                                                <span className="text-[9px] px-1.5 py-0.5 bg-violet-600/15 border border-violet-500/10 rounded-full text-violet-400 font-medium">
-                                                    {avatar.voiceEngine}
-                                                </span>
+                                            <div className="flex flex-col gap-2 mt-2 pt-2 border-t border-gray-850/40">
                                                 
-                                                <div className="flex items-center gap-1">
+                                                {/* Voice engine and voice ID editor */}
+                                                <div className="flex items-center gap-1.5">
+                                                    <select value={avatar.voiceEngine}
+                                                        onChange={e => handleUpdateAvatarVoice(avatar.id, e.target.value, avatar.voiceId || "")}
+                                                        className="bg-gray-950 border border-gray-800 rounded-lg px-1.5 py-0.5 text-[9px] font-bold text-violet-400 focus:outline-none focus:border-violet-500 cursor-pointer">
+                                                        <option value="xtts">XTTS (Free)</option>
+                                                        <option value="dia">Dia (Free)</option>
+                                                        <option value="elevenlabs">ElevenLabs</option>
+                                                    </select>
+                                                    <input type="text" placeholder="Voice ID" value={avatar.voiceId || ""}
+                                                        onChange={e => handleUpdateAvatarVoice(avatar.id, avatar.voiceEngine, e.target.value)}
+                                                        className="w-16 bg-gray-950 border border-gray-800 rounded-lg px-1.5 py-0.5 text-[9px] font-mono text-gray-300 placeholder-gray-700 focus:outline-none focus:border-violet-500" />
+                                                </div>
+
+                                                <div className="flex items-center justify-between">
                                                     <button onClick={() => openR2Picker(avatar.id)}
                                                         className="px-2 py-0.5 bg-gray-850 hover:bg-gray-800 text-gray-400 hover:text-white rounded border border-gray-800 text-[8px] font-bold font-sans cursor-pointer transition-all">
                                                         Browse R2

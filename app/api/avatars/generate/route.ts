@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     try {
-        const { suggestion } = await req.json();
+        const { suggestion, voiceEngine } = await req.json();
         if (!suggestion || !suggestion.trim()) {
             return NextResponse.json({ error: "Suggestion prompt is required" }, { status: 400 });
         }
@@ -80,10 +80,16 @@ Ensure prompt describes the character details, outfit, backdrop, and Pixar/3D st
             }
         }
 
-        // 2. Select appropriate ElevenLabs voice ID based on gender
-        const voiceId = gender === "male" 
-            ? "pNInz6obpgq5mWGP36TZ" // Liam (US Male)
-            : "EXAVITQu4vr4xnSDxMaL"; // Bella (US Female)
+        // 2. Select appropriate voice ID based on engine and gender
+        const engine = voiceEngine || "xtts";
+        let voiceId = "";
+        if (engine === "elevenlabs") {
+            voiceId = gender === "male" ? "pNInz6obpgq5mWGP36TZ" : "EXAVITQu4vr4xnSDxMaL";
+        } else if (engine === "dia") {
+            voiceId = gender === "male" ? "male_default" : "female_default";
+        } else {
+            voiceId = gender === "male" ? "adam" : "lisa";
+        }
 
         // 3. Locate or create a private UGC system documentary vault for database tracking
         let ugcVault = await prisma.documentary.findFirst({
@@ -106,7 +112,7 @@ Ensure prompt describes the character details, outfit, backdrop, and Pixar/3D st
                 userId: session.user.id,
                 name,
                 persona,
-                voiceEngine: "elevenlabs",
+                voiceEngine: engine,
                 voiceId
             }
         });
