@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(req: NextRequest) {
     const session = await auth();
@@ -7,14 +8,15 @@ export async function POST(req: NextRequest) {
 
     const { text, voice } = await req.json();
     if (!text || !voice) {
-        return NextResponse.json({ error: "Text and voice are required" }, { status: 400 });
+        return NextResponse.json({ error: "text and voice are required" }, { status: 400 });
     }
 
     const moneyPrinterUrl = process.env.MONEY_PRINTER_URL || "http://localhost:8080";
 
     try {
-        console.log(`[Voice Preview] Dispatching preview request for voice "${voice}"`);
-        const createRes = await fetch(`${moneyPrinterUrl}/api/v1/audio`, {
+        console.log(`[Voice Preview] Previewing: "${text}" using voice ${voice}`);
+
+        const audioRes = await fetch(`${moneyPrinterUrl}/api/v1/audio`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -28,65 +30,50 @@ export async function POST(req: NextRequest) {
             })
         });
 
-        if (!createRes.ok) {
-            const errText = await createRes.text();
-            throw new Error(`Failed to create preview task: ${errText}`);
+        if (!audioRes.ok) {
+            throw new Error(`EdgeTTS preview failed: ${await audioRes.text()}`);
         }
 
-        const createData = await createRes.json();
+        const createData = await audioRes.json();
         const task = createData.data || createData;
         const taskId = task.task_id;
 
-        if (!taskId) {
-            throw new Error("No task_id returned from MoneyPrinterTurbo");
-        }
-
-        // Poll for completion (up to 15 seconds max for short previews)
+        // Poll for audio synthesis task completion
         let attempts = 0;
         let isDone = false;
-        let isFailed = false;
-
-        while (attempts < 10 && !isDone && !isFailed) {
-            await new Promise(r => setTimeout(r, 1500));
+        while (attempts < 15 && !isDone) {
+            await new Promise(r => setTimeout(r, 1000));
             attempts++;
-
-            const statusRes = await fetch(`${moneyPrinterUrl}/api/v1/tasks/${taskId}`, {
-                headers: { "Accept": "application/json" }
-            });
-            if (!statusRes.ok) continue;
-
-            const statusData = await statusRes.json();
-            const statusTask = statusData.data || statusData;
-
-            if (statusTask.state === 1) {
-                isDone = true;
-            } else if (statusTask.state === -1) {
-                isFailed = true;
+            const statusRes = await fetch(`${moneyPrinterUrl}/api/v1/tasks/${taskId}`);
+            if (statusRes.ok) {
+                const statusData = await statusRes.json();
+                const statusTask = statusData.data || statusData;
+                if (statusTask.state === 1) isDone = true;
             }
         }
 
         if (!isDone) {
-            throw new Error(isFailed ? "Audio synthesis failed on worker" : "Audio synthesis timed out");
+            throw new Error(`TTS synthesis task timed out`);
         }
 
-        // Stream the finished audio file back to client
+        // Download synthesized audio file
         const audioUrl = `${moneyPrinterUrl}/tasks/${taskId}/audio.mp3`;
         const audioFetch = await fetch(audioUrl);
         if (!audioFetch.ok) {
-            throw new Error(`Failed to retrieve generated audio file: ${audioFetch.statusText}`);
+            throw new Error(`Failed to download synthesized audio file`);
         }
-
+        
         const audioBuffer = await audioFetch.arrayBuffer();
 
-        return new NextResponse(audioBuffer, {
+        return new Response(new Uint8Array(audioBuffer), {
             headers: {
                 "Content-Type": "audio/mpeg",
                 "Content-Length": audioBuffer.byteLength.toString(),
-            }
+            },
         });
 
     } catch (err: any) {
-        console.error("[Voice Preview] Error:", err.message);
-        return NextResponse.json({ error: "Failed to generate preview", details: err.message }, { status: 500 });
+        console.error("[Voice Preview] failed:", err.message);
+        return NextResponse.json({ error: "Voice preview failed", details: err.message }, { status: 500 });
     }
 }

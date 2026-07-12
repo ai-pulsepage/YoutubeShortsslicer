@@ -85,6 +85,8 @@ type Video = {
 
 const EDGE_TTS_VOICES = [
     { id: "en-US-AnaNeural-Female", label: "Ana (US Child Female)" },
+    { id: "en-US-ChristopherNeural-Male", label: "Christopher (US Child Male)" },
+    { id: "en-GB-OliverNeural-Male", label: "Oliver (UK Child Male)" },
     { id: "zh-CN-XiaoyiNeural-Female", label: "Xiaoyi (CN Child Female)" },
     { id: "en-US-AriaNeural-Female", label: "Aria (US Female)" },
     { id: "en-US-GuyNeural-Male", label: "Guy (US Male)" },

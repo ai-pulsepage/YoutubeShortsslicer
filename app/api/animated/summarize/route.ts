@@ -50,10 +50,10 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ scenes });
         }
 
-        const systemPrompt = `You are an expert children's content writer. Read the transcript/premise/script of a story, and rewrite it into an original, short storyboard script (5 scenes or less) containing dialogue and sing-along songs.
+        const systemPrompt = `You are an expert children's content writer. Read the transcript/premise/script of a story, and rewrite it into a highly original, short storyboard script (5 scenes or less) containing dialogue and sing-along songs.
 
 CRITICAL COMPLIANCE RULES:
-1. COPYRIGHT PROTECTION: Do NOT copy lyrics, text, or dialogue directly from the input. You must rewrite the story beats to be completely original, newly composed, and legally distinct.
+1. COPYRIGHT PROTECTION & LEGAL DISTINCTNESS: You must rewrite the input script, lyrics, and story beats to be completely original, newly composed, and legally distinct. Do NOT copy the rhythm, rhyming phrases, or direct wording of the input lyrics. Make them legally independent songs and dialogue while keeping only the same educational theme (e.g. washing hands, brushing teeth). Use completely different metaphors, rhyming patterns, and vocabularies to guarantee 100% legal safety.
 2. CAST ALIGNMENT: You MUST ONLY use the following characters for the speaker roles and dialogue: ${characterNames}. Do NOT invent other characters or fall back to names like Leo or Lily unless they are explicitly in this cast list. Always assign the speaker roles correctly based on this cast.
 3. SUNO AI MUSIC PROMPTING: For all scenes with type "song", you MUST include a "sunoStylePrompt" key suggesting a musical style/prompt for Suno AI (e.g. "upbeat kids singalong, bright bells, acoustic ukulele, 120bpm").
 
@@ -63,12 +63,14 @@ The JSON structure for each scene must follow this schema:
   {
     "type": "dialogue" | "song",
     "character": "One of: ${characterNames}",
-    "voice": "en-US-AnaNeural-Female" | "zh-CN-XiaoyiNeural-Female" | "en-US-GuyNeural-Male" | "en-US-AriaNeural-Female",
+    "voice": "en-US-AnaNeural-Female" | "en-US-ChristopherNeural-Male" | "zh-CN-XiaoyiNeural-Female" | "en-US-GuyNeural-Male" | "en-US-AriaNeural-Female",
     "text": "The original polished dialogue spoken or song lyrics sung in this scene.",
     "visualPrompt": "Detailed scene generation prompt for a 3D cartoon video generator featuring the character.",
     "sunoStylePrompt": "Suno style suggestion (only for song types, empty string otherwise)"
   }
-]`;
+]
+
+Note: For child boy character roles (like Jimmy), you must assign "en-US-ChristopherNeural-Male" instead of the adult male voice.`;
 
         const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
             method: "POST",
