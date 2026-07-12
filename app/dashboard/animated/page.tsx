@@ -118,6 +118,7 @@ export default function KidsStoryBuilderPage() {
     const [targetDuration, setTargetDuration] = useState<number>(2); // Default to 2 minutes
     const [compositionMode, setCompositionMode] = useState<"spin_off" | "paraphrase">("spin_off");
     const [includeMusicals, setIncludeMusicals] = useState<boolean>(true);
+    const [rewritingShotId, setRewritingShotId] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
 
     const [docId, setDocId] = useState<string | null>(null);
@@ -474,6 +475,36 @@ export default function KidsStoryBuilderPage() {
             updateScene(sceneId, { text: data.improvedText || text });
         } catch (err: any) {
             setError(err.message || "Script Polish failed.");
+        }
+    };
+
+    // AI Rewrite Shot Visual Prompt to match Character
+    const handleRewriteShotPrompt = async (sceneId: string, shotId: string, visualPrompt: string, primaryCharacter: string, sceneText: string) => {
+        setError("");
+        setInsufficientFunds(false);
+        setRewritingShotId(shotId);
+        try {
+            const res = await fetch("/api/animated/scenes/improve-shot-prompt", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ visualPrompt, primaryCharacter, sceneText })
+            });
+            const data = await res.json();
+
+            if (res.status === 402 || data.error === "DEEPSEEK_OUT_OF_FUNDS") {
+                setInsufficientFunds(true);
+                throw new Error("DeepSeek API: Insufficient Balance. Please check your console.deepseek.com funds.");
+            }
+
+            if (!res.ok) throw new Error(data.error || "Failed to rewrite visual prompt");
+
+            if (data.rewrittenPrompt) {
+                updateShot(sceneId, shotId, { visualPrompt: data.rewrittenPrompt });
+            }
+        } catch (err: any) {
+            setError(err.message || "Failed to rewrite prompt.");
+        } finally {
+            setRewritingShotId(null);
         }
     };
 
@@ -1465,15 +1496,34 @@ export default function KidsStoryBuilderPage() {
 
                                                             {/* left side prompt inputs */}
                                                             <div className="flex-1 space-y-2">
-                                                                <div className="flex items-center gap-2">
-                                                                    <span className="text-[10px] font-bold text-gray-400">Shot {sIdx + 1}</span>
-                                                                    
-                                                                    <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider block">Primary Subject:</span>
-                                                                    <select value={shot.primaryCharacter} onChange={e => updateShot(scene.id, shot.id, { primaryCharacter: e.target.value })}
-                                                                        className="bg-gray-850 border border-gray-750 text-[10px] text-white px-2 py-0.5 rounded focus:outline-none cursor-pointer">
-                                                                        <option value="None" className="bg-gray-900 text-white">None (Landscape)</option>
-                                                                        {characters.map(c => <option key={c.id} value={c.name} className="bg-gray-900 text-white">{c.name}</option>)}
-                                                                    </select>
+                                                                <div className="flex items-center justify-between">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="text-[10px] font-bold text-gray-400">Shot {sIdx + 1}</span>
+                                                                        
+                                                                        <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider block">Primary Subject:</span>
+                                                                        <select value={shot.primaryCharacter} onChange={e => updateShot(scene.id, shot.id, { primaryCharacter: e.target.value })}
+                                                                            className="bg-gray-850 border border-gray-750 text-[10px] text-white px-2 py-0.5 rounded focus:outline-none cursor-pointer">
+                                                                            <option value="None" className="bg-gray-900 text-white">None (Landscape)</option>
+                                                                            {characters.map(c => <option key={c.id} value={c.name} className="bg-gray-900 text-white">{c.name}</option>)}
+                                                                        </select>
+                                                                    </div>
+                                                                    {shot.visualPrompt && (
+                                                                        <button onClick={() => handleRewriteShotPrompt(scene.id, shot.id, shot.visualPrompt, shot.primaryCharacter, scene.text)}
+                                                                            disabled={rewritingShotId === shot.id}
+                                                                            className="flex items-center gap-0.5 text-violet-400 hover:text-violet-300 text-[9px] font-bold disabled:opacity-50 transition-all">
+                                                                            {rewritingShotId === shot.id ? (
+                                                                                <>
+                                                                                    <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                                                                                    <span>Rewriting...</span>
+                                                                                </>
+                                                                            ) : (
+                                                                                <>
+                                                                                    <Sparkles className="w-2.5 h-2.5" />
+                                                                                    <span>AI Rewrite Prompt</span>
+                                                                                </>
+                                                                            )}
+                                                                        </button>
+                                                                    )}
                                                                 </div>
 
                                                                 <textarea value={shot.visualPrompt} onChange={e => updateShot(scene.id, shot.id, { visualPrompt: e.target.value })} rows={2}
