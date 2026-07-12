@@ -36,16 +36,38 @@ export async function GET(req: NextRequest) {
                 prompt: a.prompt || "",
                 imagePath: a.imagePath || ""
             })),
-            scenes: p.scenes.map(s => ({
-                id: s.id,
-                type: s.sceneIndex % 3 === 2 ? "song" : "dialogue", // Fallback mapping, UI handles this state
-                character: "Leo", // Fallback, updated on load
-                voice: "en-US-AnaNeural-Female",
-                text: s.narrationText || "",
-                visualPrompt: s.searchQueries || "",
-                visualPath: s.assembledPath || undefined,
-                narrationPath: s.narrationPath || undefined
-            }))
+            scenes: p.scenes.map(s => {
+                let character = "Leo";
+                let voice = "en-US-AnaNeural-Female";
+                let type: "dialogue" | "song" = s.sceneIndex % 3 === 2 ? "song" : "dialogue";
+                let visualPrompt = s.searchQueries || "";
+                let sunoStylePrompt = "";
+
+                try {
+                    if (s.searchQueries && s.searchQueries.startsWith("{")) {
+                        const meta = JSON.parse(s.searchQueries);
+                        if (meta.character) character = meta.character;
+                        if (meta.voice) voice = meta.voice;
+                        if (meta.type) type = meta.type;
+                        if (meta.visualPrompt !== undefined) visualPrompt = meta.visualPrompt;
+                        if (meta.sunoStylePrompt) sunoStylePrompt = meta.sunoStylePrompt;
+                    }
+                } catch (e) {
+                    console.error("JSON parse searchQueries failed:", e);
+                }
+
+                return {
+                    id: s.id,
+                    type,
+                    character,
+                    voice,
+                    text: s.narrationText || "",
+                    visualPrompt,
+                    sunoStylePrompt,
+                    visualPath: s.assembledPath || undefined,
+                    narrationPath: s.narrationPath || undefined
+                };
+            })
         }));
 
         return NextResponse.json({ projects: mapped });
@@ -110,7 +132,7 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        // 3. Sync scenes timeline
+        // 3. Sync scenes timeline with JSON serialized metadata
         if (scenes && Array.isArray(scenes)) {
             // Delete old scenes first
             await prisma.docScene.deleteMany({
@@ -122,6 +144,14 @@ export async function POST(req: NextRequest) {
                 const s = scenes[idx];
                 const isTempId = s.id.startsWith("scene-");
 
+                const serializedMeta = JSON.stringify({
+                    visualPrompt: s.visualPrompt,
+                    character: s.character,
+                    voice: s.voice,
+                    type: s.type,
+                    sunoStylePrompt: s.sunoStylePrompt || ""
+                });
+
                 await prisma.docScene.create({
                     data: {
                         id: isTempId ? undefined : s.id,
@@ -129,7 +159,7 @@ export async function POST(req: NextRequest) {
                         sceneIndex: idx,
                         title: `Scene ${idx + 1}`,
                         narrationText: s.text,
-                        searchQueries: s.visualPrompt,
+                        searchQueries: serializedMeta,
                         assembledPath: s.visualPath || null,
                         narrationPath: s.narrationPath || null
                     }
@@ -158,16 +188,38 @@ export async function POST(req: NextRequest) {
                     prompt: a.prompt || "",
                     imagePath: a.imagePath || ""
                 })),
-                scenes: updated?.scenes.map(s => ({
-                    id: s.id,
-                    type: s.sceneIndex % 3 === 2 ? "song" : "dialogue",
-                    character: "Leo",
-                    voice: "en-US-AnaNeural-Female",
-                    text: s.narrationText || "",
-                    visualPrompt: s.searchQueries || "",
-                    visualPath: s.assembledPath || undefined,
-                    narrationPath: s.narrationPath || undefined
-                }))
+                scenes: updated?.scenes.map(s => {
+                    let character = "Leo";
+                    let voice = "en-US-AnaNeural-Female";
+                    let type: "dialogue" | "song" = s.sceneIndex % 3 === 2 ? "song" : "dialogue";
+                    let visualPrompt = s.searchQueries || "";
+                    let sunoStylePrompt = "";
+
+                    try {
+                        if (s.searchQueries && s.searchQueries.startsWith("{")) {
+                            const meta = JSON.parse(s.searchQueries);
+                            if (meta.character) character = meta.character;
+                            if (meta.voice) voice = meta.voice;
+                            if (meta.type) type = meta.type;
+                            if (meta.visualPrompt !== undefined) visualPrompt = meta.visualPrompt;
+                            if (meta.sunoStylePrompt) sunoStylePrompt = meta.sunoStylePrompt;
+                        }
+                    } catch (e) {
+                        console.error("JSON parse searchQueries failed:", e);
+                    }
+
+                    return {
+                        id: s.id,
+                        type,
+                        character,
+                        voice,
+                        text: s.narrationText || "",
+                        visualPrompt,
+                        sunoStylePrompt,
+                        visualPath: s.assembledPath || undefined,
+                        narrationPath: s.narrationPath || undefined
+                    };
+                })
             }
         });
 
