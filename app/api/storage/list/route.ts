@@ -19,10 +19,11 @@ export async function GET(req: NextRequest) {
 
     try {
         const prefix = req.nextUrl.searchParams.get("prefix") || "";
+        const recursive = req.nextUrl.searchParams.get("recursive") === "true";
         const command = new ListObjectsV2Command({
             Bucket: BUCKET,
             Prefix: prefix,
-            Delimiter: "/",
+            ...(recursive ? {} : { Delimiter: "/" }),
         });
 
         const response = await s3.send(command);
