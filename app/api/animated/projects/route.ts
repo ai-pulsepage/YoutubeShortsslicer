@@ -258,13 +258,16 @@ export async function POST(req: NextRequest) {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { id, title, script, characters, scenes, sourceUrls, targetDuration, compositionMode, includeMusicals } = await req.json();
+    const { id, title, script, characters, scenes, sourceUrls, targetDuration, compositionMode, includeMusicals, visualStyle, targetAge, genre } = await req.json();
 
     try {
         let activeId = id;
         const configMeta = {
             compositionMode: compositionMode || "spin_off",
-            includeMusicals: includeMusicals !== false
+            includeMusicals: includeMusicals !== false,
+            visualStyle: visualStyle || "Pixar 3D",
+            targetAge: targetAge || "Kids",
+            genre: genre || "Adventure"
         };
 
         // 1. Create or Update parent Documentary Project

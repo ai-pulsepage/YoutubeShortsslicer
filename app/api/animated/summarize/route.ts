@@ -6,7 +6,7 @@ export async function POST(req: NextRequest) {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { videoId, premise, scriptText, characters, targetDuration, compositionMode, includeMusicals } = await req.json();
+    const { videoId, premise, scriptText, characters, targetDuration, compositionMode, includeMusicals, visualStyle, targetAge, genre } = await req.json();
     if (!videoId && !premise && !scriptText) {
         return NextResponse.json({ error: "videoId, premise or scriptText is required" }, { status: 400 });
     }
@@ -40,6 +40,10 @@ export async function POST(req: NextRequest) {
         const useMusicals = includeMusicals !== false;
         const isSpinOff = compositionMode !== "paraphrase";
 
+        const selectedStyle = visualStyle || "Pixar 3D";
+        const selectedAge = targetAge || "Kids";
+        const selectedGenre = genre || "Adventure";
+
         if (!apiKey) {
             // Fallback: build a default structured story from the transcript
             const sentences = contentToProcess.split(/[.!?。！？]/).filter(Boolean).slice(0, numScenes);
@@ -49,7 +53,7 @@ export async function POST(req: NextRequest) {
                 character: idx % 2 === 0 ? (characters?.[0]?.name || "Leo") : "Narrator",
                 voice: idx % 2 === 0 ? "en-US-AnaNeural-Female" : "en-US-GuyNeural-Male",
                 text: sentence.trim() + ".",
-                visualPrompt: `Cartoon ${idx % 2 === 0 ? "boy smiling" : "landscape background"}, 3d animation style, Pixar look`,
+                visualPrompt: `A beautiful scenic scene matching the "${selectedStyle}" animation style, ${selectedGenre} theme, showing ${idx % 2 === 0 ? (characters?.[0]?.name || "Leo") : "the landscape"}`,
                 sunoStylePrompt: idx % 3 === 2 && useMusicals ? "upbeat children singalong, acoustic guitar, 120bpm" : ""
             }));
             return NextResponse.json({ scenes });
@@ -94,6 +98,11 @@ export async function POST(req: NextRequest) {
         // Phase 2: Creative Composition
         const systemPrompt = `You are an expert children's content writer. Read the following input (which is ${isSpinOff ? "a simple narrative premise outline" : "a story script"}), and rewrite it into a highly original storyboard script consisting of exactly ${numScenes} scenes.
 
+TARGET AUDIENCE & STYLE SETTINGS:
+- Visual Style Constraint: All visual prompts must specify and adhere to the "${selectedStyle}" animation style (e.g., character descriptions, background settings).
+- Target Audience Age: The tone of the dialogue, themes, and vocabulary must be tailored specifically for the "${selectedAge}" age bracket.
+- Genre: The story narrative style, pacing, and overall themes must fit the "${selectedGenre}" genre.
+
 CRITICAL COMPLIANCE RULES:
 1. COMPLETE ORIGINALITY & COPYRIGHT PROTECTION: You must compose all dialogue and song lyrics entirely from scratch. Do NOT reuse existing song lyrics or word-for-word structures. Use completely different metaphors, rhyming patterns, and vocabularies to guarantee 100% legal safety.
 ${isSpinOff 
@@ -114,7 +123,7 @@ The JSON structure for each scene must follow this schema:
     "character": "One of: ${characterNames}",
     "voice": "en-US-AnaNeural-Female" | "en-US-ChristopherNeural-Male" | "zh-CN-XiaoyiNeural-Female" | "en-US-GuyNeural-Male" | "en-US-AriaNeural-Female",
     "text": "The original polished dialogue spoken${useMusicals ? " or song lyrics sung" : ""} in this scene.",
-    "visualPrompt": "Detailed scene generation prompt for a 3D cartoon video generator featuring the character.",
+    "visualPrompt": "Detailed scene generation prompt for a video generator featuring the character, written in a descriptive style that enforces the \\"${selectedStyle}\\" visual theme.",
     "sunoStylePrompt": "Suno style suggestion (only for song types, empty string otherwise)"
   }
 ]

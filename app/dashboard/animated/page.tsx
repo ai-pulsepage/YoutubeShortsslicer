@@ -121,6 +121,9 @@ export default function KidsStoryBuilderPage() {
     const [targetDuration, setTargetDuration] = useState<number>(2); // Default to 2 minutes
     const [compositionMode, setCompositionMode] = useState<"spin_off" | "paraphrase">("spin_off");
     const [includeMusicals, setIncludeMusicals] = useState<boolean>(true);
+    const [visualStyle, setVisualStyle] = useState<string>("Pixar 3D");
+    const [targetAge, setTargetAge] = useState<string>("Kids");
+    const [genre, setGenre] = useState<string>("Adventure");
     const [rewritingShotId, setRewritingShotId] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
     const [isLibraryOpen, setIsLibraryOpen] = useState(false);
@@ -374,6 +377,9 @@ export default function KidsStoryBuilderPage() {
             setTargetDuration(proj.sourceUrls ? (proj as any).targetDuration || 2 : 2);
             setCompositionMode((proj as any).compositionMode || "spin_off");
             setIncludeMusicals((proj as any).includeMusicals !== false);
+            setVisualStyle((proj as any).visualStyle || "Pixar 3D");
+            setTargetAge((proj as any).targetAge || "Kids");
+            setGenre((proj as any).genre || "Adventure");
             setCurrentStep(1);
         }
     };
@@ -395,7 +401,10 @@ export default function KidsStoryBuilderPage() {
                     sourceUrls: selectedVideoId ? [selectedVideoId] : [],
                     targetDuration,
                     compositionMode,
-                    includeMusicals
+                    includeMusicals,
+                    visualStyle,
+                    targetAge,
+                    genre
                 })
             });
 
@@ -421,8 +430,8 @@ export default function KidsStoryBuilderPage() {
         setInsufficientFunds(false);
         try {
             const bodyPayload = sourceMode === "video" 
-                ? { videoId: selectedVideoId, characters, targetDuration, compositionMode, includeMusicals } 
-                : { premise: projectScript, characters, targetDuration, compositionMode, includeMusicals };
+                ? { videoId: selectedVideoId, characters, targetDuration, compositionMode, includeMusicals, visualStyle, targetAge, genre } 
+                : { premise: projectScript, characters, targetDuration, compositionMode, includeMusicals, visualStyle, targetAge, genre };
 
             const res = await fetch("/api/animated/summarize", {
                 method: "POST",
@@ -1457,10 +1466,10 @@ export default function KidsStoryBuilderPage() {
                             </div>
 
                             {/* Options panel in Step 3 */}
-                            <div className="bg-black/20 border border-gray-850 p-5 rounded-2xl text-left space-y-4 max-w-lg mx-auto">
+                            <div className="bg-black/20 border border-gray-850 p-5 rounded-2xl text-left space-y-4 max-w-lg mx-auto animate-none">
                                 <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-850 pb-2">AI Blueprint Composition Settings</h4>
-                                <div className="space-y-3.5">
-                                    <div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-sans">
+                                    <div className="md:col-span-2">
                                         <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1.5">Story Composition Mode</label>
                                         <select value={compositionMode} onChange={e => setCompositionMode(e.target.value as any)}
                                             className="w-full bg-gray-850 border border-gray-750 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-violet-500 font-semibold cursor-pointer">
@@ -1468,15 +1477,49 @@ export default function KidsStoryBuilderPage() {
                                             <option value="paraphrase" className="bg-gray-900 text-white">Direct Paraphrase (Similar Pacing & Sequence)</option>
                                         </select>
                                     </div>
+
                                     <div>
-                                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">Sing-Along Musicals</label>
-                                        <div className="flex items-center gap-2.5 mt-1.5">
-                                            <input type="checkbox" id="includeMusicalsCheckbox3" checked={includeMusicals} onChange={e => setIncludeMusicals(e.target.checked)}
-                                                className="w-4 h-4 text-violet-600 border-gray-700 bg-gray-800 rounded focus:ring-violet-500 cursor-pointer animate-none" />
-                                            <label htmlFor="includeMusicalsCheckbox3" className="text-xs text-gray-300 font-semibold cursor-pointer select-none">
-                                                Include Sing-Along Songs (adds Suno prompt lyrics)
-                                            </label>
-                                        </div>
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1.5">Visual Style Preset</label>
+                                        <select value={visualStyle} onChange={e => setVisualStyle(e.target.value)}
+                                            className="w-full bg-gray-850 border border-gray-750 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-violet-500 font-semibold cursor-pointer">
+                                            <option value="Pixar 3D" className="bg-gray-900 text-white">Pixar 3D</option>
+                                            <option value="Classic Anime" className="bg-gray-900 text-white">Classic Anime</option>
+                                            <option value="Studio Ghibli" className="bg-gray-900 text-white">Studio Ghibli</option>
+                                            <option value="Hand-Drawn Sketch/Watercolor" className="bg-gray-900 text-white">Hand-Drawn / Watercolor</option>
+                                            <option value="Retro Cartoon (90s)" className="bg-gray-900 text-white">Retro Cartoon (90s)</option>
+                                            <option value="Realistic CGI" className="bg-gray-900 text-white">Realistic CGI</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1.5">Target Audience Age</label>
+                                        <select value={targetAge} onChange={e => setTargetAge(e.target.value)}
+                                            className="w-full bg-gray-850 border border-gray-750 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-violet-500 font-semibold cursor-pointer font-sans">
+                                            <option value="Toddlers" className="bg-gray-900 text-white">Toddlers (2-4)</option>
+                                            <option value="Kids" className="bg-gray-900 text-white">Kids (5-11)</option>
+                                            <option value="Teens (13+)" className="bg-gray-900 text-white">Teens (13+)</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1.5">Story Genre</label>
+                                        <select value={genre} onChange={e => setGenre(e.target.value)}
+                                            className="w-full bg-gray-850 border border-gray-750 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-violet-500 font-semibold cursor-pointer">
+                                            <option value="Adventure" className="bg-gray-900 text-white">Adventure</option>
+                                            <option value="Comedy" className="bg-gray-900 text-white">Comedy</option>
+                                            <option value="Fantasy" className="bg-gray-900 text-white">Fantasy</option>
+                                            <option value="Teen Romance" className="bg-gray-900 text-white">Teen Romance</option>
+                                            <option value="Bedtime Story" className="bg-gray-900 text-white">Bedtime Story</option>
+                                            <option value="Sci-Fi" className="bg-gray-900 text-white">Sci-Fi</option>
+                                        </select>
+                                    </div>
+
+                                    <div className="flex items-center gap-2.5 mt-4 md:mt-0 md:justify-start md:col-span-2">
+                                        <input type="checkbox" id="includeMusicalsCheckbox3" checked={includeMusicals} onChange={e => setIncludeMusicals(e.target.checked)}
+                                            className="w-4 h-4 text-violet-600 border-gray-700 bg-gray-800 rounded focus:ring-violet-500 cursor-pointer animate-none" />
+                                        <label htmlFor="includeMusicalsCheckbox3" className="text-xs text-gray-300 font-semibold cursor-pointer select-none">
+                                            Include Sing-Along Songs (adds Suno prompt lyrics)
+                                        </label>
                                     </div>
                                 </div>
                             </div>

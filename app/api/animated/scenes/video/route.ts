@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { sceneId, visualPrompt, docId } = await req.json();
+    const { sceneId, visualPrompt, docId, refImage } = await req.json();
     if (!sceneId || !visualPrompt) {
         return NextResponse.json({ error: "sceneId and visualPrompt are required" }, { status: 400 });
     }
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
             documentaryId: activeDocId,
             type: "shot_video",
             prompt: visualPrompt,
-            referenceImages: [],
+            referenceImages: refImage ? [refImage] : [],
             metadata: { sceneId }
         });
 
