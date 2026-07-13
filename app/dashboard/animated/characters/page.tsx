@@ -176,11 +176,20 @@ export default function AnimatedCastLibraryPage() {
         setPickingAvatarCharName(charName);
         setLoadingR2Avatars(true);
         try {
-            const res = await fetch("/api/storage/list?prefix=avatars/");
-            const data = await res.json();
-            if (res.ok) {
-                setR2Avatars(data.files || []);
-            }
+            const [resAvatars, resAssets] = await Promise.all([
+                fetch("/api/storage/list?prefix=avatars/"),
+                fetch("/api/storage/list?prefix=documentaries/assets/")
+            ]);
+            
+            const dataAvatars = await resAvatars.json();
+            const dataAssets = await resAssets.json();
+            
+            const mergedFiles = [
+                ...(dataAvatars.files || []),
+                ...(dataAssets.files || [])
+            ];
+            
+            setR2Avatars(mergedFiles);
         } catch (err) {
             console.error("Failed to load R2 avatars:", err);
         } finally {
