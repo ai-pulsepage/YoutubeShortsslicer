@@ -31,7 +31,8 @@ import {
     Wand2,
     Activity,
     Folder,
-    PackageOpen
+    PackageOpen,
+    Cpu
 } from "lucide-react";
 import { useState } from "react";
 
@@ -56,6 +57,7 @@ const aiStudioItems = [
 
 const bottomNavItems = [
     { label: "Queue Monitor", href: "/dashboard/queue", icon: Activity },
+    { label: "GPU Workbench", href: "/dashboard/workbench", icon: Cpu },
     { label: "Storage Explorer", href: "/dashboard/storage", icon: Folder },
     { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
     { label: "Whop", href: "/dashboard/whop", icon: DollarSign },

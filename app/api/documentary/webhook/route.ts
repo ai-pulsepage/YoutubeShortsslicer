@@ -92,7 +92,101 @@ export async function POST(req: NextRequest) {
         console.error(`[Webhook]   Job ${jobId} FAILED: ${error}`);
     }
 
+    // Check if we should trigger auto-shutdown because the queue is finished
+    await triggerAutoShutdownIfNeeded();
+
     return NextResponse.json({ ok: true });
+}
+
+async function getDbConfig(key: string): Promise<string> {
+    try {
+        const row = await prisma.apiKey.findUnique({ where: { service: key } });
+        if (row?.key) {
+            return Buffer.from(row.key, "base64").toString("utf8");
+        }
+    } catch {}
+    return "";
+}
+
+async function triggerAutoShutdownIfNeeded() {
+    try {
+        // 1. Check GenJob
+        const activeGenJobs = await prisma.genJob.count({
+            where: {
+                status: { in: ["QUEUED", "PROCESSING"] }
+            }
+        });
+        if (activeGenJobs > 0) return;
+
+        // 2. Check UGCJob
+        const activeUgcJobs = await prisma.uGCJob.count({
+            where: {
+                status: { in: ["PENDING", "GENERATING_SCRIPT", "GENERATING_VIDEO", "COMPOSITING"] }
+            }
+        });
+        if (activeUgcJobs > 0) return;
+
+        // 3. Check PodcastEpisode
+        const activePodcastJobs = await prisma.podcastEpisode.count({
+            where: {
+                status: { in: ["SCRIPTING", "RECORDING", "ASSEMBLING"] }
+            }
+        });
+        if (activePodcastJobs > 0) return;
+
+        // If we reach here, there are absolutely 0 active jobs in the queue!
+        console.log("[Auto-Shutdown] Queue is fully empty. Fetching active RunPod server to terminate...");
+
+        const apiKey = await getDbConfig("runpod_api_key");
+        if (!apiKey) return;
+
+        // Query active pods
+        const myselfQuery = `
+        query {
+          myself {
+            pods {
+              id
+              status
+            }
+          }
+        }`;
+        
+        const res = await fetch(`https://api.runpod.io/graphql?api_key=${apiKey}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: myselfQuery })
+        });
+        if (!res.ok) return;
+        const json = await res.json();
+        const pods = json.data?.myself?.pods || [];
+
+        const runningPods = pods.filter((p: any) => p.status === "RUNNING");
+        if (runningPods.length === 0) {
+            console.log("[Auto-Shutdown] No active running pods to shut down");
+            return;
+        }
+
+        // Send termination mutation to all active pods
+        for (const pod of runningPods) {
+            console.log(`[Auto-Shutdown] Terminating pod: ${pod.id}`);
+            const mutation = `
+            mutation TerminatePod($input: PodTerminateInput!) {
+              podTerminate(input: $input)
+            }`;
+            await fetch(`https://api.runpod.io/graphql?api_key=${apiKey}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    query: mutation,
+                    variables: { input: { podId: pod.id } }
+                })
+            });
+        }
+        console.log("[Auto-Shutdown] Successfully stopped all GPU instances.");
+
+    } catch (err: any) {
+        console.error("[Auto-Shutdown] Failed during queue check & termination:", err.message);
+    }
 }
 
 async function checkDocumentaryCompletion(documentaryId: string) {
