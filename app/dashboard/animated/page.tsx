@@ -919,14 +919,14 @@ export default function KidsStoryBuilderPage() {
         }
     };
 
-    // Scan avatars/ and documentaries/assets/ prefixes in R2 and display file chooser popup
+    // Scan avatars/ and animated/ prefixes in R2 and display file chooser popup
     const openR2Picker = async (charId: string) => {
         setPickingAvatarCharId(charId);
         setLoadingR2Avatars(true);
         try {
             const [resAvatars, resAssets] = await Promise.all([
                 fetch("/api/storage/list?prefix=avatars/"),
-                fetch("/api/storage/list?prefix=documentaries/assets/")
+                fetch("/api/storage/list?prefix=animated/")
             ]);
             
             const dataAvatars = await resAvatars.json();

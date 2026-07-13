@@ -30,22 +30,22 @@ export async function POST(req: NextRequest) {
         }
 
         // 1. Generate profile layout using DeepSeek
-        let name = `${suggestion.trim()} Creator`;
-        let promptText = `Pixar 3D style animated character portrait of a ${suggestion.trim()} on a plain solid color studio background, smiling, high resolution, detailed lighting`;
-        let persona = `A friendly creator speaking about ${suggestion.trim()}`;
+        let name = `${suggestion.trim()} Presenter`;
+        let promptText = `Highly realistic, professional headshot photo of a real human spokesperson representing ${suggestion.trim()}, warm friendly smile, natural skin texture, sharp details, plain solid color studio background, shot on 85mm lens, f/1.8, cinematic lighting, photorealistic, 8k resolution`;
+        let persona = `A realistic professional spokesperson speaking about ${suggestion.trim()}`;
         let gender = "female";
 
         if (apiKey) {
             try {
-                const systemPrompt = `You are a creative character designer. Generate a JSON object describing a realistic 3D Pixar style character persona who acts as a UGC presenter. The character should represent a niche based on the user's suggestion.
+                const systemPrompt = `You are a creative character designer. Generate a JSON object describing a realistic, professional real human presenter (UGC spokesperson) based on the user's suggestion. The presenter should look like a real person, not an animation or cartoon.
 Return ONLY a valid JSON object matching this schema:
 {
   "name": "Sarah - Skincare Expert",
-  "prompt": "Pixar 3D style animated character portrait, warm friendly smile, glowing skin, holding a small cosmetic bottle, neutral soft studio background...",
+  "prompt": "Highly realistic professional headshot photo of a real woman skincare expert, warm friendly smile, clear skin, simple elegant attire, soft solid color studio background, natural skin texture, detailed eyes, shot on 85mm lens, photorealistic...",
   "persona": "An expert skincare aesthetician who speaks softly and offers practical advice.",
   "gender": "female"
 }
-Ensure prompt describes the character details, outfit, backdrop, and Pixar/3D style. Make it under 40 words.`;
+Ensure the prompt describes the character details, outfit, backdrop, and photorealistic human appearance. Avoid any reference to Pixar, 3D, animation, digital art, cartoon, drawing, illustration. Make it under 40 words.`;
 
                 const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
                     method: "POST",

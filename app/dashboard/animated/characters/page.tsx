@@ -178,7 +178,7 @@ export default function AnimatedCastLibraryPage() {
         try {
             const [resAvatars, resAssets] = await Promise.all([
                 fetch("/api/storage/list?prefix=avatars/"),
-                fetch("/api/storage/list?prefix=documentaries/assets/")
+                fetch("/api/storage/list?prefix=animated/")
             ]);
             
             const dataAvatars = await resAvatars.json();

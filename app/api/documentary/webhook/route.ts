@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { organizeCompletedJobAsset } from "@/lib/documentary/asset-organizer";
 
 interface WorkerResult {
     jobId: string;
@@ -41,17 +42,20 @@ export async function POST(req: NextRequest) {
     }
 
     if (status === "completed" && outputPath) {
+        // Automatically organize file path in R2 bucket
+        const finalPath = await organizeCompletedJobAsset(jobId, outputPath);
+
         // Update job
         await prisma.genJob.update({
             where: { id: jobId },
-            data: { status: "COMPLETED", outputPath },
+            data: { status: "COMPLETED", outputPath: finalPath },
         });
 
         // Update asset (ref images)
         if (job.assetId && job.jobType === "ref_image") {
             await prisma.docAsset.update({
                 where: { id: job.assetId },
-                data: { imagePath: outputPath },
+                data: { imagePath: finalPath },
             });
             console.log(`[Webhook]   Asset ${job.assetId} updated`);
         }
@@ -61,14 +65,59 @@ export async function POST(req: NextRequest) {
         if (meta && meta.ugcAvatarId) {
             await prisma.uGCAvatar.update({
                 where: { id: meta.ugcAvatarId },
-                data: { referenceImageUrl: outputPath },
+                data: { referenceImageUrl: finalPath },
             });
             console.log(`[Webhook]   UGC Avatar ${meta.ugcAvatarId} updated with image path`);
         }
 
+        // Check if this job was for an Animated Short Scene/Shot
+        if (meta && (meta.sceneId || meta.shotId)) {
+            const sceneId = meta.sceneId;
+            const shotId = meta.shotId;
+            let targetScene = null;
+
+            if (sceneId) {
+                targetScene = await prisma.docScene.findUnique({ where: { id: sceneId } });
+            } else if (shotId) {
+                targetScene = await prisma.docScene.findFirst({
+                    where: { searchQueries: { contains: shotId } }
+                });
+            }
+
+            if (targetScene) {
+                let updatedPath = finalPath;
+                let searchQueriesMeta: any = {};
+                try {
+                    searchQueriesMeta = JSON.parse(targetScene.searchQueries || "{}");
+                } catch {}
+
+                if (searchQueriesMeta.visualShots && Array.isArray(searchQueriesMeta.visualShots)) {
+                    searchQueriesMeta.visualShots = searchQueriesMeta.visualShots.map((shot: any) => {
+                        if ((shotId && shot.id === shotId) || shot.jobId === jobId) {
+                            return { ...shot, visualPath: finalPath, jobStatus: "COMPLETED" };
+                        }
+                        return shot;
+                    });
+
+                    const allDone = searchQueriesMeta.visualShots.every((s: any) => s.jobStatus === "COMPLETED" || s.visualPath);
+                    if (allDone && searchQueriesMeta.visualShots.length > 0) {
+                        updatedPath = searchQueriesMeta.visualShots[searchQueriesMeta.visualShots.length - 1].visualPath || finalPath;
+                    }
+                }
+
+                await prisma.docScene.update({
+                    where: { id: targetScene.id },
+                    data: {
+                        assembledPath: updatedPath,
+                        searchQueries: JSON.stringify(searchQueriesMeta)
+                    }
+                });
+            }
+        }
+
         // Update shot (video clips)
         if (job.shotId && job.jobType === "shot_video") {
-            const updateData: Record<string, string> = { clipPath: outputPath };
+            const updateData: Record<string, string> = { clipPath: finalPath };
             if (lastFramePath) updateData.lastFramePath = lastFramePath;
 
             await prisma.docShot.update({

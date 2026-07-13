@@ -342,7 +342,7 @@ export default function UGCStudioPage() {
         try {
             const [resAvatars, resAssets] = await Promise.all([
                 fetch("/api/storage/list?prefix=avatars/"),
-                fetch("/api/storage/list?prefix=documentaries/assets/")
+                fetch("/api/storage/list?prefix=ugc/avatars/")
             ]);
             
             const dataAvatars = await resAvatars.json();

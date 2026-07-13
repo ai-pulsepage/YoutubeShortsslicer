@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getRedis, CHANNELS } from "@/lib/documentary/redis-client";
+import { organizeCompletedJobAsset } from "@/lib/documentary/asset-organizer";
 
 export async function GET(req: NextRequest) {
     const session = await auth();
@@ -25,8 +26,12 @@ export async function GET(req: NextRequest) {
                 const data = JSON.parse(result);
                 const jobId = data.jobId;
                 const status = data.status === "completed" ? "COMPLETED" : "FAILED";
-                const outputPath = data.outputPath || null;
+                let outputPath = data.outputPath || null;
                 const errorMsg = data.error || null;
+
+                if (status === "COMPLETED" && outputPath) {
+                    outputPath = await organizeCompletedJobAsset(jobId, outputPath);
+                }
 
                 // Update GenJob record
                 const job = await prisma.genJob.update({
@@ -115,6 +120,17 @@ export async function GET(req: NextRequest) {
             });
 
             for (const job of completedJobs) {
+                if (job.outputPath) {
+                    const organizedPath = await organizeCompletedJobAsset(job.id, job.outputPath);
+                    if (organizedPath !== job.outputPath) {
+                        await prisma.genJob.update({
+                            where: { id: job.id },
+                            data: { outputPath: organizedPath }
+                        });
+                        job.outputPath = organizedPath;
+                    }
+                }
+
                 const meta = job.metadata as any;
                 if (meta && (meta.sceneId || meta.shotId) && job.outputPath) {
                     const sceneId = meta.sceneId;

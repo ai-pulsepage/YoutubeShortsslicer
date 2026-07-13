@@ -5,6 +5,7 @@ import {
     DeleteObjectCommand,
     DeleteObjectsCommand,
     ListObjectsV2Command,
+    CopyObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Upload } from "@aws-sdk/lib-storage";
@@ -284,4 +285,33 @@ export async function getPresignedUploadUrl(
     });
 
     return getSignedUrl(s3, command, { expiresIn });
+}
+
+/**
+ * Copy an object within R2
+ */
+export async function copyR2Object(sourceKey: string, destKey: string): Promise<string> {
+    await s3.send(
+        new CopyObjectCommand({
+            Bucket: BUCKET,
+            CopySource: encodeURI(`${BUCKET}/${sourceKey}`),
+            Key: destKey,
+        })
+    );
+    return destKey;
+}
+
+/**
+ * Move (Copy and Delete) an object within R2
+ */
+export async function moveR2Object(sourceKey: string, destKey: string): Promise<string> {
+    if (sourceKey === destKey) return destKey;
+    await copyR2Object(sourceKey, destKey);
+    await s3.send(
+        new DeleteObjectCommand({
+            Bucket: BUCKET,
+            Key: sourceKey,
+        })
+    );
+    return destKey;
 }

@@ -1,12 +1,172 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getRedis, CHANNELS } from "@/lib/documentary/redis-client";
+import { organizeCompletedJobAsset } from "@/lib/documentary/asset-organizer";
 
 export async function GET(req: NextRequest) {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     try {
+        const redis = getRedis();
+
+        // 1. Drain pending finished task results from Redis to update PostgreSQL states
+        for (let i = 0; i < 50; i++) {
+            const result = await redis.rpop(CHANNELS.DOCUMENTARY_RESULTS);
+            if (!result) break;
+
+            try {
+                const data = JSON.parse(result);
+                const jobId = data.jobId;
+                const status = data.status === "completed" ? "COMPLETED" : "FAILED";
+                let outputPath = data.outputPath || null;
+                const errorMsg = data.error || null;
+
+                if (status === "COMPLETED" && outputPath) {
+                    outputPath = await organizeCompletedJobAsset(jobId, outputPath);
+                }
+
+                const job = await prisma.genJob.update({
+                    where: { id: jobId },
+                    data: { status, outputPath, errorMsg }
+                });
+
+                if (status === "COMPLETED" && outputPath) {
+                    if (job.assetId) {
+                        await prisma.docAsset.update({
+                            where: { id: job.assetId },
+                            data: { imagePath: outputPath }
+                        });
+                    }
+
+                    if (job.shotId && job.jobType === "shot_video") {
+                        await prisma.docShot.update({
+                            where: { id: job.shotId },
+                            data: { clipPath: outputPath }
+                        });
+                    }
+
+                    const meta = job.metadata as any;
+                    if (meta && (meta.sceneId || meta.shotId)) {
+                        const sceneId = meta.sceneId;
+                        const shotId = meta.shotId;
+                        let targetScene = null;
+
+                        if (sceneId) {
+                            targetScene = await prisma.docScene.findUnique({ where: { id: sceneId } });
+                        } else if (shotId) {
+                            targetScene = await prisma.docScene.findFirst({
+                                where: { searchQueries: { contains: shotId } }
+                            });
+                        }
+
+                        if (targetScene) {
+                            let updatedPath = outputPath;
+                            let searchQueriesMeta: any = {};
+                            try {
+                                searchQueriesMeta = JSON.parse(targetScene.searchQueries || "{}");
+                            } catch {}
+
+                            if (searchQueriesMeta.visualShots && Array.isArray(searchQueriesMeta.visualShots)) {
+                                searchQueriesMeta.visualShots = searchQueriesMeta.visualShots.map((shot: any) => {
+                                    if ((shotId && shot.id === shotId) || shot.jobId === jobId) {
+                                        return { ...shot, visualPath: outputPath, jobStatus: "COMPLETED" };
+                                    }
+                                    return shot;
+                                });
+
+                                const allDone = searchQueriesMeta.visualShots.every((s: any) => s.jobStatus === "COMPLETED" || s.visualPath);
+                                if (allDone && searchQueriesMeta.visualShots.length > 0) {
+                                    updatedPath = searchQueriesMeta.visualShots[searchQueriesMeta.visualShots.length - 1].visualPath || outputPath;
+                                }
+                            }
+
+                            await prisma.docScene.update({
+                                where: { id: targetScene.id },
+                                data: {
+                                    assembledPath: updatedPath,
+                                    searchQueries: JSON.stringify(searchQueriesMeta)
+                                }
+                            });
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error("[GET Projects Sync] Error processing result:", err);
+            }
+        }
+
+        // 2. Retroactive sync check: find all COMPLETED GenJobs and link them if not done yet
+        try {
+            const completedJobs = await prisma.genJob.findMany({
+                where: {
+                    status: "COMPLETED",
+                    outputPath: { not: null }
+                }
+            });
+
+            for (const job of completedJobs) {
+                if (job.outputPath) {
+                    const organizedPath = await organizeCompletedJobAsset(job.id, job.outputPath);
+                    if (organizedPath !== job.outputPath) {
+                        await prisma.genJob.update({
+                            where: { id: job.id },
+                            data: { outputPath: organizedPath }
+                        });
+                        job.outputPath = organizedPath;
+                    }
+                }
+
+                const meta = job.metadata as any;
+                if (meta && (meta.sceneId || meta.shotId) && job.outputPath) {
+                    const sceneId = meta.sceneId;
+                    const shotId = meta.shotId;
+                    let targetScene = null;
+
+                    if (sceneId) {
+                        targetScene = await prisma.docScene.findUnique({ where: { id: sceneId } });
+                    } else if (shotId) {
+                        targetScene = await prisma.docScene.findFirst({
+                            where: { searchQueries: { contains: shotId } }
+                        });
+                    }
+
+                    if (targetScene && !targetScene.assembledPath) {
+                        let updatedPath = job.outputPath;
+                        let searchQueriesMeta: any = {};
+                        try {
+                            searchQueriesMeta = JSON.parse(targetScene.searchQueries || "{}");
+                        } catch {}
+
+                        if (searchQueriesMeta.visualShots && Array.isArray(searchQueriesMeta.visualShots)) {
+                            searchQueriesMeta.visualShots = searchQueriesMeta.visualShots.map((shot: any) => {
+                                if ((shotId && shot.id === shotId) || shot.jobId === job.id) {
+                                    return { ...shot, visualPath: job.outputPath, jobStatus: "COMPLETED" };
+                                }
+                                return shot;
+                            });
+
+                            const allDone = searchQueriesMeta.visualShots.every((s: any) => s.jobStatus === "COMPLETED" || s.visualPath);
+                            if (allDone && searchQueriesMeta.visualShots.length > 0) {
+                                updatedPath = searchQueriesMeta.visualShots[searchQueriesMeta.visualShots.length - 1].visualPath || job.outputPath;
+                            }
+                        }
+
+                        await prisma.docScene.update({
+                            where: { id: targetScene.id },
+                            data: {
+                                assembledPath: updatedPath,
+                                searchQueries: JSON.stringify(searchQueriesMeta)
+                            }
+                        });
+                    }
+                }
+            }
+        } catch (retroErr) {
+            console.error("[GET Projects Sync] Retroactive link check failed:", retroErr);
+        }
+
         const projects = await prisma.documentary.findMany({
             where: {
                 userId: session.user.id,
