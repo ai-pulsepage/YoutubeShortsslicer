@@ -124,7 +124,11 @@ Ensure prompt describes the character details, outfit, backdrop, and Pixar/3D st
                 jobType: "ref_image",
                 prompt: promptText,
                 status: "QUEUED",
-                metadata: { ugcAvatarId: avatar.id } as any
+                metadata: { 
+                    ugcAvatarId: avatar.id,
+                    sourceApp: "AI UGC Studio",
+                    title: `Avatar: ${name}`
+                } as any
             }
         });
 
@@ -135,7 +139,12 @@ Ensure prompt describes the character details, outfit, backdrop, and Pixar/3D st
             type: "ref_image",
             prompt: promptText,
             referenceImages: [],
-            metadata: { ugcAvatarId: avatar.id, model: "flux" }
+            metadata: { 
+                ugcAvatarId: avatar.id, 
+                model: "flux",
+                sourceApp: "AI UGC Studio",
+                title: `Avatar: ${name}`
+            }
         });
 
         return NextResponse.json({
