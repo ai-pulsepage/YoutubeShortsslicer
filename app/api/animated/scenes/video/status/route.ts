@@ -145,7 +145,7 @@ export async function GET(req: NextRequest) {
                         });
                     }
 
-                    if (targetScene && !targetScene.assembledPath) {
+                    if (targetScene) {
                         let updatedPath = job.outputPath;
                         let searchQueriesMeta: any = {};
                         try {
@@ -157,7 +157,7 @@ export async function GET(req: NextRequest) {
                                 if ((shotId && shot.id === shotId) || shot.jobId === job.id) {
                                     return { ...shot, visualPath: job.outputPath, jobStatus: "COMPLETED" };
                                 }
-                                return shot;
+                                  return shot;
                             });
 
                             const allDone = searchQueriesMeta.visualShots.every((s: any) => s.jobStatus === "COMPLETED" || s.visualPath);

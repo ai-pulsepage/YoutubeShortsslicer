@@ -132,7 +132,7 @@ export async function GET(req: NextRequest) {
                         });
                     }
 
-                    if (targetScene && !targetScene.assembledPath) {
+                    if (targetScene) {
                         let updatedPath = job.outputPath;
                         let searchQueriesMeta: any = {};
                         try {
