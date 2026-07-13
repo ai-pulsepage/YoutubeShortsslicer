@@ -449,11 +449,11 @@ export default function KidsStoryBuilderPage() {
             if (!res.ok) throw new Error(data.error || "Failed to draft blueprint");
 
             if (data.scenes && Array.isArray(data.scenes)) {
-                setScenes(data.scenes.map((s: any) => ({
+                setScenes(data.scenes.map((s: any, idx: number) => ({
                     ...s,
                     visualShots: s.visualShots || [
                         {
-                            id: `shot-${Date.now()}-default`,
+                            id: `shot-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 9)}-default`,
                             primaryCharacter: s.character || "Leo",
                             visualPrompt: s.visualPrompt || "Cartoon style scenery background",
                             jobStatus: "IDLE"
