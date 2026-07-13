@@ -63,6 +63,35 @@ export async function GET(req: NextRequest) {
             await bullRedis.quit();
         }
 
+        // 3. Fetch active GenJobs from database to track jobs that have been popped from Redis but are still rendering
+        try {
+            const activeDbJobs = await prisma.genJob.findMany({
+                where: {
+                    status: { in: ["QUEUED", "PROCESSING"] }
+                },
+                orderBy: { createdAt: "desc" }
+            });
+            
+            for (const dbJob of activeDbJobs) {
+                // Avoid duplicating jobs already listed directly from Redis
+                if (listJobs.some(j => j.id === dbJob.id)) continue;
+                
+                const meta = dbJob.metadata as any;
+                listJobs.push({
+                    id: dbJob.id,
+                    documentaryId: dbJob.documentaryId,
+                    type: dbJob.jobType,
+                    prompt: dbJob.prompt || "N/A",
+                    queueName: "documentary_jobs",
+                    sourceApp: meta?.sourceApp || "Animated Shorts",
+                    projectTitle: meta?.title || "Kids Story Project",
+                    status: dbJob.status, // "QUEUED" or "PROCESSING"
+                });
+            }
+        } catch (dbErr: any) {
+            console.warn("[Queue Jobs GET] db fallback check failed:", dbErr.message);
+        }
+
         return NextResponse.json({ success: true, jobs: listJobs });
     } catch (err: any) {
         console.error("[Queue Jobs GET] failed:", err.message);

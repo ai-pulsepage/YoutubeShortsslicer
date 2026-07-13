@@ -160,7 +160,8 @@ export async function POST(req: NextRequest) {
                 { key: "R2_BUCKET_NAME", value: process.env.R2_BUCKET_NAME || "" },
                 { key: "R2_ENDPOINT", value: process.env.R2_ENDPOINT || "" },
                 { key: "DEEPSEEK_API_KEY", value: process.env.DEEPSEEK_API_KEY || "" },
-                { key: "NEXTAUTH_SECRET", value: process.env.NEXTAUTH_SECRET || "" }
+                { key: "NEXTAUTH_SECRET", value: process.env.NEXTAUTH_SECRET || "" },
+                { key: "YOUTUBEVIDEOS", value: "{{ RUNPOD_SECRET_YOUTUBEVIDEOS }}" }
             ].filter(env => env.value !== "");
 
             const mutation = `
