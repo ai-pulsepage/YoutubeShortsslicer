@@ -37,7 +37,9 @@ type Shot = {
     visualPrompt: string;
     visualPath?: string;      // R2 key of generated shot clip
     jobId?: string;           // RunPod Job ID
-    jobStatus?: "IDLE" | "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED";
+    jobStatus?: "IDLE" | "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED" | "PENDING_AVATAR";
+    duration?: number;        // Optional custom duration in seconds
+    chainFromPrevious?: boolean; // Optional flag to chain keyframe context
 };
 
 type Scene = {
@@ -690,8 +692,11 @@ export default function KidsStoryBuilderPage() {
     };
 
     // Dispatch Scene video generator (shot-level)
-    const generateShotVideo = async (sceneId: string, shotId: string, visualPrompt: string, characterName: string) => {
+    const generateShotVideo = async (sceneId: string, shotObj: Shot) => {
         setError("");
+        const shotId = shotObj.id;
+        const visualPrompt = shotObj.visualPrompt;
+        const characterName = shotObj.primaryCharacter;
         
         let finalPrompt = visualPrompt;
         characters.forEach(char => {
@@ -713,7 +718,10 @@ export default function KidsStoryBuilderPage() {
                     sceneId, 
                     visualPrompt: finalPrompt, 
                     docId, 
-                    refImage: hasRefImage || undefined 
+                    refImage: hasRefImage || undefined,
+                    shotId: shotObj.id,
+                    duration: shotObj.duration || 5,
+                    chainFromPrevious: shotObj.chainFromPrevious || false
                 })
             });
 
@@ -1152,7 +1160,7 @@ export default function KidsStoryBuilderPage() {
             });
 
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error || "Compilation failed");
+            if (!res.ok) throw new Error(data.details || data.error || "Compilation failed");
 
             if (data.videoUrl) {
                 const signedRes = await fetch(`/api/storage/signed?key=${data.videoUrl}`);
@@ -1707,15 +1715,32 @@ export default function KidsStoryBuilderPage() {
                                                             {/* left side prompt inputs */}
                                                             <div className="flex-1 space-y-2">
                                                                 <div className="flex items-center justify-between">
-                                                                    <div className="flex items-center gap-2">
+                                                                    <div className="flex flex-wrap items-center gap-2">
                                                                         <span className="text-[10px] font-bold text-gray-400">Shot {sIdx + 1}</span>
                                                                         
-                                                                        <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider block">Primary Subject:</span>
                                                                         <select value={shot.primaryCharacter} onChange={e => updateShot(scene.id, shot.id, { primaryCharacter: e.target.value })}
                                                                             className="bg-gray-850 border border-gray-750 text-[10px] text-white px-2 py-0.5 rounded focus:outline-none cursor-pointer">
                                                                             <option value="None" className="bg-gray-900 text-white">None (Landscape)</option>
                                                                             {characters.map(c => <option key={c.id} value={c.name} className="bg-gray-900 text-white">{c.name}</option>)}
                                                                         </select>
+
+                                                                        <div className="flex items-center gap-1">
+                                                                            <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Dur:</span>
+                                                                            <select value={shot.duration || 5} onChange={e => updateShot(scene.id, shot.id, { duration: parseInt(e.target.value) })}
+                                                                                className="bg-gray-850 border border-gray-750 text-[10px] text-white px-1 py-0.5 rounded focus:outline-none cursor-pointer">
+                                                                                <option value={5} className="bg-gray-900 text-white">5s</option>
+                                                                                <option value={8} className="bg-gray-900 text-white">8s</option>
+                                                                                <option value={10} className="bg-gray-900 text-white">10s</option>
+                                                                            </select>
+                                                                        </div>
+
+                                                                        {(sIdx > 0 || idx > 0) && (
+                                                                            <label className="flex items-center gap-1 cursor-pointer select-none">
+                                                                                <input type="checkbox" checked={!!shot.chainFromPrevious} onChange={e => updateShot(scene.id, shot.id, { chainFromPrevious: e.target.checked })}
+                                                                                    className="w-3 h-3 rounded border-gray-700 bg-gray-850 text-violet-500 focus:ring-0 focus:ring-offset-0 cursor-pointer" />
+                                                                                <span className="text-[9px] text-gray-400 font-bold">Chain</span>
+                                                                            </label>
+                                                                        )}
                                                                     </div>
                                                                     {shot.visualPrompt && (
                                                                         <button onClick={() => handleRewriteShotPrompt(scene.id, shot.id, shot.visualPrompt, shot.primaryCharacter, scene.text)}
@@ -1755,7 +1780,7 @@ export default function KidsStoryBuilderPage() {
                                                                     </span>
 
                                                                     <div className="flex items-center gap-1.5">
-                                                                        <button onClick={() => generateShotVideo(scene.id, shot.id, shot.visualPrompt, shot.primaryCharacter)}
+                                                                        <button onClick={() => generateShotVideo(scene.id, shot)}
                                                                             disabled={shot.jobStatus === "QUEUED" || shot.jobStatus === "PROCESSING"}
                                                                             className="px-2 py-0.5 bg-violet-600 hover:bg-violet-550 disabled:opacity-50 text-[10px] text-white font-bold rounded transition-all font-sans">
                                                                             {shot.jobStatus === "COMPLETED" ? "Regenerate" : "Generate"}

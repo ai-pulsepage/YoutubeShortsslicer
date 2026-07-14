@@ -16,6 +16,31 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Scenes list is required" }, { status: 400 });
     }
 
+    // 0. Pre-validate that all visual clips exist
+    const missingClips: string[] = [];
+    for (let idx = 0; idx < scenes.length; idx++) {
+        const scene = scenes[idx];
+        if (scene.visualShots && Array.isArray(scene.visualShots) && scene.visualShots.length > 0) {
+            for (let sIdx = 0; sIdx < scene.visualShots.length; sIdx++) {
+                const shot = scene.visualShots[sIdx];
+                if (!shot.visualPath) {
+                    missingClips.push(`Scene ${idx + 1} (Shot ${sIdx + 1})`);
+                }
+            }
+        } else {
+            if (!scene.visualPath) {
+                missingClips.push(`Scene ${idx + 1}`);
+            }
+        }
+    }
+
+    if (missingClips.length > 0) {
+        return NextResponse.json({
+            error: "Missing visual clips",
+            details: `The following scenes are missing generated video clips: ${missingClips.join(", ")}. Please generate all visuals first.`
+        }, { status: 400 });
+    }
+
     const moneyPrinterUrl = process.env.MONEY_PRINTER_URL || "http://localhost:8080";
     const tempDir = path.join(os.tmpdir(), `story-compile-${Date.now()}`);
     fs.mkdirSync(tempDir, { recursive: true });

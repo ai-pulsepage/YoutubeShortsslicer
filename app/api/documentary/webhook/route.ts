@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { organizeCompletedJobAsset } from "@/lib/documentary/asset-organizer";
+import { dispatchJob } from "@/lib/documentary/redis-client";
 
 interface WorkerResult {
     jobId: string;
@@ -58,6 +59,12 @@ export async function POST(req: NextRequest) {
                 data: { imagePath: finalPath },
             });
             console.log(`[Webhook]   Asset ${job.assetId} updated`);
+
+            try {
+                await dispatchPendingVideoJobsForCharacter(job.documentaryId, job.assetId, finalPath);
+            } catch (err: any) {
+                console.error("[Webhook] Failed to dispatch pending video jobs:", err.message);
+            }
         }
 
         // Check if this job was for a UGC avatar
@@ -94,7 +101,12 @@ export async function POST(req: NextRequest) {
                 if (searchQueriesMeta.visualShots && Array.isArray(searchQueriesMeta.visualShots)) {
                     searchQueriesMeta.visualShots = searchQueriesMeta.visualShots.map((shot: any) => {
                         if ((shotId && shot.id === shotId) || shot.jobId === jobId) {
-                            return { ...shot, visualPath: finalPath, jobStatus: "COMPLETED" };
+                            return { 
+                                ...shot, 
+                                visualPath: finalPath, 
+                                jobStatus: "COMPLETED",
+                                lastFramePath: lastFramePath || undefined
+                            };
                         }
                         return shot;
                     });
@@ -279,5 +291,83 @@ async function checkDocumentaryCompletion(documentaryId: string) {
             data: { status: newStatus as any },
         });
         console.log(`[Webhook] Documentary ${documentaryId} → ${newStatus}`);
+    }
+}
+
+async function dispatchPendingVideoJobsForCharacter(projectId: string, characterId: string, characterImagePath: string) {
+    const project = await prisma.documentary.findUnique({
+        where: { id: projectId },
+        include: {
+            assets: { where: { id: characterId } },
+            scenes: { orderBy: { sceneIndex: "asc" } }
+        }
+    });
+    if (!project || project.assets.length === 0) return;
+    const charAsset = project.assets[0];
+
+    console.log(`[Webhook] Auto-dispatching video jobs for character "${charAsset.label}" using avatar: ${characterImagePath}`);
+
+    for (const scene of project.scenes) {
+        let searchQueriesParsed: any = {};
+        try {
+            if (scene.searchQueries && scene.searchQueries.startsWith("{")) {
+                searchQueriesParsed = JSON.parse(scene.searchQueries);
+            }
+        } catch {}
+
+        const visualShots = searchQueriesParsed.visualShots || [];
+        let modified = false;
+        const updatedVisualShots = [];
+
+        for (const shot of visualShots) {
+            if (shot.jobStatus === "PENDING_AVATAR" && shot.primaryCharacter && shot.primaryCharacter.toLowerCase() === charAsset.label.toLowerCase()) {
+                console.log(`[Webhook]   Queueing shot ${shot.id} for scene ${scene.id}`);
+                
+                const jobMetadata = {
+                    shotId: shot.id,
+                    sceneId: scene.id,
+                    duration: shot.duration || 5,
+                    chainFromPrevious: !!shot.chainFromPrevious,
+                    sourceApp: "Animated Shorts",
+                    title: project.title || "Kids Story Project"
+                };
+
+                // Create a GenJob for video
+                const job = await prisma.genJob.create({
+                    data: {
+                        documentaryId: project.id,
+                        jobType: "shot_video",
+                        prompt: shot.visualPrompt,
+                        status: "QUEUED",
+                        metadata: jobMetadata as any
+                    }
+                });
+
+                // Dispatch to GPU worker queue
+                await dispatchJob({
+                    jobId: job.id,
+                    documentaryId: project.id,
+                    type: "shot_video",
+                    prompt: shot.visualPrompt,
+                    referenceImages: [characterImagePath],
+                    metadata: jobMetadata
+                });
+
+                shot.jobId = job.id;
+                shot.jobStatus = "QUEUED";
+                modified = true;
+            }
+            updatedVisualShots.push(shot);
+        }
+
+        if (modified) {
+            searchQueriesParsed.visualShots = updatedVisualShots;
+            await prisma.docScene.update({
+                where: { id: scene.id },
+                data: {
+                    searchQueries: JSON.stringify(searchQueriesParsed)
+                }
+            });
+        }
     }
 }

@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
         const systemPrompt = `You are an expert children's content writer. Read the following input (which is ${isSpinOff ? "a simple narrative premise outline" : "a story script"}), and rewrite it into a highly original storyboard script consisting of exactly ${numScenes} scenes.
 
 TARGET AUDIENCE & STYLE SETTINGS:
-- Visual Style Constraint: All visual prompts must specify and adhere to the "${selectedStyle}" animation style (e.g., character descriptions, background settings).
+- Visual Style Constraint: All visual prompts must strictly start with the style preset prefix (e.g., "${selectedStyle} style animation of...") to enforce the visual theme. The visual prompt must be concise, under 20 words, and explicitly name the character (e.g. "Jimmy the cat") so the image adapter can map the reference face portrait.
 - Target Audience Age: The tone of the dialogue, themes, and vocabulary must be tailored specifically for the "${selectedAge}" age bracket.
 - Genre: The story narrative style, pacing, and overall themes must fit the "${selectedGenre}" genre.
 
@@ -123,12 +123,12 @@ The JSON structure for each scene must follow this schema:
     "character": "One of: ${characterNames}",
     "voice": "en-US-AnaNeural-Female" | "en-US-ChristopherNeural-Male" | "zh-CN-XiaoyiNeural-Female" | "en-US-GuyNeural-Male" | "en-US-AriaNeural-Female",
     "text": "The original polished dialogue spoken${useMusicals ? " or song lyrics sung" : ""} in this scene.",
-    "visualPrompt": "Detailed scene generation prompt for a video generator featuring the character, written in a descriptive style that enforces the \\"${selectedStyle}\\" visual theme.",
+    "visualPrompt": "Concise prompt (under 20 words) starting with style, e.g.: \\"${selectedStyle} style animation of [characterName] [doing action], [background]\\".",
     "sunoStylePrompt": "Suno style suggestion (only for song types, empty string otherwise)"
   }
 ]
 
-Note: For child boy character roles (like Jimmy), you must assign "en-US-ChristopherNeural-Male" instead of the adult male voice.`;
+Note: For child boy character roles (like Jimmy), you must assign "en-US-ChristopherNeural-Male" instead of the adult voice.`;
 
         const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
             method: "POST",

@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { sceneId, visualPrompt, docId, refImage } = await req.json();
+    const { sceneId, visualPrompt, docId, refImage, shotId, duration, chainFromPrevious } = await req.json();
     if (!sceneId || !visualPrompt) {
         return NextResponse.json({ error: "sceneId and visualPrompt are required" }, { status: 400 });
     }
@@ -28,6 +28,13 @@ export async function POST(req: NextRequest) {
             activeDocId = doc.id;
         }
 
+        const jobMetadata = {
+            sceneId,
+            shotId: shotId || undefined,
+            duration: duration || 5,
+            chainFromPrevious: !!chainFromPrevious
+        };
+
         // Create GenJob record to track progress
         const genJob = await prisma.genJob.create({
             data: {
@@ -35,7 +42,7 @@ export async function POST(req: NextRequest) {
                 jobType: "shot_video",
                 prompt: visualPrompt,
                 status: "QUEUED",
-                metadata: { sceneId } as any
+                metadata: jobMetadata as any
             }
         });
 
@@ -46,7 +53,7 @@ export async function POST(req: NextRequest) {
             type: "shot_video",
             prompt: visualPrompt,
             referenceImages: refImage ? [refImage] : [],
-            metadata: { sceneId }
+            metadata: jobMetadata
         });
 
         return NextResponse.json({
