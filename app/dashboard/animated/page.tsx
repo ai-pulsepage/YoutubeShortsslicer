@@ -420,7 +420,17 @@ export default function KidsStoryBuilderPage() {
             if (data.project) {
                 setDocId(data.project.id);
                 setSelectedProjectId(data.project.id);
+                if (data.project.characters) {
+                    setCharacters(data.project.characters);
+                }
+                if (data.project.scenes) {
+                    setScenes(data.project.scenes);
+                }
                 loadProjects();
+                return {
+                    id: data.project.id,
+                    characters: data.project.characters
+                };
             }
         } catch (err: any) {
             setError(err.message || "Error saving project.");
@@ -562,22 +572,43 @@ export default function KidsStoryBuilderPage() {
 
     // Generate Character Avatar Face
     const handleGenerateAvatar = async (charId: string, promptText: string) => {
-        if (!docId) {
-            setError("Please click 'Save Project Draft' first before generating character avatars.");
-            return;
-        }
+        let activeCharId = charId;
+        let activeDocId = docId;
 
         setError("");
         try {
+            // Auto-save project if character has a temp ID or project is unsaved
+            if (charId.startsWith("temp-") || !docId) {
+                const localChar = characters.find(c => c.id === charId);
+                if (!localChar) throw new Error("Character profile not found in local blueprint");
+
+                console.log("[Auto-Save] Saving project before avatar generation to sync database IDs...");
+                const saveResult = await handleSaveProject();
+                if (!saveResult) throw new Error("Failed to save project draft. Please save draft manually first.");
+
+                activeDocId = saveResult.id;
+                
+                // Find matching character's newly generated database CUID
+                const updatedChar = saveResult.characters?.find((c: any) => c.name === localChar.name);
+                if (!updatedChar) {
+                    throw new Error(`Failed to save character profile for ${localChar.name}. Please try saving draft manually first.`);
+                }
+                activeCharId = updatedChar.id;
+            }
+
+            if (!activeDocId) {
+                throw new Error("Please click 'Save Project Draft' first before generating character avatars.");
+            }
+
             const res = await fetch("/api/animated/characters/avatar", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ docId, characterId: charId, prompt: promptText })
+                body: JSON.stringify({ docId: activeDocId, characterId: activeCharId, prompt: promptText })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Avatar generation call failed");
 
-            updateCharacterProfile(charId, {
+            updateCharacterProfile(activeCharId, {
                 jobId: data.jobId,
                 jobStatus: "QUEUED"
             });
