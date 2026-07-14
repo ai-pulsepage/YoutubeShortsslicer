@@ -51,6 +51,7 @@ export default function AnimatedCastLibraryPage() {
     const [wizardAgeBracket, setWizardAgeBracket] = useState("Child");
     const [wizardAttire, setWizardAttire] = useState("");
     const [wizardCustomDetails, setWizardCustomDetails] = useState("");
+    const [generatingBlueprint, setGeneratingBlueprint] = useState(false);
 
     // Filter States
     const [searchQuery, setSearchQuery] = useState("");
@@ -162,6 +163,44 @@ export default function AnimatedCastLibraryPage() {
             setError(err.message || "Failed to create character.");
         } finally {
             setCreating(false);
+        }
+    };
+
+    const handleAiGeneratePrompt = async () => {
+        setGeneratingBlueprint(true);
+        setError("");
+        setInsufficientFunds(false);
+        try {
+            const wizardMetadata = {
+                style: wizardStyle,
+                subjectClass: wizardSubjectClass,
+                species: wizardSpecies,
+                anthropomorphic: wizardAnthro,
+                ageBracket: wizardAgeBracket,
+                attire: wizardAttire,
+                customDetails: wizardCustomDetails
+            };
+
+            const res = await fetch("/api/animated/characters/expand", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    prompt: wizardCustomDetails,
+                    wizardMetadata
+                })
+            });
+            const data = await res.json();
+            if (res.status === 402 || data.error === "DEEPSEEK_OUT_OF_FUNDS") {
+                setInsufficientFunds(true);
+                throw new Error(data.details || "DeepSeek API: Insufficient Balance.");
+            }
+
+            if (!res.ok) throw new Error(data.error || "Failed to generate character prompt");
+            setFormPrompt(data.expandedPrompt || "");
+        } catch (err: any) {
+            setError(err.message || "Failed to generate AI character prompt.");
+        } finally {
+            setGeneratingBlueprint(false);
         }
     };
 
@@ -484,16 +523,13 @@ export default function AnimatedCastLibraryPage() {
                         <div className="md:col-span-2">
                             <div className="flex items-center justify-between">
                                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Visual Prompt blueprint (Generated from wizard)</label>
-                                <button type="button" onClick={() => {
-                                    const anthroPrefix = wizardAnthro ? "anthropomorphic " : "";
-                                    const attireText = wizardAttire ? `, wearing ${wizardAttire}` : "";
-                                    const detailsText = wizardCustomDetails ? `, ${wizardCustomDetails}` : "";
-                                    setFormPrompt(`${wizardStyle} style animation of a ${anthroPrefix}${wizardAgeBracket.toLowerCase()} ${wizardSpecies.toLowerCase()}${attireText}${detailsText}, friendly look, close-up portrait, plain neutral studio background.`);
-                                }} className="text-[10px] text-violet-400 font-bold hover:text-violet-300 cursor-pointer">
-                                    Auto-Compile From Fields
+                                <button type="button" onClick={handleAiGeneratePrompt} disabled={generatingBlueprint}
+                                    className="flex items-center gap-1 text-[10px] text-violet-400 font-bold hover:text-violet-300 cursor-pointer disabled:opacity-50">
+                                    {generatingBlueprint ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                                    {generatingBlueprint ? "AI Generating..." : "AI Generate Blueprint Prompt"}
                                 </button>
                             </div>
-                            <textarea placeholder="Click 'Auto-Compile From Fields' or type manually..."
+                            <textarea placeholder="Click 'AI Generate Blueprint Prompt' or type manually..."
                                 value={formPrompt} onChange={e => setFormPrompt(e.target.value)} rows={2}
                                 className="w-full bg-gray-850 border border-gray-750 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-violet-500 leading-relaxed font-sans" />
                         </div>
