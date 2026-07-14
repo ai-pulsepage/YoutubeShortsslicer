@@ -14,6 +14,15 @@ type LibraryCharacter = {
     imagePath: string;
     jobId?: string;
     jobStatus?: "IDLE" | "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED";
+    wizardMetadata?: {
+        style: string;
+        subjectClass: string;
+        species: string;
+        anthropomorphic: boolean;
+        ageBracket: string;
+        attire: string;
+        customDetails: string;
+    } | null;
 };
 
 export default function AnimatedCastLibraryPage() {
@@ -33,6 +42,20 @@ export default function AnimatedCastLibraryPage() {
     const [formPrompt, setFormPrompt] = useState("");
     const [creating, setCreating] = useState(false);
     const [expandingId, setExpandingId] = useState<string | null>(null);
+
+    // Wizard States
+    const [wizardStyle, setWizardStyle] = useState("Pixar 3D");
+    const [wizardSubjectClass, setWizardSubjectClass] = useState("Human");
+    const [wizardSpecies, setWizardSpecies] = useState("Boy");
+    const [wizardAnthro, setWizardAnthro] = useState(false);
+    const [wizardAgeBracket, setWizardAgeBracket] = useState("Child");
+    const [wizardAttire, setWizardAttire] = useState("");
+    const [wizardCustomDetails, setWizardCustomDetails] = useState("");
+
+    // Filter States
+    const [searchQuery, setSearchQuery] = useState("");
+    const [classFilter, setClassFilter] = useState("All");
+    const [styleFilter, setStyleFilter] = useState("All");
 
     const loadLibrary = async () => {
         try {
@@ -103,18 +126,36 @@ export default function AnimatedCastLibraryPage() {
         setCreating(true);
         setError("");
         try {
+            const wizardMetadata = {
+                style: wizardStyle,
+                subjectClass: wizardSubjectClass,
+                species: wizardSpecies,
+                anthropomorphic: wizardAnthro,
+                ageBracket: wizardAgeBracket,
+                attire: wizardAttire,
+                customDetails: wizardCustomDetails
+            };
+
             const res = await fetch("/api/animated/characters/library", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     name: formName,
                     prompt: formPrompt,
-                    imagePath: ""
+                    imagePath: "",
+                    wizardMetadata
                 })
             });
             if (!res.ok) throw new Error("Failed to create library character");
             setFormName("");
             setFormPrompt("");
+            setWizardStyle("Pixar 3D");
+            setWizardSubjectClass("Human");
+            setWizardSpecies("Boy");
+            setWizardAnthro(false);
+            setWizardAgeBracket("Child");
+            setWizardAttire("");
+            setWizardCustomDetails("");
             setShowForm(false);
             await loadLibrary();
         } catch (err: any) {
@@ -237,7 +278,7 @@ export default function AnimatedCastLibraryPage() {
         }
     };
 
-    const handleExpandPrompt = async (charId: string, currentPrompt: string) => {
+    const handleExpandPrompt = async (charId: string, currentPrompt: string, wizardMetadata?: any) => {
         setExpandingId(charId);
         setError("");
         setInsufficientFunds(false);
@@ -246,7 +287,7 @@ export default function AnimatedCastLibraryPage() {
             const res = await fetch("/api/animated/characters/expand", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ prompt: currentPrompt })
+                body: JSON.stringify({ prompt: currentPrompt, wizardMetadata })
             });
             const data = await res.json();
             if (res.status === 402 || data.error === "DEEPSEEK_OUT_OF_FUNDS") {
@@ -265,7 +306,8 @@ export default function AnimatedCastLibraryPage() {
                     body: JSON.stringify({
                         name: targetChar.name,
                         prompt: data.expandedPrompt,
-                        imagePath: targetChar.imagePath
+                        imagePath: targetChar.imagePath,
+                        wizardMetadata: wizardMetadata || targetChar.wizardMetadata
                     })
                 });
                 await loadLibrary();
@@ -313,6 +355,20 @@ export default function AnimatedCastLibraryPage() {
         }
     };
 
+    const filteredCharacters = characters.filter(char => {
+        const matchesSearch = searchQuery.trim() === "" ||
+            char.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            char.prompt.toLowerCase().includes(searchQuery.toLowerCase());
+
+        const matchesClass = classFilter === "All" ||
+            (char.wizardMetadata && char.wizardMetadata.subjectClass === classFilter);
+
+        const matchesStyle = styleFilter === "All" ||
+            (char.wizardMetadata && char.wizardMetadata.style === styleFilter);
+
+        return matchesSearch && matchesClass && matchesStyle;
+    });
+
     return (
         <div className="space-y-6 pb-12">
             {/* Header / Sub-navigation links */}
@@ -359,36 +415,128 @@ export default function AnimatedCastLibraryPage() {
                         </a>
                     )}
                 </div>
-            )}
-
-            {/* Create character form */}
+            )}            {/* Create character form */}
             {showForm && (
                 <div className="bg-gray-955/20 border border-gray-850 p-6 rounded-2xl space-y-4 max-w-2xl">
-                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">New Cast Character Profile</h3>
-                    <div className="space-y-3">
-                        <div>
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">New Cast Character Profile Wizard</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="md:col-span-2">
                             <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Character Name</label>
                             <input type="text" placeholder="e.g. Jimmy" value={formName} onChange={e => setFormName(e.target.value)}
                                 className="w-full bg-gray-850 border border-gray-750 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-violet-500 font-semibold" />
                         </div>
+                        
                         <div>
-                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Appearance Prompt blueprint</label>
-                            <textarea placeholder="Describe hair color, clothing style, Pixar 3D face details (on a plain neutral backdrop)..."
-                                value={formPrompt} onChange={e => setFormPrompt(e.target.value)} rows={3}
+                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Visual Style</label>
+                            <select value={wizardStyle} onChange={e => setWizardStyle(e.target.value)}
+                                className="w-full bg-gray-850 border border-gray-750 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-violet-500 font-semibold">
+                                {["Pixar 3D", "Claymation", "Anime", "Water Color", "2D Retro Cartoon"].map(s => (
+                                    <option key={s} value={s} className="bg-gray-900 text-white">{s}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Subject Class</label>
+                            <select value={wizardSubjectClass} onChange={e => setWizardSubjectClass(e.target.value)}
+                                className="w-full bg-gray-850 border border-gray-750 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-violet-500 font-semibold">
+                                {["Human", "Animal", "Robot", "Creature"].map(c => (
+                                    <option key={c} value={c} className="bg-gray-900 text-white">{c}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Species / Sub-Type</label>
+                            <input type="text" placeholder="e.g. Beaver, Boy, Android, Cat" value={wizardSpecies} onChange={e => setWizardSpecies(e.target.value)}
+                                className="w-full bg-gray-850 border border-gray-750 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-violet-500 font-semibold" />
+                        </div>
+
+                        <div>
+                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Age Bracket</label>
+                            <select value={wizardAgeBracket} onChange={e => setWizardAgeBracket(e.target.value)}
+                                className="w-full bg-gray-850 border border-gray-750 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-violet-500 font-semibold">
+                                {["Toddler", "Child", "Teen", "Adult", "Elderly"].map(a => (
+                                    <option key={a} value={a} className="bg-gray-900 text-white">{a}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-5">
+                            <input type="checkbox" id="anthro" checked={wizardAnthro} onChange={e => setWizardAnthro(e.target.checked)}
+                                className="w-4 h-4 rounded bg-gray-850 border-gray-750 text-violet-550 focus:ring-violet-550 cursor-pointer" />
+                            <label htmlFor="anthro" className="text-xs font-bold text-gray-400 uppercase tracking-wider cursor-pointer select-none">Anthropomorphic (Anthro)</label>
+                        </div>
+
+                        <div>
+                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Key Attire / Accessory</label>
+                            <input type="text" placeholder="e.g. Blue builder hat, red jacket" value={wizardAttire} onChange={e => setWizardAttire(e.target.value)}
+                                className="w-full bg-gray-850 border border-gray-750 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-violet-500 font-semibold" />
+                        </div>
+
+                        <div className="md:col-span-2">
+                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Custom details (Optional description)</label>
+                            <textarea placeholder="e.g. buck teeth, happy smile, wide brown eyes"
+                                value={wizardCustomDetails} onChange={e => setWizardCustomDetails(e.target.value)} rows={2}
+                                className="w-full bg-gray-850 border border-gray-750 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-violet-500 leading-relaxed font-sans" />
+                        </div>
+
+                        <div className="md:col-span-2">
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Visual Prompt blueprint (Generated from wizard)</label>
+                                <button type="button" onClick={() => {
+                                    const anthroPrefix = wizardAnthro ? "anthropomorphic " : "";
+                                    const attireText = wizardAttire ? `, wearing ${wizardAttire}` : "";
+                                    const detailsText = wizardCustomDetails ? `, ${wizardCustomDetails}` : "";
+                                    setFormPrompt(`${wizardStyle} style animation of a ${anthroPrefix}${wizardAgeBracket.toLowerCase()} ${wizardSpecies.toLowerCase()}${attireText}${detailsText}, friendly look, close-up portrait, plain neutral studio background.`);
+                                }} className="text-[10px] text-violet-400 font-bold hover:text-violet-300 cursor-pointer">
+                                    Auto-Compile From Fields
+                                </button>
+                            </div>
+                            <textarea placeholder="Click 'Auto-Compile From Fields' or type manually..."
+                                value={formPrompt} onChange={e => setFormPrompt(e.target.value)} rows={2}
                                 className="w-full bg-gray-850 border border-gray-750 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-violet-500 leading-relaxed font-sans" />
                         </div>
                     </div>
 
                     <div className="flex gap-2 justify-end">
-                        <button onClick={() => setShowForm(false)} className="px-4 py-2 rounded-xl text-xs font-bold text-gray-400 hover:text-white">Cancel</button>
+                        <button onClick={() => setShowForm(false)} className="px-4 py-2 rounded-xl text-xs font-bold text-gray-400 hover:text-white cursor-pointer">Cancel</button>
                         <button onClick={handleCreateCharacter} disabled={creating || !formName.trim()}
-                            className="flex items-center gap-1 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-md font-sans">
+                            className="flex items-center gap-1 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-md font-sans cursor-pointer">
                             {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
                             Create Profile
                         </button>
                     </div>
                 </div>
             )}
+
+            {/* Search/Filter Toolbar */}
+            <div className="bg-gray-955/20 border border-gray-850 p-4 rounded-2xl flex flex-col md:flex-row gap-4 items-center justify-between font-sans">
+                <div className="w-full md:w-80">
+                    <input type="text" placeholder="Search cast by name or prompt details..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                        className="w-full bg-gray-850 border border-gray-750 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-violet-500 font-semibold" />
+                </div>
+                <div className="flex flex-wrap gap-4 w-full md:w-auto">
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Class:</span>
+                        <select value={classFilter} onChange={e => setClassFilter(e.target.value)}
+                            className="bg-gray-850 border border-gray-750 rounded-xl px-3 py-2 text-xs text-white font-semibold focus:outline-none cursor-pointer">
+                            {["All", "Human", "Animal", "Robot", "Creature"].map(c => (
+                                <option key={c} value={c} className="bg-gray-900 text-white">{c}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Style:</span>
+                        <select value={styleFilter} onChange={e => setStyleFilter(e.target.value)}
+                            className="bg-gray-850 border border-gray-750 rounded-xl px-3 py-2 text-xs text-white font-semibold focus:outline-none cursor-pointer">
+                            {["All", "Pixar 3D", "Claymation", "Anime", "Water Color", "2D Retro Cartoon"].map(s => (
+                                <option key={s} value={s} className="bg-gray-900 text-white">{s}</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+            </div>
 
             {/* Character grid */}
             {loading ? (
@@ -399,9 +547,15 @@ export default function AnimatedCastLibraryPage() {
                     <h3 className="text-md font-bold text-white">Cast Library is Empty</h3>
                     <p className="text-gray-400 text-xs mt-2 max-w-sm mx-auto leading-relaxed font-sans">Create your first reusable Pixar 3D animated character using the creator form above.</p>
                 </div>
+            ) : filteredCharacters.length === 0 ? (
+                <div className="bg-gray-955/10 border border-gray-850 rounded-2xl p-16 text-center">
+                    <Users className="w-12 h-12 text-gray-650 mx-auto mb-4" />
+                    <h3 className="text-md font-bold text-white">No Matching Characters</h3>
+                    <p className="text-gray-400 text-xs mt-2 max-w-sm mx-auto leading-relaxed font-sans">No characters in the cast library match your search filters.</p>
+                </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {characters.map(char => (
+                    {filteredCharacters.map(char => (
                         <div key={char.id} className="bg-gray-955/20 border border-gray-850 p-5 rounded-2xl flex flex-col justify-between space-y-4 relative group">
                             <button onClick={() => handleDeleteCharacter(char.name)}
                                 className="absolute top-3 right-3 p-1.5 bg-gray-850 hover:bg-red-950/20 border border-gray-800 hover:border-red-900/30 text-gray-500 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all">
@@ -437,7 +591,7 @@ export default function AnimatedCastLibraryPage() {
                                     className="flex items-center gap-0.5 px-3 py-1.5 bg-gray-850 hover:bg-gray-800 border border-gray-750 text-gray-300 text-[10px] font-bold rounded-lg transition-all font-sans cursor-pointer">
                                     <Copy className="w-3 h-3 text-gray-400" /> Clone
                                 </button>
-                                <button onClick={() => handleExpandPrompt(char.id, char.prompt)}
+                                <button onClick={() => handleExpandPrompt(char.id, char.prompt, char.wizardMetadata)}
                                     disabled={expandingId === char.id}
                                     className="flex items-center gap-0.5 px-3 py-1.5 bg-violet-600/10 border border-violet-500/20 text-violet-400 text-[10px] font-bold rounded-lg hover:bg-violet-600/20 transition-all font-sans">
                                     {expandingId === char.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}

@@ -23,12 +23,23 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ characters: [] });
         }
 
-        const characters = libraryDoc.assets.map(a => ({
-            id: a.id,
-            name: a.label,
-            prompt: a.prompt || "",
-            imagePath: a.imagePath || ""
-        }));
+        const characters = libraryDoc.assets.map(a => {
+            let wizardMetadata = null;
+            if (a.description) {
+                try {
+                    wizardMetadata = JSON.parse(a.description);
+                } catch (e) {
+                    // Fallback for raw text description
+                }
+            }
+            return {
+                id: a.id,
+                name: a.label,
+                prompt: a.prompt || "",
+                imagePath: a.imagePath || "",
+                wizardMetadata
+            };
+        });
 
         return NextResponse.json({ characters });
 
@@ -42,7 +53,7 @@ export async function POST(req: NextRequest) {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { name, prompt, imagePath } = await req.json();
+    const { name, prompt, imagePath, wizardMetadata } = await req.json();
     if (!name) return NextResponse.json({ error: "Character name is required" }, { status: 400 });
 
     try {
@@ -73,11 +84,14 @@ export async function POST(req: NextRequest) {
             }
         });
 
+        const serializedDescription = wizardMetadata ? JSON.stringify(wizardMetadata) : null;
+
         if (existing) {
             await prisma.docAsset.update({
                 where: { id: existing.id },
                 data: {
                     prompt,
+                    description: serializedDescription,
                     imagePath: imagePath || null
                 }
             });
@@ -88,6 +102,7 @@ export async function POST(req: NextRequest) {
                     type: "CHARACTER",
                     label: name,
                     prompt,
+                    description: serializedDescription,
                     imagePath: imagePath || null
                 }
             });
