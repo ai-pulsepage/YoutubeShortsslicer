@@ -129,6 +129,7 @@ export default function KidsStoryBuilderPage() {
     const [genre, setGenre] = useState<string>("Adventure");
     const [rewritingShotId, setRewritingShotId] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
+    const [generatingAllVoices, setGeneratingAllVoices] = useState(false);
     const [isLibraryOpen, setIsLibraryOpen] = useState(false);
     const [librarySearchQuery, setLibrarySearchQuery] = useState("");
 
@@ -608,6 +609,60 @@ export default function KidsStoryBuilderPage() {
         } catch (err: any) {
             setError(err.message || "Failed to generate voiceover track.");
             updateScene(sceneId, { voiceStatus: "FAILED" });
+        }
+    };
+
+    // Batch Generate Dialogue Voiceovers
+    const handleGenerateAllVoices = async () => {
+        const dialogueScenes = scenes.filter(s => s.type === "dialogue" && s.voiceStatus !== "READY");
+        if (dialogueScenes.length === 0) {
+            alert("All dialogue voiceovers are already generated!");
+            return;
+        }
+
+        setGeneratingAllVoices(true);
+        setError("");
+
+        try {
+            // First, trigger a save to ensure latest timeline matches database
+            await handleSaveProject();
+
+            for (let i = 0; i < dialogueScenes.length; i++) {
+                const s = dialogueScenes[i];
+                console.log(`[Batch Audio] Generating voiceover for scene ${s.id} (${i + 1}/${dialogueScenes.length})`);
+                
+                updateScene(s.id, { voiceStatus: "GENERATING" });
+
+                const res = await fetch("/api/animated/voice/generate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ docId, sceneId: s.id, text: s.text, voice: s.voice })
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    updateScene(s.id, { voiceStatus: "FAILED" });
+                    throw new Error(data.error || `Voiceover synthesis failed for scene ${i + 1}`);
+                }
+
+                updateScene(s.id, {
+                    narrationPath: data.narrationPath,
+                    voiceStatus: "READY"
+                });
+                
+                // Auto plan shots based on EdgeTTS narration duration
+                await probeAndPlanShots(s.id, data.narrationPath, s.text);
+            }
+            alert(`Successfully generated narration audio for all ${dialogueScenes.length} dialogue scenes!`);
+        } catch (err: any) {
+            setError(err.message || "Failed during batch voiceover generation.");
+        } finally {
+            setGeneratingAllVoices(false);
+            // Refresh project state
+            const freshRes = await fetch("/api/animated/projects");
+            if (freshRes.ok) {
+                const freshData = await freshRes.json();
+                setProjects(freshData.projects || []);
+            }
         }
     };
 
@@ -1564,6 +1619,11 @@ export default function KidsStoryBuilderPage() {
                             <div className="flex items-center justify-between border-b border-gray-800 pb-2">
                                 <h3 className="text-sm font-bold text-white uppercase tracking-wider">Timeline Scenes List</h3>
                                 <div className="flex items-center gap-2">
+                                    <button onClick={handleGenerateAllVoices} disabled={generatingAllVoices}
+                                        className="flex items-center gap-1 px-3 py-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-[11px] font-bold rounded-lg transition-all shadow font-sans cursor-pointer">
+                                        {generatingAllVoices ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Volume2 className="w-3.5 h-3.5" />} 
+                                        {generatingAllVoices ? "Generating Audio..." : "Queue All Dialogue Audio"}
+                                    </button>
                                     <button onClick={handleQueueAllVisuals}
                                         className="flex items-center gap-1 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold rounded-lg transition-all shadow font-sans cursor-pointer">
                                         <Wand2 className="w-3.5 h-3.5" /> Queue All Visuals (Assembly Line)
