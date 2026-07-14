@@ -132,39 +132,50 @@ The JSON structure for each scene must follow this schema:
 
 Note: For child boy character roles (like Jimmy), you must assign "en-US-ChristopherNeural-Male" instead of the adult voice.`;
 
-        const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${apiKey}`
-            },
-            body: JSON.stringify({
-                model: "deepseek-chat",
-                messages: [
-                    {
-                        role: "system",
-                        content: systemPrompt
-                    },
-                    {
-                        role: "user",
-                        content: premiseOutline
-                    }
-                ],
-                temperature: 0.7,
-                max_tokens: 3000
-            })
-        });
+        let content = "";
+        try {
+            const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model: "deepseek-chat",
+                    messages: [
+                        {
+                            role: "system",
+                            content: systemPrompt
+                        },
+                        {
+                            role: "user",
+                            content: premiseOutline
+                        }
+                    ],
+                    temperature: 0.7,
+                    max_tokens: 3000
+                })
+            });
 
-        if (!res.ok) {
-            const errText = await res.text();
-            if (res.status === 402 || errText.toLowerCase().includes("insufficient_balance") || errText.toLowerCase().includes("balance") || errText.toLowerCase().includes("credit")) {
-                return NextResponse.json({ error: "DEEPSEEK_OUT_OF_FUNDS", details: "DeepSeek API: Insufficient Balance. Please check your funds at console.deepseek.com." }, { status: 402 });
+            if (!res.ok) {
+                const errText = await res.text();
+                throw new Error(`DeepSeek API returned ${res.status}: ${errText}`);
             }
-            throw new Error(`DeepSeek API returned ${res.status}: ${errText}`);
-        }
 
-        const data = await res.json();
-        let content = data.choices?.[0]?.message?.content?.trim() || "";
+            const data = await res.json();
+            content = data.choices?.[0]?.message?.content?.trim() || "";
+        } catch (deepSeekErr: any) {
+            console.warn("[Summarize] DeepSeek request failed, trying Gemini fallback:", deepSeekErr.message);
+            try {
+                content = await callGeminiFallback(systemPrompt, premiseOutline);
+            } catch (geminiErr: any) {
+                console.error("[Summarize] Gemini fallback also failed:", geminiErr.message);
+                return NextResponse.json({
+                    error: "AI_GENERATION_FAILED",
+                    details: `Both DeepSeek and Gemini fallback failed. DeepSeek error: ${deepSeekErr.message}. Gemini error: ${geminiErr.message}`
+                }, { status: 500 });
+            }
+        }
 
         // Remove markdown block wraps if present
         if (content.startsWith("```")) {
@@ -185,7 +196,7 @@ Note: For child boy character roles (like Jimmy), you must assign "en-US-Christo
             }));
             return NextResponse.json({ scenes: mappedScenes });
         } catch (parseErr: any) {
-            console.warn("[Animated Summarize] Failed to parse DeepSeek JSON, returning default mapping:", parseErr);
+            console.warn("[Animated Summarize] Failed to parse AI JSON, returning default mapping:", parseErr);
             return NextResponse.json({
                 scenes: [
                     {
@@ -204,4 +215,51 @@ Note: For child boy character roles (like Jimmy), you must assign "en-US-Christo
         console.error("[Animated Summarize] Error:", err.message);
         return NextResponse.json({ error: "Summarization failed", details: err.message }, { status: 500 });
     }
+}
+
+async function callGeminiFallback(systemPrompt: string, userPrompt: string): Promise<string> {
+    let apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+        const dbKey = await prisma.apiKey.findUnique({ where: { service: "gemini_api_key" } });
+        if (dbKey?.key) apiKey = Buffer.from(dbKey.key, "base64").toString("utf8");
+    }
+
+    if (!apiKey) {
+        throw new Error("GEMINI_API_KEY is not configured in environment or database.");
+    }
+
+    const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                systemInstruction: {
+                    parts: [{ text: systemPrompt }]
+                },
+                contents: [
+                    {
+                        role: "user",
+                        parts: [{ text: userPrompt }]
+                    }
+                ],
+                generationConfig: {
+                    temperature: 0.7,
+                    responseMimeType: "application/json"
+                }
+            })
+        }
+    );
+
+    if (!res.ok) {
+        throw new Error(`Gemini API returned status ${res.status}: ${await res.text()}`);
+    }
+
+    const json = await res.json();
+    const content = json.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    if (!content) {
+        throw new Error("Empty response from Gemini");
+    }
+
+    return content;
 }
