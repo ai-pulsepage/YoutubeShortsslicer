@@ -121,6 +121,7 @@ export default function KidsStoryBuilderPage() {
     const [projectTitle, setProjectTitle] = useState("");
     const [projectScript, setProjectScript] = useState("");
     const [targetDuration, setTargetDuration] = useState<number>(2); // Default to 2 minutes
+    const [defaultShotDuration, setDefaultShotDuration] = useState<number>(5); // Default scene clip duration
     const [compositionMode, setCompositionMode] = useState<"spin_off" | "paraphrase">("spin_off");
     const [includeMusicals, setIncludeMusicals] = useState<boolean>(true);
     const [visualStyle, setVisualStyle] = useState<string>("Pixar 3D");
@@ -376,7 +377,8 @@ export default function KidsStoryBuilderPage() {
                 setSourceMode("text");
                 setSelectedVideoId("");
             }
-            setTargetDuration(proj.sourceUrls ? (proj as any).targetDuration || 2 : 2);
+            setTargetDuration((proj as any).targetDuration || 2);
+            setDefaultShotDuration((proj as any).defaultShotDuration || 5);
             setCompositionMode((proj as any).compositionMode || "spin_off");
             setIncludeMusicals((proj as any).includeMusicals !== false);
             setVisualStyle((proj as any).visualStyle || "Pixar 3D");
@@ -402,6 +404,7 @@ export default function KidsStoryBuilderPage() {
                     scenes: overrideScenes !== undefined ? overrideScenes : scenes,
                     sourceUrls: selectedVideoId ? [selectedVideoId] : [],
                     targetDuration,
+                    defaultShotDuration,
                     compositionMode,
                     includeMusicals,
                     visualStyle,
@@ -432,8 +435,8 @@ export default function KidsStoryBuilderPage() {
         setInsufficientFunds(false);
         try {
             const bodyPayload = sourceMode === "video" 
-                ? { videoId: selectedVideoId, characters, targetDuration, compositionMode, includeMusicals, visualStyle, targetAge, genre } 
-                : { premise: projectScript, characters, targetDuration, compositionMode, includeMusicals, visualStyle, targetAge, genre };
+                ? { videoId: selectedVideoId, characters, targetDuration, defaultShotDuration, compositionMode, includeMusicals, visualStyle, targetAge, genre } 
+                : { premise: projectScript, characters, targetDuration, defaultShotDuration, compositionMode, includeMusicals, visualStyle, targetAge, genre };
 
             const res = await fetch("/api/animated/summarize", {
                 method: "POST",
@@ -453,11 +456,15 @@ export default function KidsStoryBuilderPage() {
             if (data.scenes && Array.isArray(data.scenes)) {
                 setScenes(data.scenes.map((s: any, idx: number) => ({
                     ...s,
-                    visualShots: s.visualShots || [
+                    visualShots: s.visualShots ? s.visualShots.map((shot: any) => ({
+                        ...shot,
+                        duration: shot.duration || defaultShotDuration
+                    })) : [
                         {
                             id: `shot-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 9)}-default`,
                             primaryCharacter: s.character || "Leo",
                             visualPrompt: s.visualPrompt || "Cartoon style scenery background",
+                            duration: defaultShotDuration,
                             jobStatus: "IDLE"
                         }
                     ]
@@ -1299,13 +1306,24 @@ export default function KidsStoryBuilderPage() {
                                             <input type="text" placeholder="Busby Beaver's Big Dam Adventure..." value={projectTitle} onChange={e => setProjectTitle(e.target.value)}
                                                 className="w-full bg-gray-850 border border-gray-750 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-violet-500 font-semibold" />
                                         </div>
-                                        <div className="md:col-span-4">
-                                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Target Video Duration</label>
+                                        <div className="md:col-span-2">
+                                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Video Length</label>
                                             <select value={targetDuration} onChange={e => setTargetDuration(parseInt(e.target.value))}
-                                                className="w-full bg-gray-850 border border-gray-750 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-violet-500 font-semibold">
+                                                className="w-full bg-gray-850 border border-gray-750 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-violet-500 font-semibold">
                                                 {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(m => (
                                                     <option key={m} value={m} className="bg-gray-900 text-white">
                                                         {m} Min (~{m * 3} scenes)
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="md:col-span-2">
+                                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Scene Duration</label>
+                                            <select value={defaultShotDuration} onChange={e => setDefaultShotDuration(parseInt(e.target.value))}
+                                                className="w-full bg-gray-850 border border-gray-750 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-violet-500 font-semibold">
+                                                {[5, 8, 10].map(s => (
+                                                    <option key={s} value={s} className="bg-gray-900 text-white">
+                                                        {s}s (~{Math.round(s * 2.5)} words)
                                                     </option>
                                                 ))}
                                             </select>

@@ -6,7 +6,7 @@ export async function POST(req: NextRequest) {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { videoId, premise, scriptText, characters, targetDuration, compositionMode, includeMusicals, visualStyle, targetAge, genre } = await req.json();
+    const { videoId, premise, scriptText, characters, targetDuration, defaultShotDuration, compositionMode, includeMusicals, visualStyle, targetAge, genre } = await req.json();
     if (!videoId && !premise && !scriptText) {
         return NextResponse.json({ error: "videoId, premise or scriptText is required" }, { status: 400 });
     }
@@ -96,9 +96,11 @@ export async function POST(req: NextRequest) {
         }
 
         // Phase 2: Creative Composition
+        const targetWordCount = Math.round((defaultShotDuration || 5) * 2.5);
         const systemPrompt = `You are an expert children's content writer. Read the following input (which is ${isSpinOff ? "a simple narrative premise outline" : "a story script"}), and rewrite it into a highly original storyboard script consisting of exactly ${numScenes} scenes.
 
 TARGET AUDIENCE & STYLE SETTINGS:
+- Narration/Dialogue length constraint: You MUST write exactly ${targetWordCount} words of narration/dialogue for each scene (give or take 2 words). This is a strict constraint because each scene's video visual runs for exactly ${defaultShotDuration || 5} seconds.
 - Visual Style Constraint: All visual prompts must strictly start with the style preset prefix (e.g., "${selectedStyle} style animation of...") to enforce the visual theme. The visual prompt must be concise, under 20 words, and explicitly name the character (e.g. "Jimmy the cat") so the image adapter can map the reference face portrait.
 - Target Audience Age: The tone of the dialogue, themes, and vocabulary must be tailored specifically for the "${selectedAge}" age bracket.
 - Genre: The story narrative style, pacing, and overall themes must fit the "${selectedGenre}" genre.
