@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getRedis, CHANNELS } from "@/lib/documentary/redis-client";
 import { organizeCompletedJobAsset } from "@/lib/documentary/asset-organizer";
+import { moveR2Object } from "@/lib/storage";
 
 export async function GET(req: NextRequest) {
     const session = await auth();
@@ -345,6 +346,21 @@ export async function POST(req: NextRequest) {
             for (let idx = 0; idx < scenes.length; idx++) {
                 const s = scenes[idx];
                 const isTempId = s.id.startsWith("scene-");
+                const finalSceneId = isTempId ? `scene-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 5)}` : s.id;
+
+                // Automatically relocate custom Suno MP3 uploads from UGC folders to kids animated project folder
+                let sunoAudioKey = s.sunoAudioKey || "";
+                if (sunoAudioKey && sunoAudioKey.startsWith("ugc/")) {
+                    const extension = sunoAudioKey.split(".").pop() || "mp3";
+                    const newKey = `animated/projects/${activeId}/audio/scene_${finalSceneId}_suno.${extension}`;
+                    try {
+                        console.log(`[Save Project] Relocating Suno upload: ${sunoAudioKey} -> ${newKey}`);
+                        await moveR2Object(sunoAudioKey, newKey);
+                        sunoAudioKey = newKey;
+                    } catch (err: any) {
+                        console.error("[Save Project] Failed to relocate Suno file:", err.message);
+                    }
+                }
 
                 const serializedMeta = JSON.stringify({
                     visualPrompt: s.visualPrompt,
@@ -353,12 +369,12 @@ export async function POST(req: NextRequest) {
                     type: s.type,
                     sunoStylePrompt: s.sunoStylePrompt || "",
                     visualShots: s.visualShots || [],
-                    sunoAudioKey: s.sunoAudioKey || ""
+                    sunoAudioKey: sunoAudioKey
                 });
 
                 await prisma.docScene.create({
                     data: {
-                        id: isTempId ? undefined : s.id,
+                        id: finalSceneId,
                         documentaryId: activeId,
                         sceneIndex: idx,
                         title: `Scene ${idx + 1}`,
