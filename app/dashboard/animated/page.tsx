@@ -725,10 +725,12 @@ export default function KidsStoryBuilderPage() {
             const planData = await planRes.json();
             if (!planRes.ok) throw new Error(planData.error || "Failed to plan visual shots");
 
+            const shotDur = duration / numShots;
             const plannedShots = planData.shots.map((s: any, idx: number) => ({
                 id: `shot-${idx}-${Date.now()}`,
                 primaryCharacter: s.primaryCharacter || "Narrator",
                 visualPrompt: s.visualPrompt || "Cartoon scene background",
+                duration: Math.max(3, Math.round(shotDur)),
                 jobStatus: "IDLE"
             }));
 
@@ -1887,9 +1889,9 @@ export default function KidsStoryBuilderPage() {
                                                                             <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Dur:</span>
                                                                             <select value={shot.duration || 5} onChange={e => updateShot(scene.id, shot.id, { duration: parseInt(e.target.value) })}
                                                                                 className="bg-gray-850 border border-gray-750 text-[10px] text-white px-1 py-0.5 rounded focus:outline-none cursor-pointer">
-                                                                                <option value={5} className="bg-gray-900 text-white">5s</option>
-                                                                                <option value={8} className="bg-gray-900 text-white">8s</option>
-                                                                                <option value={10} className="bg-gray-900 text-white">10s</option>
+                                                                                {[3, 4, 5, 6, 7, 8, 9, 10].map(v => (
+                                                                                    <option key={v} value={v} className="bg-gray-900 text-white">{v}s</option>
+                                                                                ))}
                                                                             </select>
                                                                         </div>
 
