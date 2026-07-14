@@ -16,8 +16,9 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Scenes list is required" }, { status: 400 });
     }
 
-    // 0. Pre-validate that all visual clips exist
+    // 0. Pre-validate that all visual clips and narration/song audio files exist
     const missingClips: string[] = [];
+    const missingAudio: string[] = [];
     for (let idx = 0; idx < scenes.length; idx++) {
         const scene = scenes[idx];
         if (scene.visualShots && Array.isArray(scene.visualShots) && scene.visualShots.length > 0) {
@@ -32,12 +33,29 @@ export async function POST(req: NextRequest) {
                 missingClips.push(`Scene ${idx + 1}`);
             }
         }
+
+        if (scene.type === "song") {
+            if (!scene.sunoAudioKey) {
+                missingAudio.push(`Scene ${idx + 1} (Song)`);
+            }
+        } else {
+            if (!scene.narrationPath) {
+                missingAudio.push(`Scene ${idx + 1} (Narration)`);
+            }
+        }
     }
 
-    if (missingClips.length > 0) {
+    if (missingClips.length > 0 || missingAudio.length > 0) {
+        const errors = [];
+        if (missingClips.length > 0) {
+            errors.push(`Missing video clips for: ${missingClips.join(", ")}`);
+        }
+        if (missingAudio.length > 0) {
+            errors.push(`Missing audio narration for: ${missingAudio.join(", ")}`);
+        }
         return NextResponse.json({
-            error: "Missing visual clips",
-            details: `The following scenes are missing generated video clips: ${missingClips.join(", ")}. Please generate all visuals first.`
+            error: "Incomplete scene assets",
+            details: `Cannot compile: ${errors.join(". ")}. Please generate all visual shots and audio tracks first.`
         }, { status: 400 });
     }
 
@@ -121,64 +139,7 @@ export async function POST(req: NextRequest) {
                 );
                 duration = parseFloat(ffprobeRes.trim()) || 5.0;
             } else {
-                // Synthesize EdgeTTS audio using MoneyPrinterTurbo
-                console.log(`[Compile] Synthesizing speech via EdgeTTS fallback: "${scene.text}" (${scene.voice})`);
-                const audioRes = await fetch(`${moneyPrinterUrl}/api/v1/audio`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        video_script: scene.text,
-                        voice_name: scene.voice,
-                        bgm_type: "none",
-                        bgm_file: "",
-                        bgm_volume: 0,
-                        voice_volume: 1.0,
-                        voice_rate: 1.2
-                    })
-                });
-
-                if (!audioRes.ok) {
-                    throw new Error(`EdgeTTS synthesis failed for scene ${idx + 1}: ${await audioRes.text()}`);
-                }
-
-                const createData = await audioRes.json();
-                const task = createData.data || createData;
-                const taskId = task.task_id;
-
-                // Poll for audio synthesis task completion
-                let attempts = 0;
-                let isDone = false;
-                while (attempts < 15 && !isDone) {
-                    await new Promise(r => setTimeout(r, 1000));
-                    attempts++;
-                    const statusRes = await fetch(`${moneyPrinterUrl}/api/v1/tasks/${taskId}`);
-                    if (statusRes.ok) {
-                        const statusData = await statusRes.json();
-                        const statusTask = statusData.data || statusData;
-                        if (statusTask.state === 1) isDone = true;
-                    }
-                }
-
-                if (!isDone) {
-                    throw new Error(`TTS synthesis timed out for scene ${idx + 1}`);
-                }
-
-                // Download synthesized audio file
-                const audioUrl = `${moneyPrinterUrl}/tasks/${taskId}/audio.mp3`;
-                const audioFetch = await fetch(audioUrl);
-                if (!audioFetch.ok) {
-                    throw new Error(`Failed to download audio for scene ${idx + 1}`);
-                }
-                const audioBuffer = await audioFetch.arrayBuffer();
-                fs.writeFileSync(sceneAudioPath, Buffer.from(audioBuffer));
-
-
-                // Get audio duration using ffprobe
-                const ffprobeRes = execSync(
-                    `ffprobe -i "${sceneAudioPath}" -show_entries format=duration -v quiet -of csv="p=0"`,
-                    { encoding: "utf8" }
-                );
-                duration = parseFloat(ffprobeRes.trim()) || 5.0;
+                throw new Error(`Scene ${idx + 1} is missing pre-generated narration audio. Please generate narration before compiling!`);
             }
 
             console.log(`[Compile] Scene ${idx + 1} audio duration resolved: ${duration.toFixed(2)}s`);

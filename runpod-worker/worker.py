@@ -326,8 +326,11 @@ def process_job(job: dict, r: redis.Redis):
                 if refs and len(refs) > 0:
                     download_from_r2(refs[0], ref_path)
                 else:
-                    # Generate a reference image from prompt if none provided
-                    generate_image(prompt, ref_path, width=1280, height=704)
+                    if job_type == "shot_video":
+                        raise ValueError("Character-consistent visual generation failed: Reference character avatar image is missing!")
+                    else:
+                        # Generate a reference image from prompt if none provided for general videos
+                        generate_image(prompt, ref_path, width=1280, height=704)
 
                 # Generate video clip
                 output_file = os.path.join(tmpdir, f"{job_id}.mp4")
