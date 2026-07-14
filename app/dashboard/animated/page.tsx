@@ -465,7 +465,7 @@ export default function KidsStoryBuilderPage() {
             if (!res.ok) throw new Error(data.error || "Failed to draft blueprint");
 
             if (data.scenes && Array.isArray(data.scenes)) {
-                setScenes(data.scenes.map((s: any, idx: number) => ({
+                const mappedScenes = data.scenes.map((s: any, idx: number) => ({
                     ...s,
                     visualShots: s.visualShots ? s.visualShots.map((shot: any) => ({
                         ...shot,
@@ -479,8 +479,9 @@ export default function KidsStoryBuilderPage() {
                             jobStatus: "IDLE"
                         }
                     ]
-                })));
-                setTimeout(() => handleSaveProject(), 100);
+                }));
+                setScenes(mappedScenes);
+                setTimeout(() => handleSaveProject(mappedScenes), 100);
                 setCurrentStep(4);
             }
         } catch (err: any) {
