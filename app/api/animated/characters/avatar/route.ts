@@ -22,6 +22,24 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Character profile not found" }, { status: 404 });
         }
 
+        // Check if there is already an active (QUEUED or PROCESSING) ref_image job for this asset
+        const activeJob = await prisma.genJob.findFirst({
+            where: {
+                assetId: characterId,
+                jobType: "ref_image",
+                status: { in: ["QUEUED", "PROCESSING"] }
+            }
+        });
+
+        if (activeJob) {
+            console.log(`[Avatar API] Active job ${activeJob.id} already exists for character ${characterId}. Reusing.`);
+            return NextResponse.json({
+                success: true,
+                jobId: activeJob.id,
+                message: "Avatar generation is already in progress."
+            });
+        }
+
         // Create a GenJob to track image generation
         const job = await prisma.genJob.create({
             data: {

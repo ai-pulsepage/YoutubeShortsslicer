@@ -914,6 +914,47 @@ export default function KidsStoryBuilderPage() {
         }
     };
 
+    // Handle Custom Suno MP3 Deletion/Clear
+    const handleClearSunoSong = async (sceneId: string) => {
+        if (!confirm("Are you sure you want to delete the song from this scene? This will reset all generated visual shots for this scene.")) return;
+        
+        setError("");
+        try {
+            const defaultPrompt = scenes.find(s => s.id === sceneId)?.text || "";
+            
+            // Rebuild default visual shots list
+            const defaultVisualShots = [
+                {
+                    id: `shot-0-${Date.now()}`,
+                    visualPrompt: `${visualStyle} style animation of ${defaultPrompt.slice(0, 80)}, close-up portrait, plain neutral studio background`,
+                    duration: defaultShotDuration || 5,
+                    primaryCharacter: "None",
+                    jobId: "",
+                    jobStatus: "IDLE" as const
+                }
+            ];
+
+            const updatedScenes = scenes.map(s => {
+                if (s.id === sceneId) {
+                    return {
+                        ...s,
+                        sunoAudioKey: "",
+                        sunoDuration: undefined,
+                        visualShots: defaultVisualShots,
+                        visualPath: undefined
+                    };
+                }
+                return s;
+            });
+
+            setScenes(updatedScenes);
+            await handleSaveProject(updatedScenes);
+
+        } catch (err: any) {
+            setError(err.message || "Failed to clear song.");
+        }
+    };
+
     // Edit scene values
     const updateScene = (id: string, updates: Partial<Scene>) => {
         setScenes(prev =>
@@ -1730,11 +1771,19 @@ export default function KidsStoryBuilderPage() {
                                                         </div>
                                                         <div>
                                                             <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">Suno MP3 Audio Upload</label>
-                                                            <label className="flex items-center justify-between bg-gray-850 border border-dashed border-gray-750 hover:bg-gray-800/80 px-3 py-1.5 rounded-xl cursor-pointer transition-colors text-[10px] text-gray-400">
-                                                                <span className="truncate">{scene.sunoAudioKey ? "✓ Track uploaded" : "Upload Suno MP3"}</span>
-                                                                <Music className="w-3.5 h-3.5 text-gray-505" />
-                                                                <input type="file" accept="audio/mpeg" onChange={e => e.target.files?.[0] && handleSunoUpload(scene.id, e.target.files[0])} className="hidden" />
-                                                            </label>
+                                                            <div className="flex gap-1.5">
+                                                                <label className="flex-1 flex items-center justify-between bg-gray-850 border border-dashed border-gray-750 hover:bg-gray-800/80 px-3 py-1.5 rounded-xl cursor-pointer transition-colors text-[10px] text-gray-400 min-w-0">
+                                                                    <span className="truncate">{scene.sunoAudioKey ? "✓ Track uploaded" : "Upload Suno MP3"}</span>
+                                                                    <Music className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
+                                                                    <input type="file" accept="audio/mpeg" onChange={e => e.target.files?.[0] && handleSunoUpload(scene.id, e.target.files[0])} className="hidden" />
+                                                                </label>
+                                                                {scene.sunoAudioKey && (
+                                                                    <button onClick={() => handleClearSunoSong(scene.id)} title="Delete Song"
+                                                                        className="p-1.5 bg-red-950/20 border border-red-900/30 text-red-400 hover:bg-red-900/30 hover:border-red-800 rounded-xl transition-all cursor-pointer">
+                                                                        <Trash className="w-4 h-4" />
+                                                                    </button>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 )}

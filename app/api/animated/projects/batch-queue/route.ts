@@ -24,6 +24,14 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Project not found" }, { status: 404 });
         }
 
+        // Load all active (QUEUED or PROCESSING) jobs for this project to check for duplicates
+        const activeJobs = await prisma.genJob.findMany({
+            where: {
+                documentaryId: project.id,
+                status: { in: ["QUEUED", "PROCESSING"] }
+            }
+        });
+
         let queuedAvatarsCount = 0;
         let queuedShotsCount = 0;
 
@@ -33,6 +41,14 @@ export async function POST(req: NextRequest) {
         for (const asset of project.assets) {
             // If the character doesn't have an avatar face yet, queue it!
             if (!asset.imagePath) {
+                const alreadyQueued = activeJobs.some(
+                    j => j.jobType === "ref_image" && j.assetId === asset.id
+                );
+                if (alreadyQueued) {
+                    console.log(`[Batch Queue] Avatar for character "${asset.label}" is already active. Skipping duplicate.`);
+                    continue;
+                }
+
                 // Create a GenJob
                 const job = await prisma.genJob.create({
                     data: {
@@ -79,6 +95,17 @@ export async function POST(req: NextRequest) {
                 const shot = visualShots[sIdx];
                 // Queue shot if it's IDLE, FAILED, or missing videoPath
                 if (!shot.visualPath && (shot.jobStatus === "IDLE" || shot.jobStatus === "FAILED" || !shot.jobStatus || shot.jobStatus === "PENDING_AVATAR")) {
+                    const alreadyQueuedVideo = activeJobs.some(j => {
+                        const meta = j.metadata as any;
+                        return j.jobType === "shot_video" && meta && meta.sceneId === scene.id && meta.shotId === shot.id;
+                    });
+                    
+                    if (alreadyQueuedVideo) {
+                        console.log(`[Batch Queue] Video job for shot ${shot.id} is already active. Skipping duplicate.`);
+                        updatedVisualShots.push(shot);
+                        continue;
+                    }
+
                     let referenceImages: string[] = [];
                     let hasMissingAvatar = false;
                     let hasChainedImage = false;

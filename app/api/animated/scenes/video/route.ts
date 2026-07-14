@@ -63,27 +63,40 @@ export async function POST(req: NextRequest) {
                             finalRefImage = charAsset.imagePath;
                         } else {
                             // Automatically trigger ref_image generation first!
-                            console.log(`[Scene Video Gen] Missing avatar for character "${charAsset.label}". Queueing avatar job first.`);
-                            
-                            const avatarJob = await prisma.genJob.create({
-                                data: {
-                                    documentaryId: activeDocId,
-                                    jobType: "ref_image",
-                                    prompt: charAsset.prompt || "",
-                                    status: "QUEUED",
+                            console.log(`[Scene Video Gen] Missing avatar for character "${charAsset.label}". Checking for active avatar job.`);
+
+                            // Check if an active job already exists for this character
+                            const activeAvatarJob = await prisma.genJob.findFirst({
+                                where: {
                                     assetId: charAsset.id,
-                                    metadata: { characterId: charAsset.id } as any
+                                    jobType: "ref_image",
+                                    status: { in: ["QUEUED", "PROCESSING"] }
                                 }
                             });
 
-                            await dispatchJob({
-                                jobId: avatarJob.id,
-                                documentaryId: activeDocId,
-                                type: "ref_image",
-                                prompt: charAsset.prompt || "",
-                                referenceImages: [],
-                                metadata: { characterId: charAsset.id, model: "flux", sourceApp: "Animated Shorts", title: scene.documentary.title || "Kids Story Project" }
-                            });
+                            if (activeAvatarJob) {
+                                console.log(`[Scene Video Gen] Active avatar job ${activeAvatarJob.id} already exists for character "${charAsset.label}". Reusing.`);
+                            } else {
+                                const avatarJob = await prisma.genJob.create({
+                                    data: {
+                                        documentaryId: activeDocId,
+                                        jobType: "ref_image",
+                                        prompt: charAsset.prompt || "",
+                                        status: "QUEUED",
+                                        assetId: charAsset.id,
+                                        metadata: { characterId: charAsset.id } as any
+                                    }
+                                });
+
+                                await dispatchJob({
+                                    jobId: avatarJob.id,
+                                    documentaryId: activeDocId,
+                                    type: "ref_image",
+                                    prompt: charAsset.prompt || "",
+                                    referenceImages: [],
+                                    metadata: { characterId: charAsset.id, model: "flux", sourceApp: "Animated Shorts", title: scene.documentary.title || "Kids Story Project" }
+                                });
+                            }
 
                             // Mark shot as PENDING_AVATAR
                             const updatedShots = visualShots.map((s: any) => {
@@ -112,6 +125,29 @@ export async function POST(req: NextRequest) {
                 docId: activeDocId,
                 pendingAvatar: true,
                 message: "Character avatar is missing. Automatically generating avatar first. Video generation will start once ready!"
+            });
+        }
+
+        // Check for duplicate video jobs in the same project that are QUEUED or PROCESSING
+        const activeVideoJobs = await prisma.genJob.findMany({
+            where: {
+                documentaryId: activeDocId,
+                jobType: "shot_video",
+                status: { in: ["QUEUED", "PROCESSING"] }
+            }
+        });
+        const duplicateJob = activeVideoJobs.find(j => {
+            const meta = j.metadata as any;
+            return meta && meta.sceneId === sceneId && meta.shotId === shotId;
+        });
+
+        if (duplicateJob) {
+            console.log(`[Scene Video Gen] Active video job ${duplicateJob.id} already exists for scene ${sceneId} shot ${shotId}. Reusing.`);
+            return NextResponse.json({
+                success: true,
+                docId: activeDocId,
+                jobId: duplicateJob.id,
+                message: "Video generation for this shot is already in progress."
             });
         }
 
