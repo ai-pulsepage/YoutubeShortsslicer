@@ -198,8 +198,12 @@ export async function GET(req: NextRequest) {
                 finalVideoPath: p.finalVideoPath,
                 sourceUrls: p.sourceUrls || [],
                 targetDuration: p.totalDuration || 2.0,
+                defaultShotDuration: metaConfig.defaultShotDuration || 5,
                 compositionMode: metaConfig.compositionMode || "spin_off",
                 includeMusicals: metaConfig.includeMusicals !== false,
+                visualStyle: metaConfig.visualStyle || "Pixar 3D",
+                targetAge: metaConfig.targetAge || "Kids",
+                genre: metaConfig.genre || "Adventure",
                 characters: p.assets.map(a => ({
                     id: a.id,
                     name: a.label,
@@ -262,7 +266,7 @@ export async function POST(req: NextRequest) {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { id, title, script, characters, scenes, sourceUrls, targetDuration, compositionMode, includeMusicals, visualStyle, targetAge, genre } = await req.json();
+    const { id, title, script, characters, scenes, sourceUrls, targetDuration, defaultShotDuration, compositionMode, includeMusicals, visualStyle, targetAge, genre } = await req.json();
 
     try {
         let activeId = id;
@@ -271,7 +275,8 @@ export async function POST(req: NextRequest) {
             includeMusicals: includeMusicals !== false,
             visualStyle: visualStyle || "Pixar 3D",
             targetAge: targetAge || "Kids",
-            genre: genre || "Adventure"
+            genre: genre || "Adventure",
+            defaultShotDuration: defaultShotDuration || 5
         };
 
         // 1. Create or Update parent Documentary Project
@@ -412,8 +417,12 @@ export async function POST(req: NextRequest) {
                 script: updated?.script,
                 sourceUrls: updated?.sourceUrls || [],
                 targetDuration: updated?.totalDuration || 2.0,
+                defaultShotDuration: metaConfig.defaultShotDuration || 5,
                 compositionMode: metaConfig.compositionMode || "spin_off",
                 includeMusicals: metaConfig.includeMusicals !== false,
+                visualStyle: metaConfig.visualStyle || "Pixar 3D",
+                targetAge: metaConfig.targetAge || "Kids",
+                genre: metaConfig.genre || "Adventure",
                 characters: updated?.assets.map(a => ({
                     id: a.id,
                     name: a.label,
