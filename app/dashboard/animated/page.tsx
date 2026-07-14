@@ -740,7 +740,7 @@ export default function KidsStoryBuilderPage() {
                             return {
                                 ...shot,
                                 jobId: data.jobId,
-                                jobStatus: "QUEUED"
+                                jobStatus: data.pendingAvatar ? "PENDING_AVATAR" : "QUEUED"
                             };
                         })
                     };
@@ -1770,6 +1770,8 @@ export default function KidsStoryBuilderPage() {
                                                                             <span className="flex items-center gap-1 text-gray-450"><RefreshCw className="w-3 h-3 animate-spin" /> Queued</span>
                                                                         ) : shot.jobStatus === "PROCESSING" ? (
                                                                             <span className="flex items-center gap-1 text-violet-400"><Loader2 className="w-3 h-3 animate-spin" /> Generating...</span>
+                                                                        ) : shot.jobStatus === "PENDING_AVATAR" ? (
+                                                                            <span className="flex items-center gap-1 text-amber-400 font-medium"><Users className="w-3 h-3 animate-pulse" /> Pending Avatar</span>
                                                                         ) : shot.jobStatus === "COMPLETED" ? (
                                                                             <span className="flex items-center gap-1 text-emerald-400"><Check className="w-3 h-3" /> Ready</span>
                                                                         ) : shot.jobStatus === "FAILED" ? (
@@ -1781,11 +1783,11 @@ export default function KidsStoryBuilderPage() {
 
                                                                     <div className="flex items-center gap-1.5">
                                                                         <button onClick={() => generateShotVideo(scene.id, shot)}
-                                                                            disabled={shot.jobStatus === "QUEUED" || shot.jobStatus === "PROCESSING"}
+                                                                            disabled={shot.jobStatus === "QUEUED" || shot.jobStatus === "PROCESSING" || shot.jobStatus === "PENDING_AVATAR"}
                                                                             className="px-2 py-0.5 bg-violet-600 hover:bg-violet-550 disabled:opacity-50 text-[10px] text-white font-bold rounded transition-all font-sans">
                                                                             {shot.jobStatus === "COMPLETED" ? "Regenerate" : "Generate"}
                                                                         </button>
-                                                                        {(shot.jobStatus === "QUEUED" || shot.jobStatus === "PROCESSING") && (
+                                                                        {(shot.jobStatus === "QUEUED" || shot.jobStatus === "PROCESSING" || shot.jobStatus === "PENDING_AVATAR") && (
                                                                             <button onClick={() => resetShotStatus(scene.id, shot.id)}
                                                                                 className="px-1.5 py-0.5 bg-gray-850 hover:bg-gray-800 border border-gray-750 text-gray-400 hover:text-white text-[9px] font-bold rounded transition-all font-sans cursor-pointer">
                                                                                 Reset

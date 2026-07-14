@@ -35,6 +35,86 @@ export async function POST(req: NextRequest) {
             chainFromPrevious: !!chainFromPrevious
         };
 
+        // Check if we need to auto-generate the character avatar first
+        let finalRefImage = refImage;
+        let isPendingAvatar = false;
+
+        if (sceneId && !finalRefImage) {
+            const scene = await prisma.docScene.findUnique({
+                where: { id: sceneId },
+                include: { documentary: { include: { assets: true } } }
+            });
+            if (scene && scene.documentary) {
+                activeDocId = scene.documentaryId;
+                let searchQueriesMeta: any = {};
+                try {
+                    searchQueriesMeta = JSON.parse(scene.searchQueries || "{}");
+                } catch {}
+
+                const visualShots = searchQueriesMeta.visualShots || [];
+                const shot = visualShots.find((s: any) => s.id === shotId);
+                
+                if (shot && shot.primaryCharacter && shot.primaryCharacter !== "None") {
+                    const charAsset = scene.documentary.assets.find(
+                        (a: any) => a.label.toLowerCase() === shot.primaryCharacter.toLowerCase()
+                    );
+                    if (charAsset) {
+                        if (charAsset.imagePath) {
+                            finalRefImage = charAsset.imagePath;
+                        } else {
+                            // Automatically trigger ref_image generation first!
+                            console.log(`[Scene Video Gen] Missing avatar for character "${charAsset.label}". Queueing avatar job first.`);
+                            
+                            const avatarJob = await prisma.genJob.create({
+                                data: {
+                                    documentaryId: activeDocId,
+                                    jobType: "ref_image",
+                                    prompt: charAsset.prompt || "",
+                                    status: "QUEUED",
+                                    assetId: charAsset.id,
+                                    metadata: { characterId: charAsset.id } as any
+                                }
+                            });
+
+                            await dispatchJob({
+                                jobId: avatarJob.id,
+                                documentaryId: activeDocId,
+                                type: "ref_image",
+                                prompt: charAsset.prompt || "",
+                                referenceImages: [],
+                                metadata: { characterId: charAsset.id, model: "flux", sourceApp: "Animated Shorts", title: scene.documentary.title || "Kids Story Project" }
+                            });
+
+                            // Mark shot as PENDING_AVATAR
+                            const updatedShots = visualShots.map((s: any) => {
+                                if (s.id === shotId) {
+                                    return { ...s, jobStatus: "PENDING_AVATAR" };
+                                }
+                                return s;
+                            });
+                            searchQueriesMeta.visualShots = updatedShots;
+                            
+                            await prisma.docScene.update({
+                                where: { id: sceneId },
+                                data: { searchQueries: JSON.stringify(searchQueriesMeta) }
+                            });
+
+                            isPendingAvatar = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (isPendingAvatar) {
+            return NextResponse.json({
+                success: true,
+                docId: activeDocId,
+                pendingAvatar: true,
+                message: "Character avatar is missing. Automatically generating avatar first. Video generation will start once ready!"
+            });
+        }
+
         // Create GenJob record to track progress
         const genJob = await prisma.genJob.create({
             data: {
@@ -52,7 +132,7 @@ export async function POST(req: NextRequest) {
             documentaryId: activeDocId,
             type: "shot_video",
             prompt: visualPrompt,
-            referenceImages: refImage ? [refImage] : [],
+            referenceImages: finalRefImage ? [finalRefImage] : [],
             metadata: jobMetadata
         });
 
