@@ -168,7 +168,6 @@ export async function POST(req: NextRequest) {
             mutation DeployPod($input: PodFindAndDeployOnDemandInput!) {
               podFindAndDeployOnDemand(input: $input) {
                 id
-                status
               }
             }`;
 
