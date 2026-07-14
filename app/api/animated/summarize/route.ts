@@ -96,11 +96,12 @@ export async function POST(req: NextRequest) {
         }
 
         // Phase 2: Creative Composition
-        const targetWordCount = Math.round((defaultShotDuration || 5) * 2.5);
+        const maxWordCount = Math.round((defaultShotDuration || 5) * 2.5);
         const systemPrompt = `You are an expert children's content writer. Read the following input (which is ${isSpinOff ? "a simple narrative premise outline" : "a story script"}), and rewrite it into a highly original storyboard script consisting of exactly ${numScenes} scenes.
 
 TARGET AUDIENCE & STYLE SETTINGS:
-- Narration/Dialogue length constraint: You MUST write exactly ${targetWordCount} words of narration/dialogue for each scene (give or take 2 words). This is a strict constraint because each scene's video visual runs for exactly ${defaultShotDuration || 5} seconds.
+- Narration/Dialogue Pacing: Write natural, engaging narration or dialogue. Do NOT stuff words just to fill time. The absolute maximum length is ${maxWordCount} words to prevent audio overlapping the video duration, but it is highly recommended to have short, meaningful lines (e.g. 5-10 words) and let the cinematic action carry the scene.
+- Cinematic Visual Action: Design the visual prompts to match the scene's ${defaultShotDuration || 5}s timeline. For longer durations (like 8s or 10s), describe continuous cinematic actions (e.g. "dragon flying through clouds", "character slowly walking down path", "wide scenic camera pan") so the visual pacing fills the time naturally without needing constant narration.
 - Visual Style Constraint: All visual prompts must strictly start with the style preset prefix (e.g., "${selectedStyle} style animation of...") to enforce the visual theme. The visual prompt must be concise, under 20 words, and explicitly name the character (e.g. "Jimmy the cat") so the image adapter can map the reference face portrait.
 - Target Audience Age: The tone of the dialogue, themes, and vocabulary must be tailored specifically for the "${selectedAge}" age bracket.
 - Genre: The story narrative style, pacing, and overall themes must fit the "${selectedGenre}" genre.
