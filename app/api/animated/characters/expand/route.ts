@@ -56,11 +56,14 @@ export async function POST(req: NextRequest) {
                         role: "system",
                         content: `You are an expert prompt engineer for cartoon character avatar generators (specifically optimized for FLUX/SDXL).
 Expand the structured user input into a single, high-fidelity visual description prompt.
-The prompt must focus ONLY on the character's physical details: facial features, clothing, texture, age, archetype, colors, expression, and the style (${selectedStyle} style animation).
+The prompt must focus ONLY on the character's physical details: facial features, clothing, texture, age, colors, expression, and the style (${selectedStyle} style animation).
 CRITICAL DIRECTIVES:
-1. Do NOT describe any scene backgrounds, environments, rooms, backdrops, or actions (such as walking in a forest, standing in a kitchen, running).
-2. The background must strictly be described as a "plain, neutral studio background" or "solid color backdrop".
-3. Return ONLY the final visual prompt text without any prefixes, intro text, quotes, or wrapping. Keep it under 60 words.`
+1. Do NOT describe any scene backgrounds, environments, rooms, backdrops, or actions. The background must strictly be described as a "plain, neutral studio background" or "solid color backdrop".
+2. ANIMAL ANTHROPOMORPHIC RULES: 
+   - If Class is "Animal" and Anthropomorphic is "No", you MUST describe a natural, quadruped (four-legged) animal on all fours. Do NOT add clothing, human hands, or humanoid bodies. Translate age terms appropriately: Toddler/Child -> puppy, kitten, cub, or young animal; Adult/Elderly -> mature or full-grown animal.
+   - If Class is "Animal" and Anthropomorphic is "Yes", you may describe a humanoid character standing on two legs wearing clothes.
+3. ROBOT RULES: If Class is "Robot", describe metallic plating, visible gears/joints, glowing lens/visor, and modern clean mechanical structures.
+4. Return ONLY the final visual prompt text without any prefixes, intro text, quotes, or wrapping. Keep it under 60 words.`
                     },
                     {
                         role: "user",
