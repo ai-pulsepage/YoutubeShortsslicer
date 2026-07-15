@@ -56,7 +56,7 @@ export default function WorkbenchPage() {
     const [apiKey, setApiKey] = useState("");
     const [volumeId, setVolumeId] = useState("");
     const [templateId, setTemplateId] = useState("");
-    const [gpuType, setGpuType] = useState("ambient-rtx-4090");
+    const [gpuType, setGpuType] = useState("NVIDIA GeForce RTX 4090");
     const [cloudType, setCloudType] = useState("ALL");
     const [volumeSize, setVolumeSize] = useState<number>(100);
     const [dockerArgs, setDockerArgs] = useState("");
@@ -85,7 +85,7 @@ export default function WorkbenchPage() {
                 if (data.config) {
                     setVolumeId(prev => prev || data.config.volumeId || "");
                     setTemplateId(prev => prev || data.config.templateId || "");
-                    setGpuType(prev => prev || data.config.gpuType || "ambient-rtx-4090");
+                    setGpuType(prev => prev || data.config.gpuType || "NVIDIA GeForce RTX 4090");
                     setCloudType(prev => prev || data.config.cloudType || "ALL");
                     setVolumeSize(prev => prev || data.config.volumeSize || 100);
                     setDockerArgs(prev => prev || data.config.dockerArgs || "");
@@ -433,15 +433,15 @@ export default function WorkbenchPage() {
                                 {/* GPU Type */}
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">GPU Type String (RunPod ID)</label>
-                                    <input type="text" placeholder="e.g. ambient-rtx-6000-ada" value={gpuType} onChange={e => setGpuType(e.target.value)}
+                                    <input type="text" placeholder="e.g. NVIDIA GeForce RTX 4090" value={gpuType} onChange={e => setGpuType(e.target.value)}
                                         className="w-full bg-gray-900 border border-gray-800 focus:border-violet-500 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none transition-all font-mono" />
                                     <div className="bg-gray-900/40 p-2.5 rounded-lg border border-gray-850 mt-1 space-y-1 text-[9px] text-gray-550 leading-relaxed font-sans">
                                         <span className="font-bold text-gray-400 block">Common GPU Type IDs:</span>
                                         <ul className="list-disc list-inside space-y-0.5">
-                                            <li><code className="text-violet-400">ambient-rtx-6000-ada</code> (RTX 6000 Ada - 48GB)</li>
-                                            <li><code className="text-violet-400">ambient-rtx-4090</code> (GeForce RTX 4090 - 24GB)</li>
-                                            <li><code className="text-violet-400">ambient-rtx-3090</code> (GeForce RTX 3090 - 24GB)</li>
-                                            <li><code className="text-violet-400">ambient-a100-80gb</code> (NVIDIA A100 - 80GB)</li>
+                                            <li><code className="text-violet-400">NVIDIA GeForce RTX 4090</code> (GeForce RTX 4090 - 24GB)</li>
+                                            <li><code className="text-violet-400">NVIDIA GeForce RTX 3090</code> (GeForce RTX 3090 - 24GB)</li>
+                                            <li><code className="text-violet-400">NVIDIA RTX 6000 Ada</code> (RTX 6000 Ada - 48GB)</li>
+                                            <li><code className="text-violet-400">NVIDIA A100 80GB PCIe</code> (NVIDIA A100 - 80GB)</li>
                                         </ul>
                                     </div>
                                 </div>

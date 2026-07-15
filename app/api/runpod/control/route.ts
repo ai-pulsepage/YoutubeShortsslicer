@@ -47,7 +47,7 @@ export async function GET() {
         const apiKey = await getDbConfig("runpod_api_key");
         const volumeId = await getDbConfig("runpod_volume_id");
         const templateId = await getDbConfig("runpod_template_id");
-        const gpuType = await getDbConfig("runpod_gpu_type") || "ambient-rtx-4090";
+        const gpuType = await getDbConfig("runpod_gpu_type") || "NVIDIA GeForce RTX 4090";
         const cloudType = await getDbConfig("runpod_cloud_type") || "ALL";
         const volumeSize = await getDbConfig("runpod_volume_size") || "100";
         const dockerArgs = await getDbConfig("runpod_docker_args");
@@ -64,15 +64,27 @@ export async function GET() {
                     pods {
                       id
                       name
-                      gpuName
-                      status
-                      runtimeSeconds
                       costPerHr
+                      desiredStatus
+                      machine {
+                        gpuTypeId
+                      }
+                      runtime {
+                        uptimeSeconds
+                      }
                     }
                   }
                 }`;
                 const data = await queryRunPod(apiKey, query);
-                activePods = data?.myself?.pods || [];
+                const rawPods = data?.myself?.pods || [];
+                activePods = rawPods.map((p: any) => ({
+                    id: p.id,
+                    name: p.name,
+                    gpuName: p.machine?.gpuTypeId || "NVIDIA GeForce RTX 4090",
+                    status: p.desiredStatus || "UNKNOWN",
+                    runtimeSeconds: p.runtime?.uptimeSeconds || 0,
+                    costPerHr: p.costPerHr || 0
+                }));
                 connectionOk = true;
             } catch (err: any) {
                 console.warn("[RunPod GET] API list pods failed:", err.message);
@@ -110,6 +122,7 @@ export async function GET() {
                 podcasts: podcastJobQueue
             }
         });
+
 
     } catch (err: any) {
         return NextResponse.json({ error: "Failed to load RunPod status", details: err.message }, { status: 500 });
@@ -153,7 +166,7 @@ export async function POST(req: NextRequest) {
         if (action === "start") {
             const volumeId = await getDbConfig("runpod_volume_id");
             const templateId = await getDbConfig("runpod_template_id");
-            const gpuType = await getDbConfig("runpod_gpu_type") || "ambient-rtx-4090";
+            const gpuType = await getDbConfig("runpod_gpu_type") || "NVIDIA GeForce RTX 4090";
             const cloudType = await getDbConfig("runpod_cloud_type") || "ALL";
             const volumeSizeStr = await getDbConfig("runpod_volume_size") || "100";
             const volumeSize = parseInt(volumeSizeStr, 10) || 100;
