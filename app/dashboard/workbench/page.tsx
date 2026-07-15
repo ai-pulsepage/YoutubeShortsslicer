@@ -44,7 +44,6 @@ type RunPodConfig = {
     volumeSize: number;
     dockerArgs?: string;
     hasGitToken?: boolean;
-    redisUrl?: string;
 };
 
 export default function WorkbenchPage() {
@@ -62,7 +61,6 @@ export default function WorkbenchPage() {
     const [volumeSize, setVolumeSize] = useState<number>(100);
     const [dockerArgs, setDockerArgs] = useState("");
     const [gitToken, setGitToken] = useState("");
-    const [redisUrl, setRedisUrl] = useState("");
 
     // UX states
     const [loading, setLoading] = useState(true);
@@ -91,7 +89,6 @@ export default function WorkbenchPage() {
                     setCloudType(prev => prev || data.config.cloudType || "ALL");
                     setVolumeSize(prev => prev || data.config.volumeSize || 100);
                     setDockerArgs(prev => prev || data.config.dockerArgs || "");
-                    setRedisUrl(prev => prev || data.config.redisUrl || "");
                 }
             }
         } catch (err: any) {
@@ -130,8 +127,7 @@ export default function WorkbenchPage() {
                     cloudType,
                     volumeSize: Number(volumeSize),
                     dockerArgs: dockerArgs.trim(),
-                    gitToken: gitToken.trim() || undefined, // Only send if edited
-                    redisUrl: redisUrl.trim()
+                    gitToken: gitToken.trim() || undefined // Only send if edited
                 })
             });
             const data = await res.json();
@@ -398,16 +394,6 @@ export default function WorkbenchPage() {
                                     <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">RunPod API Key</label>
                                     <input type="password" placeholder={config?.hasApiKey ? "••••••••••••••••••••••••" : "Enter RunPod API Key"} value={apiKey} onChange={e => setApiKey(e.target.value)}
                                         className="w-full bg-gray-900 border border-gray-800 focus:border-violet-500 rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all font-sans" />
-                                </div>
-
-                                {/* Public Redis URL */}
-                                <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Public Redis URL (for RunPod)</label>
-                                    <input type="text" placeholder="redis://default:password@viaduct.proxy.rlwy.net:12345" value={redisUrl} onChange={e => setRedisUrl(e.target.value)}
-                                        className="w-full bg-gray-900 border border-gray-800 focus:border-violet-500 rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-650 focus:outline-none transition-all font-sans" />
-                                    <span className="text-[9px] text-gray-600 font-sans block mt-0.5 leading-snug">
-                                        Must be the **public connection string** (e.g. proxy.rlwy.net) since RunPod is outside your internal network.
-                                    </span>
                                 </div>
 
                                 {/* Template ID */}

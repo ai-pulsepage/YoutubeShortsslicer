@@ -52,7 +52,6 @@ export async function GET() {
         const volumeSize = await getDbConfig("runpod_volume_size") || "100";
         const dockerArgs = await getDbConfig("runpod_docker_args");
         const gitToken = await getDbConfig("runpod_git_token");
-        const redisUrl = await getDbConfig("runpod_redis_url");
 
         let activePods: any[] = [];
         let connectionOk = false;
@@ -114,7 +113,6 @@ export async function GET() {
                 volumeSize: parseInt(volumeSize, 10) || 100,
                 dockerArgs,
                 hasGitToken: !!gitToken,
-                redisUrl,
             },
             connectionOk,
             activePods,
@@ -137,7 +135,7 @@ export async function PATCH(req: NextRequest) {
 
     try {
         const body = await req.json();
-        const { apiKey, volumeId, templateId, gpuType, cloudType, volumeSize, dockerArgs, gitToken, redisUrl } = body;
+        const { apiKey, volumeId, templateId, gpuType, cloudType, volumeSize, dockerArgs, gitToken } = body;
 
         if (apiKey !== undefined) await setDbConfig("runpod_api_key", apiKey);
         if (volumeId !== undefined) await setDbConfig("runpod_volume_id", volumeId);
@@ -147,7 +145,6 @@ export async function PATCH(req: NextRequest) {
         if (volumeSize !== undefined) await setDbConfig("runpod_volume_size", String(volumeSize));
         if (dockerArgs !== undefined) await setDbConfig("runpod_docker_args", dockerArgs);
         if (gitToken !== undefined) await setDbConfig("runpod_git_token", gitToken);
-        if (redisUrl !== undefined) await setDbConfig("runpod_redis_url", redisUrl);
 
         return NextResponse.json({ success: true, message: "Settings saved successfully" });
     } catch (err: any) {
@@ -176,8 +173,7 @@ export async function POST(req: NextRequest) {
             const volumeSize = parseInt(volumeSizeStr, 10) || 100;
             const dockerArgsSetting = await getDbConfig("runpod_docker_args");
             const gitToken = await getDbConfig("runpod_git_token");
-            const redisUrlSetting = await getDbConfig("runpod_redis_url");
-            const activeRedisUrl = redisUrlSetting || process.env.REDIS_URL || "";
+            const activeRedisUrl = process.env.REDIS_URL || "";
 
             // Construct active docker start command
             let activeDockerArgs = dockerArgsSetting;
