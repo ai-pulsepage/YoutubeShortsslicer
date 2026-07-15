@@ -203,7 +203,14 @@ export async function POST(req: NextRequest) {
                 { key: "DEEPSEEK_API_KEY", value: process.env.DEEPSEEK_API_KEY || "" },
                 { key: "NEXTAUTH_SECRET", value: process.env.NEXTAUTH_SECRET || "" },
                 { key: "YOUTUBEVIDEOS", value: "{{ RUNPOD_SECRET_YOUTUBEVIDEOS }}" }
-            ].filter(env => env.value !== "");
+            ].filter(env => {
+                if (!env.value) return false;
+                // Avoid passing internal URLs that cannot resolve on RunPod
+                if (env.value.includes(".internal") || env.value.includes("railway.internal")) {
+                    return false;
+                }
+                return true;
+            });
 
             const mutation = `
             mutation DeployPod($input: PodFindAndDeployOnDemandInput!) {
