@@ -35,14 +35,14 @@ export async function POST(req: NextRequest) {
             chainFromPrevious: !!chainFromPrevious
         };
 
-        // Check if we need to auto-generate the character avatar first
+        // Check if we need to auto-generate the character avatar first or resolve chained frame
         let finalRefImage = refImage;
         let isPendingAvatar = false;
 
-        if (sceneId && !finalRefImage) {
+        if (sceneId) {
             const scene = await prisma.docScene.findUnique({
                 where: { id: sceneId },
-                include: { documentary: { include: { assets: true } } }
+                include: { documentary: { include: { assets: true, scenes: { orderBy: { sceneIndex: "asc" } } } } }
             });
             if (scene && scene.documentary) {
                 activeDocId = scene.documentaryId;
@@ -52,9 +52,20 @@ export async function POST(req: NextRequest) {
                 } catch {}
 
                 const visualShots = searchQueriesMeta.visualShots || [];
-                const shot = visualShots.find((s: any) => s.id === shotId);
-                
-                if (shot && shot.primaryCharacter && shot.primaryCharacter !== "None") {
+                const shotIdx = visualShots.findIndex((s: any) => s.id === shotId);
+                const shot = shotIdx !== -1 ? visualShots[shotIdx] : null;
+
+                let hasChainedImage = false;
+                if (chainFromPrevious && shotIdx !== -1) {
+                    const prevShot = getPreviousShot(scene.documentary, scene, shotIdx);
+                    if (prevShot && prevShot.lastFramePath) {
+                        finalRefImage = prevShot.lastFramePath;
+                        hasChainedImage = true;
+                        console.log(`[Scene Video Gen] Chaining shot ${shotId} from previous lastFramePath: ${prevShot.lastFramePath}`);
+                    }
+                }
+
+                if (!hasChainedImage && shot && shot.primaryCharacter && shot.primaryCharacter !== "None") {
                     const charAsset = scene.documentary.assets.find(
                         (a: any) => a.label.toLowerCase() === shot.primaryCharacter.toLowerCase()
                     );
@@ -182,4 +193,23 @@ export async function POST(req: NextRequest) {
         console.error("[Scene Video Gen] Error:", err.message);
         return NextResponse.json({ error: "Failed to dispatch video generation task", details: err.message }, { status: 500 });
     }
+}
+
+function getPreviousShot(project: any, currentScene: any, currentShotIndex: number) {
+    if (currentShotIndex > 0) {
+        const parsed = JSON.parse(currentScene.searchQueries || "{}");
+        const shots = parsed.visualShots || [];
+        return shots[currentShotIndex - 1];
+    }
+    
+    // Find the previous scene
+    const prevScene = project.scenes.find((s: any) => s.sceneIndex === currentScene.sceneIndex - 1);
+    if (prevScene) {
+        const parsed = JSON.parse(prevScene.searchQueries || "{}");
+        const shots = parsed.visualShots || [];
+        if (shots.length > 0) {
+            return shots[shots.length - 1];
+        }
+    }
+    return null;
 }
