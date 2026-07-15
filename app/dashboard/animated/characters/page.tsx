@@ -28,6 +28,7 @@ type LibraryCharacter = {
 export default function AnimatedCastLibraryPage() {
     const [characters, setCharacters] = useState<LibraryCharacter[]>([]);
     const [loading, setLoading] = useState(true);
+    const [libraryDocId, setLibraryDocId] = useState<string | null>(null);
     const [error, setError] = useState("");
     const [insufficientFunds, setInsufficientFunds] = useState(false);
 
@@ -64,6 +65,7 @@ export default function AnimatedCastLibraryPage() {
             if (res.ok) {
                 const data = await res.json();
                 setCharacters(data.characters || []);
+                setLibraryDocId(data.docId || null);
             }
         } catch (err) {
             console.error("Failed to load library characters:", err);
@@ -361,19 +363,15 @@ export default function AnimatedCastLibraryPage() {
     const handleGenerateAvatar = async (charId: string, promptText: string) => {
         setError("");
         try {
-            // Find library docId
-            const docRes = await fetch("/api/animated/projects");
-            if (!docRes.ok) throw new Error("Failed to identify library scope");
-            const docData = await docRes.json();
-            
-            const libraryProject = docData.projects?.find((p: any) => p.genre === "children_library");
-            if (!libraryProject) throw new Error("Please save a character blueprint first to initialize library scope");
+            if (!libraryDocId) {
+                throw new Error("Library scope not initialized. Please save a character blueprint first.");
+            }
 
             const res = await fetch("/api/animated/characters/avatar", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    docId: libraryProject.id,
+                    docId: libraryDocId,
                     characterId: charId,
                     prompt: promptText
                 })

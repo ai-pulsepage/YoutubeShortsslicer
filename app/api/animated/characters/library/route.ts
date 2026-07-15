@@ -41,7 +41,10 @@ export async function GET(req: NextRequest) {
             };
         });
 
-        return NextResponse.json({ characters });
+        return NextResponse.json({
+            characters,
+            docId: libraryDoc ? libraryDoc.id : null
+        });
 
     } catch (err: any) {
         console.error("[Get Character Library] Error:", err.message);
