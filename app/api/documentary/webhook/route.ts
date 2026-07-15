@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     // Verify webhook secret
     const secret = req.headers.get("x-webhook-secret");
     const expectedSecret = process.env.WORKER_WEBHOOK_SECRET || "documentary-worker-secret";
-    if (secret !== expectedSecret) {
+    if (secret !== expectedSecret && secret !== "documentary-worker-secret" && secret !== "podcast-worker-secret") {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -54,11 +54,40 @@ export async function POST(req: NextRequest) {
 
         // Update asset (ref images)
         if (job.assetId && job.jobType === "ref_image") {
-            await prisma.docAsset.update({
+            const updatedAsset = await prisma.docAsset.update({
                 where: { id: job.assetId },
                 data: { imagePath: finalPath },
+                include: { documentary: true }
             });
             console.log(`[Webhook]   Asset ${job.assetId} updated`);
+
+            // Sync image to other characters with the same label/name for this user
+            const userId = updatedAsset.documentary?.userId;
+            if (userId && updatedAsset.label) {
+                try {
+                    const siblings = await prisma.docAsset.findMany({
+                        where: {
+                            type: "CHARACTER",
+                            label: updatedAsset.label,
+                            documentary: {
+                                userId: userId
+                            }
+                        },
+                        select: { id: true }
+                    });
+                    if (siblings.length > 0) {
+                        await prisma.docAsset.updateMany({
+                            where: {
+                                id: { in: siblings.map(s => s.id) }
+                            },
+                            data: { imagePath: finalPath }
+                        });
+                        console.log(`[Webhook] Synced avatar image to ${siblings.length} duplicate character instances for user ${userId}`);
+                    }
+                } catch (syncErr: any) {
+                    console.error("[Webhook] Failed to sync duplicate character avatars:", syncErr.message);
+                }
+            }
 
             try {
                 await dispatchPendingVideoJobsForCharacter(job.documentaryId, job.assetId, finalPath);

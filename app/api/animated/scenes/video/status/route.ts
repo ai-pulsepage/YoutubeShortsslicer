@@ -45,10 +45,39 @@ export async function GET(req: NextRequest) {
 
                 // A. Update Character Image if it's an Avatar
                 if (status === "COMPLETED" && outputPath && job.assetId) {
-                    await prisma.docAsset.update({
+                    const updatedAsset = await prisma.docAsset.update({
                         where: { id: job.assetId },
                         data: { imagePath: outputPath },
+                        include: { documentary: true }
                     });
+
+                    // Sync image to other characters with the same label/name for this user
+                    const userId = updatedAsset.documentary?.userId;
+                    if (userId && updatedAsset.label) {
+                        try {
+                            const siblings = await prisma.docAsset.findMany({
+                                where: {
+                                    type: "CHARACTER",
+                                    label: updatedAsset.label,
+                                    documentary: {
+                                        userId: userId
+                                    }
+                                },
+                                select: { id: true }
+                            });
+                            if (siblings.length > 0) {
+                                await prisma.docAsset.updateMany({
+                                    where: {
+                                        id: { in: siblings.map(s => s.id) }
+                                    },
+                                    data: { imagePath: outputPath }
+                                });
+                                console.log(`[Status Sync] Synced avatar image to ${siblings.length} duplicate character instances for user ${userId}`);
+                            }
+                        } catch (syncErr: any) {
+                            console.error("[Status Sync] Failed to sync duplicate character avatars:", syncErr.message);
+                        }
+                    }
                 }
 
                 // B. Update DocShot if it's a Documentary Video

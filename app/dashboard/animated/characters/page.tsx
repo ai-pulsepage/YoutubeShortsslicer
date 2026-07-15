@@ -258,17 +258,20 @@ export default function AnimatedCastLibraryPage() {
         setPickingAvatarCharName(charName);
         setLoadingR2Avatars(true);
         try {
-            const [resAvatars, resAssets] = await Promise.all([
+            const [resAvatars, resAssets, resDocs] = await Promise.all([
                 fetch("/api/storage/list?prefix=avatars/"),
-                fetch("/api/storage/list?prefix=animated/&recursive=true")
+                fetch("/api/storage/list?prefix=animated/&recursive=true"),
+                fetch("/api/storage/list?prefix=documentaries/&recursive=true")
             ]);
             
             const dataAvatars = await resAvatars.json();
             const dataAssets = await resAssets.json();
+            const dataDocs = await resDocs.json();
             
             const mergedFiles = [
                 ...(dataAvatars.files || []),
-                ...(dataAssets.files || [])
+                ...(dataAssets.files || []),
+                ...(dataDocs.files || [])
             ];
             
             setR2Avatars(mergedFiles);
