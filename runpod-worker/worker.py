@@ -39,12 +39,22 @@ from botocore.config import Config
 
 # ─── Configuration ─────────────────────────────────────
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
-R2_ENDPOINT = os.environ["R2_ENDPOINT"]
-R2_ACCESS_KEY = os.environ["R2_ACCESS_KEY"]
-R2_SECRET_KEY = os.environ["R2_SECRET_KEY"]
-R2_BUCKET = os.environ.get("R2_BUCKET", "youtubeshorts")
+R2_ENDPOINT = os.environ.get("R2_ENDPOINT")
+R2_ACCESS_KEY = os.environ.get("R2_ACCESS_KEY") or os.environ.get("R2_ACCESS_KEY_ID")
+R2_SECRET_KEY = os.environ.get("R2_SECRET_KEY") or os.environ.get("R2_SECRET_ACCESS_KEY")
+R2_BUCKET = os.environ.get("R2_BUCKET") or os.environ.get("R2_BUCKET_NAME") or "youtubeshorts"
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")  # e.g. https://your-app.railway.app/api/documentary/webhook
 WEBHOOK_SECRET = os.environ.get("WORKER_WEBHOOK_SECRET", "documentary-worker-secret")
+
+# Validate that all required R2 parameters are loaded
+missing_keys = []
+if not R2_ENDPOINT: missing_keys.append("R2_ENDPOINT")
+if not R2_ACCESS_KEY: missing_keys.append("R2_ACCESS_KEY/R2_ACCESS_KEY_ID")
+if not R2_SECRET_KEY: missing_keys.append("R2_SECRET_KEY/R2_SECRET_ACCESS_KEY")
+
+if missing_keys:
+    raise ValueError(f"CRITICAL: Missing required Cloudflare R2 environment variables: {', '.join(missing_keys)}")
+
 
 JOBS_CHANNEL = "documentary_jobs"
 RESULTS_CHANNEL = "documentary_results"

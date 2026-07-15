@@ -173,10 +173,6 @@ export async function POST(req: NextRequest) {
             const dockerArgsSetting = await getDbConfig("runpod_docker_args");
             const gitToken = await getDbConfig("runpod_git_token");
 
-            if (!templateId) {
-                return NextResponse.json({ error: "RunPod Template ID is required to start a pod" }, { status: 400 });
-            }
-
             // Construct active docker start command
             let activeDockerArgs = dockerArgsSetting;
             if (!activeDockerArgs) {
@@ -191,9 +187,12 @@ export async function POST(req: NextRequest) {
             const envArgs = [
                 { key: "REDIS_URL", value: process.env.REDIS_URL || "" },
                 { key: "DATABASE_URL", value: process.env.DATABASE_URL || "" },
-                { key: "R2_ACCESS_KEY_ID", value: process.env.R2_ACCESS_KEY_ID || "" },
-                { key: "R2_SECRET_ACCESS_KEY", value: process.env.R2_SECRET_ACCESS_KEY || "" },
-                { key: "R2_BUCKET_NAME", value: process.env.R2_BUCKET_NAME || "" },
+                { key: "R2_ACCESS_KEY_ID", value: process.env.R2_ACCESS_KEY_ID || process.env.R2_ACCESS_KEY || "" },
+                { key: "R2_ACCESS_KEY", value: process.env.R2_ACCESS_KEY_ID || process.env.R2_ACCESS_KEY || "" },
+                { key: "R2_SECRET_ACCESS_KEY", value: process.env.R2_SECRET_ACCESS_KEY || process.env.R2_SECRET_KEY || "" },
+                { key: "R2_SECRET_KEY", value: process.env.R2_SECRET_ACCESS_KEY || process.env.R2_SECRET_KEY || "" },
+                { key: "R2_BUCKET_NAME", value: process.env.R2_BUCKET_NAME || process.env.R2_BUCKET || "" },
+                { key: "R2_BUCKET", value: process.env.R2_BUCKET_NAME || process.env.R2_BUCKET || "" },
                 { key: "R2_ENDPOINT", value: process.env.R2_ENDPOINT || "" },
                 { key: "DEEPSEEK_API_KEY", value: process.env.DEEPSEEK_API_KEY || "" },
                 { key: "NEXTAUTH_SECRET", value: process.env.NEXTAUTH_SECRET || "" },
@@ -215,10 +214,13 @@ export async function POST(req: NextRequest) {
                     volumeMountPath: "/workspace",
                     gpuTypeId: gpuType,
                     networkVolumeId: volumeId || undefined,
-                    templateId: templateId,
                     ports: "8888/http,22/tcp,8000/http",
                     dockerArgs: activeDockerArgs,
-                    env: envArgs
+                    env: envArgs,
+                    ...(templateId ? { templateId } : {
+                        imageName: "runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04",
+                        containerDiskInGb: 40
+                    })
                 }
             };
 
