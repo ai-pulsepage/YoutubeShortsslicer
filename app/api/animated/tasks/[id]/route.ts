@@ -9,7 +9,7 @@ export async function GET(
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { id } = await params;
-    const moneyPrinterUrl = process.env.MONEY_PRINTER_URL || "http://localhost:8080";
+    const moneyPrinterUrl = process.env.MONEY_PRINTER_URL || "http://localhost:8085";
 
     try {
         const res = await fetch(`${moneyPrinterUrl}/api/v1/tasks/${id}`, {

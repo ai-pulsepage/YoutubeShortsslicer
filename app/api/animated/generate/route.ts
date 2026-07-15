@@ -8,7 +8,7 @@ export async function POST(req: Request) {
     const { topic, aspectRatio, voiceName, bgmType, subtitleEnabled } = await req.json();
     if (!topic) return NextResponse.json({ error: "Topic is required" }, { status: 400 });
 
-    const moneyPrinterUrl = process.env.MONEY_PRINTER_URL || "http://localhost:8080";
+    const moneyPrinterUrl = process.env.MONEY_PRINTER_URL || "http://localhost:8085";
     const videoAspect = aspectRatio === "16:9" ? "16:9" : aspectRatio === "1:1" ? "1:1" : "9:16";
 
     try {

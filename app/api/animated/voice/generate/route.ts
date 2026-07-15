@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "sceneId, text and voice are required" }, { status: 400 });
     }
 
-    const moneyPrinterUrl = process.env.MONEY_PRINTER_URL || "http://localhost:8080";
+    const moneyPrinterUrl = process.env.MONEY_PRINTER_URL || "http://localhost:8085";
     const activeDocId = docId || `temp-voice-${Date.now()}`;
     const tempDir = path.join(os.tmpdir(), `voice-gen-${Date.now()}`);
     fs.mkdirSync(tempDir, { recursive: true });

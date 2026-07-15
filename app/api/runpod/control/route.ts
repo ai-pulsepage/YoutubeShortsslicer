@@ -217,23 +217,29 @@ export async function POST(req: NextRequest) {
               }
             }`;
 
-            const variables = {
-                input: {
-                    cloudType: cloudType === "SECURE" ? "SECURE" : cloudType === "COMMUNITY" ? "COMMUNITY" : "ALL",
-                    gpuCount: 1,
-                    volumeInGb: volumeSize,
-                    volumeMountPath: "/workspace",
-                    gpuTypeId: gpuType,
-                    networkVolumeId: volumeId || undefined,
-                    ports: "8888/http,22/tcp,8000/http",
-                    dockerArgs: activeDockerArgs,
-                    env: envArgs,
-                    ...(templateId ? { templateId } : {
-                        imageName: "runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04",
-                        containerDiskInGb: 40
-                    })
-                }
+            const input: any = {
+                cloudType: cloudType === "SECURE" ? "SECURE" : cloudType === "COMMUNITY" ? "COMMUNITY" : "ALL",
+                gpuCount: 1,
+                volumeInGb: volumeSize,
+                volumeMountPath: "/workspace",
+                gpuTypeId: gpuType,
+                networkVolumeId: volumeId || undefined,
             };
+
+            if (templateId) {
+                input.templateId = templateId;
+                if (dockerArgsSetting) {
+                    input.dockerArgs = dockerArgsSetting;
+                }
+            } else {
+                input.ports = "8888/http,22/tcp,8000/http";
+                input.dockerArgs = activeDockerArgs;
+                input.env = envArgs;
+                input.imageName = "runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04";
+                input.containerDiskInGb = 40;
+            }
+
+            const variables = { input };
 
             const data = await queryRunPod(apiKey, mutation, variables);
             const pod = data?.podFindAndDeployOnDemand;

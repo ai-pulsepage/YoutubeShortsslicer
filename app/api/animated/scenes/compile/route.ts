@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
         }, { status: 400 });
     }
 
-    const moneyPrinterUrl = process.env.MONEY_PRINTER_URL || "http://localhost:8080";
+    const moneyPrinterUrl = process.env.MONEY_PRINTER_URL || "http://localhost:8085";
     const tempDir = path.join(os.tmpdir(), `story-compile-${Date.now()}`);
     fs.mkdirSync(tempDir, { recursive: true });
 

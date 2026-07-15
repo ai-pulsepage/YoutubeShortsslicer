@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "text and voice are required" }, { status: 400 });
     }
 
-    const moneyPrinterUrl = process.env.MONEY_PRINTER_URL || "http://localhost:8080";
+    const moneyPrinterUrl = process.env.MONEY_PRINTER_URL || "http://localhost:8085";
 
     try {
         console.log(`[Voice Preview] Previewing: "${text}" using voice ${voice}`);
