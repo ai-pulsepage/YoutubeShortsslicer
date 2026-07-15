@@ -311,7 +311,8 @@ def process_job(job: dict, r: redis.Redis):
     print(f"   Prompt: {prompt[:100]}...")
 
     try:
-        with tempfile.TemporaryDirectory() as tmpdir:
+        os.makedirs("/workspace/tmp", exist_ok=True)
+        with tempfile.TemporaryDirectory(dir="/workspace/tmp") as tmpdir:
             # Map job types: ref_image and image both generate images
             if job_type in ("image", "ref_image"):
                 # Generate reference image with selected model
