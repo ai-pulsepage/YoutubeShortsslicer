@@ -244,11 +244,9 @@ export async function POST(req: NextRequest) {
                 }
                 if (volumeId) {
                     baseInput.networkVolumeId = volumeId;
-                    baseInput.volumeInGb = volumeSize;
-                    baseInput.volumeMountPath = "/workspace";
                 }
-                // Do not send volumeInGb or volumeMountPath by default for template mode.
-                // This lets RunPod use the template's native pre-configured volume size.
+                baseInput.volumeInGb = volumeSize;
+                baseInput.volumeMountPath = "/workspace";
             } else {
                 baseInput.dockerArgs = activeDockerArgs;
                 baseInput.env = envArgs;
