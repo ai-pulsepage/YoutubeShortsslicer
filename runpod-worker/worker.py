@@ -21,9 +21,12 @@ Environment Variables Required:
   WORKER_WEBHOOK_SECRET - Shared secret for webhook auth
 """
 
+import os
+# Force Hugging Face cache to live on the persistent storage drive
+os.environ["HF_HOME"] = "/workspace/hf_cache"
+
 import json
 import gc
-import os
 import sys
 import time
 import uuid
