@@ -391,7 +391,10 @@ export default function WorkbenchPage() {
                                 
                                 {/* API Key */}
                                 <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">RunPod API Key</label>
+                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider flex items-center justify-between">
+                                        <span>RunPod API Key</span>
+                                        {config?.hasApiKey && <span className="text-[8px] font-bold text-green-400 normal-case bg-green-500/10 border border-green-500/20 px-1.5 py-0.5 rounded-full font-sans tracking-wide">✓ Saved in Database</span>}
+                                    </label>
                                     <input type="password" placeholder={config?.hasApiKey ? "••••••••••••••••••••••••" : "Enter RunPod API Key"} value={apiKey} onChange={e => setApiKey(e.target.value)}
                                         className="w-full bg-gray-900 border border-gray-800 focus:border-violet-500 rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all font-sans" />
                                 </div>
@@ -448,7 +451,10 @@ export default function WorkbenchPage() {
 
                                 {/* Git Token */}
                                 <div className="space-y-1 font-sans">
-                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">GitHub Access Token (PAT) (Optional)</label>
+                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider flex items-center justify-between">
+                                        <span>GitHub Access Token (PAT) (Optional)</span>
+                                        {config?.hasGitToken && <span className="text-[8px] font-bold text-green-400 normal-case bg-green-500/10 border border-green-500/20 px-1.5 py-0.5 rounded-full font-sans tracking-wide">✓ Saved in Database</span>}
+                                    </label>
                                     <input type="password" placeholder={config?.hasGitToken ? "••••••••••••••••••••••••" : "Enter Git Token for Private Repo"} value={gitToken} onChange={e => setGitToken(e.target.value)}
                                         className="w-full bg-gray-900 border border-gray-800 focus:border-violet-500 rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all" />
                                     <span className="text-[9px] text-gray-600 block mt-0.5 leading-snug">Required to clone the private workspace slicer repository on new volumes.</span>
