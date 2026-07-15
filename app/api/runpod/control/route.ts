@@ -234,6 +234,7 @@ export async function POST(req: NextRequest) {
                 cloudType: cloudType === "SECURE" ? "SECURE" : cloudType === "COMMUNITY" ? "COMMUNITY" : "ALL",
                 gpuCount: 1,
                 ports: "8888/http,22/tcp,8000/http",
+                containerDiskInGb: 40,
             };
 
             if (templateId) {
@@ -252,7 +253,6 @@ export async function POST(req: NextRequest) {
                 baseInput.dockerArgs = activeDockerArgs;
                 baseInput.env = envArgs;
                 baseInput.imageName = "runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04";
-                baseInput.containerDiskInGb = 40;
                 baseInput.volumeInGb = volumeSize || 50;
                 baseInput.volumeMountPath = "/workspace";
             }
