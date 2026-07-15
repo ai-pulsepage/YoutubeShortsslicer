@@ -233,6 +233,7 @@ export async function POST(req: NextRequest) {
             const baseInput: any = {
                 cloudType: cloudType === "SECURE" ? "SECURE" : cloudType === "COMMUNITY" ? "COMMUNITY" : "ALL",
                 gpuCount: 1,
+                ports: "8888/http,22/tcp,8000/http",
             };
 
             if (templateId) {
@@ -248,7 +249,6 @@ export async function POST(req: NextRequest) {
                 // Do not send volumeInGb or volumeMountPath by default for template mode.
                 // This lets RunPod use the template's native pre-configured volume size.
             } else {
-                baseInput.ports = "8888/http,22/tcp,8000/http";
                 baseInput.dockerArgs = activeDockerArgs;
                 baseInput.env = envArgs;
                 baseInput.imageName = "runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04";
