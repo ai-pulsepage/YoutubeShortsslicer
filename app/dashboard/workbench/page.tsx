@@ -70,7 +70,7 @@ export default function WorkbenchPage() {
     const [success, setSuccess] = useState("");
 
     // Load server status & details
-    const loadStatus = async (showLoading = false) => {
+    const loadStatus = async (showLoading = false, populateInputs = false) => {
         if (showLoading) setLoading(true);
         try {
             const res = await fetch("/api/runpod/control");
@@ -81,16 +81,16 @@ export default function WorkbenchPage() {
                 setQueueSizes(data.queueSizes || { genJobs: 0, ugcJobs: 0, podcasts: 0 });
                 setConnectionOk(data.connectionOk);
 
-                // Pre-populate form elements only if we haven't typed yet
-                if (data.config) {
-                    setApiKey(prev => prev || data.config.apiKey || "");
-                    setVolumeId(prev => prev || data.config.volumeId || "");
-                    setTemplateId(prev => prev || data.config.templateId || "");
-                    setGpuType(prev => prev || data.config.gpuType || "NVIDIA GeForce RTX 4090");
-                    setCloudType(prev => prev || data.config.cloudType || "ALL");
-                    setVolumeSize(prev => prev || data.config.volumeSize || 100);
-                    setDockerArgs(prev => prev || data.config.dockerArgs || "");
-                    setGitToken(prev => prev || data.config.gitToken || "");
+                // Pre-populate form elements only on initial page load
+                if (data.config && populateInputs) {
+                    setApiKey(data.config.apiKey || "");
+                    setVolumeId(data.config.volumeId || "");
+                    setTemplateId(data.config.templateId || "");
+                    setGpuType(data.config.gpuType || "NVIDIA GeForce RTX 4090");
+                    setCloudType(data.config.cloudType || "ALL");
+                    setVolumeSize(data.config.volumeSize || 100);
+                    setDockerArgs(data.config.dockerArgs || "");
+                    setGitToken(data.config.gitToken || "");
                 }
             }
         } catch (err: any) {
@@ -101,13 +101,13 @@ export default function WorkbenchPage() {
     };
 
     useEffect(() => {
-        loadStatus(true);
+        loadStatus(true, true); // Populate inputs on startup
     }, []);
 
     // Dynamic Polling Loop: refresh pod status and active queue sizes every 6 seconds
     useEffect(() => {
         const interval = setInterval(() => {
-            loadStatus(false);
+            loadStatus(false, false); // Do not overwrite inputs during background polling
         }, 6000);
         return () => clearInterval(interval);
     }, []);
