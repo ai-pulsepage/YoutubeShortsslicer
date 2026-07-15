@@ -70,7 +70,7 @@ export async function GET() {
                         gpuTypeId
                       }
                       runtime {
-                        uptimeSeconds
+                        uptimeInSeconds
                       }
                     }
                   }
@@ -82,7 +82,7 @@ export async function GET() {
                     name: p.name,
                     gpuName: p.machine?.gpuTypeId || "NVIDIA GeForce RTX 4090",
                     status: p.desiredStatus || "UNKNOWN",
-                    runtimeSeconds: p.runtime?.uptimeSeconds || 0,
+                    runtimeSeconds: p.runtime?.uptimeInSeconds || 0,
                     costPerHr: p.costPerHr || 0
                 }));
                 connectionOk = true;
