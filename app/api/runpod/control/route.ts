@@ -217,34 +217,85 @@ export async function POST(req: NextRequest) {
               }
             }`;
 
-            const input: any = {
+            const primaryGpu = gpuType || "NVIDIA GeForce RTX 4090";
+            const fallbackGpus = [
+                "NVIDIA GeForce RTX 4090",
+                "NVIDIA RTX 6000 Ada Generation",
+                "NVIDIA GeForce RTX 3090",
+                "NVIDIA RTX 5000 Ada Generation",
+                "NVIDIA A100 80GB PCIe",
+                "NVIDIA A100-SXM4-80GB"
+            ];
+
+            // Deduplicate, keeping preferred GPU first
+            const gpuList = Array.from(new Set([primaryGpu, ...fallbackGpus]));
+
+            const baseInput: any = {
                 cloudType: cloudType === "SECURE" ? "SECURE" : cloudType === "COMMUNITY" ? "COMMUNITY" : "ALL",
                 gpuCount: 1,
-                volumeInGb: volumeSize,
-                volumeMountPath: "/workspace",
-                gpuTypeId: gpuType,
-                networkVolumeId: volumeId || undefined,
             };
 
             if (templateId) {
-                input.templateId = templateId;
+                baseInput.templateId = templateId;
                 if (dockerArgsSetting) {
-                    input.dockerArgs = dockerArgsSetting;
+                    baseInput.dockerArgs = dockerArgsSetting;
                 }
+                if (volumeId) {
+                    baseInput.networkVolumeId = volumeId;
+                    baseInput.volumeInGb = volumeSize;
+                    baseInput.volumeMountPath = "/workspace";
+                }
+                // Do not send volumeInGb or volumeMountPath by default for template mode.
+                // This lets RunPod use the template's native pre-configured volume size.
             } else {
-                input.ports = "8888/http,22/tcp,8000/http";
-                input.dockerArgs = activeDockerArgs;
-                input.env = envArgs;
-                input.imageName = "runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04";
-                input.containerDiskInGb = 40;
+                baseInput.ports = "8888/http,22/tcp,8000/http";
+                baseInput.dockerArgs = activeDockerArgs;
+                baseInput.env = envArgs;
+                baseInput.imageName = "runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04";
+                baseInput.containerDiskInGb = 40;
+                baseInput.volumeInGb = volumeSize || 50;
+                baseInput.volumeMountPath = "/workspace";
             }
 
-            const variables = { input };
+            let pod = null;
+            let lastError = null;
 
-            console.log("[RunPod Action POST] Dispatching mutation with variables:", JSON.stringify(variables, null, 2));
+            for (const currentGpu of gpuList) {
+                try {
+                    const variables = {
+                        input: {
+                            ...baseInput,
+                            gpuTypeId: currentGpu
+                        }
+                    };
 
-            const data = await queryRunPod(apiKey, mutation, variables);
-            const pod = data?.podFindAndDeployOnDemand;
+                    console.log(`[RunPod Action POST] Attempting deploy on GPU: "${currentGpu}" with variables:`, JSON.stringify(variables, null, 2));
+
+                    const data = await queryRunPod(apiKey, mutation, variables);
+                    pod = data?.podFindAndDeployOnDemand;
+                    if (pod?.id) {
+                        console.log(`[RunPod Action POST] Successfully deployed pod: ${pod.id} on GPU: "${currentGpu}"`);
+                        break;
+                    }
+                } catch (err: any) {
+                    lastError = err;
+                    console.warn(`[RunPod Action POST] Deployment failed on GPU "${currentGpu}": ${err.message}`);
+
+                    const isResourceError =
+                        err.message.includes("does not have the resources") ||
+                        err.message.includes("capacity") ||
+                        err.message.includes("out of") ||
+                        err.message.includes("resource");
+
+                    if (!isResourceError) {
+                        throw err;
+                    }
+                }
+            }
+
+            if (!pod) {
+                throw lastError || new Error("Failed to deploy pod on any compatible GPU type");
+            }
 
             return NextResponse.json({
                 success: true,
