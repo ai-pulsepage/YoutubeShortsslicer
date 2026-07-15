@@ -241,6 +241,8 @@ export async function POST(req: NextRequest) {
 
             const variables = { input };
 
+            console.log("[RunPod Action POST] Dispatching mutation with variables:", JSON.stringify(variables, null, 2));
+
             const data = await queryRunPod(apiKey, mutation, variables);
             const pod = data?.podFindAndDeployOnDemand;
 
