@@ -102,10 +102,11 @@ export async function GET() {
             where: { status: { in: ["SCRIPTING", "RECORDING", "ASSEMBLING"] } }
         });
 
-        // Return config status (hide secret key)
+        // Return config status
         return NextResponse.json({
             config: {
                 hasApiKey: !!apiKey,
+                apiKey,
                 volumeId,
                 templateId,
                 gpuType,
@@ -113,6 +114,7 @@ export async function GET() {
                 volumeSize: parseInt(volumeSize, 10) || 100,
                 dockerArgs,
                 hasGitToken: !!gitToken,
+                gitToken,
             },
             connectionOk,
             activePods,

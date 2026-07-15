@@ -83,12 +83,14 @@ export default function WorkbenchPage() {
 
                 // Pre-populate form elements only if we haven't typed yet
                 if (data.config) {
+                    setApiKey(prev => prev || data.config.apiKey || "");
                     setVolumeId(prev => prev || data.config.volumeId || "");
                     setTemplateId(prev => prev || data.config.templateId || "");
                     setGpuType(prev => prev || data.config.gpuType || "NVIDIA GeForce RTX 4090");
                     setCloudType(prev => prev || data.config.cloudType || "ALL");
                     setVolumeSize(prev => prev || data.config.volumeSize || 100);
                     setDockerArgs(prev => prev || data.config.dockerArgs || "");
+                    setGitToken(prev => prev || data.config.gitToken || "");
                 }
             }
         } catch (err: any) {
@@ -134,8 +136,6 @@ export default function WorkbenchPage() {
             if (!res.ok) throw new Error(data.error || "Failed to update configurations");
 
             setSuccess("Configurations saved successfully.");
-            setApiKey(""); // Reset password input
-            setGitToken(""); // Reset password input
             loadStatus(false);
         } catch (err: any) {
             setError(err.message || "Failed to save settings.");
@@ -395,7 +395,7 @@ export default function WorkbenchPage() {
                                         <span>RunPod API Key</span>
                                         {config?.hasApiKey && <span className="text-[8px] font-bold text-green-400 normal-case bg-green-500/10 border border-green-500/20 px-1.5 py-0.5 rounded-full font-sans tracking-wide">✓ Saved in Database</span>}
                                     </label>
-                                    <input type="password" placeholder={config?.hasApiKey ? "••••••••••••••••••••••••" : "Enter RunPod API Key"} value={apiKey} onChange={e => setApiKey(e.target.value)}
+                                    <input type="text" placeholder="Enter RunPod API Key" value={apiKey} onChange={e => setApiKey(e.target.value)}
                                         className="w-full bg-gray-900 border border-gray-800 focus:border-violet-500 rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all font-sans" />
                                 </div>
 
@@ -455,7 +455,7 @@ export default function WorkbenchPage() {
                                         <span>GitHub Access Token (PAT) (Optional)</span>
                                         {config?.hasGitToken && <span className="text-[8px] font-bold text-green-400 normal-case bg-green-500/10 border border-green-500/20 px-1.5 py-0.5 rounded-full font-sans tracking-wide">✓ Saved in Database</span>}
                                     </label>
-                                    <input type="password" placeholder={config?.hasGitToken ? "••••••••••••••••••••••••" : "Enter Git Token for Private Repo"} value={gitToken} onChange={e => setGitToken(e.target.value)}
+                                    <input type="text" placeholder="Enter Git Token for Private Repo" value={gitToken} onChange={e => setGitToken(e.target.value)}
                                         className="w-full bg-gray-900 border border-gray-800 focus:border-violet-500 rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none transition-all" />
                                     <span className="text-[9px] text-gray-600 block mt-0.5 leading-snug">Required to clone the private workspace slicer repository on new volumes.</span>
                                 </div>
