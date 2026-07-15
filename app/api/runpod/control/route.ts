@@ -285,7 +285,9 @@ export async function POST(req: NextRequest) {
                         err.message.includes("does not have the resources") ||
                         err.message.includes("capacity") ||
                         err.message.includes("out of") ||
-                        err.message.includes("resource");
+                        err.message.includes("resource") ||
+                        err.message.includes("instances available") ||
+                        err.message.includes("requested specifications");
 
                     if (!isResourceError) {
                         throw err;
