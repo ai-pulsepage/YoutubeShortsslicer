@@ -45,18 +45,10 @@ export async function POST(req: NextRequest) {
         const selectedGenre = genre || "Adventure";
 
         if (!apiKey) {
-            // Fallback: build a default structured story from the transcript
-            const sentences = contentToProcess.split(/[.!?。！？]/).filter(Boolean).slice(0, numScenes);
-            const scenes = sentences.map((sentence: string, idx: number) => ({
-                id: `scene-${idx}`,
-                type: idx % 3 === 2 && useMusicals ? "song" : "dialogue",
-                character: idx % 2 === 0 ? (characters?.[0]?.name || "Leo") : "Narrator",
-                voice: idx % 2 === 0 ? "en-US-AnaNeural-Female" : "en-US-GuyNeural-Male",
-                text: sentence.trim() + ".",
-                visualPrompt: `A beautiful scenic scene matching the "${selectedStyle}" animation style, ${selectedGenre} theme, showing ${idx % 2 === 0 ? (characters?.[0]?.name || "Leo") : "the landscape"}`,
-                sunoStylePrompt: idx % 3 === 2 && useMusicals ? "upbeat children singalong, acoustic guitar, 120bpm" : ""
-            }));
-            return NextResponse.json({ scenes });
+            return NextResponse.json(
+                { error: "DEEPSEEK_KEY_MISSING", details: "DeepSeek API key is not configured. Please add it in Settings." },
+                { status: 503 }
+            );
         }
 
         // Phase 1: High-Level Concept Summary Extraction (only in Spin-off Mode for Ingested Videos)
@@ -100,9 +92,9 @@ export async function POST(req: NextRequest) {
         const systemPrompt = `You are an expert children's content writer. Read the following input (which is ${isSpinOff ? "a simple narrative premise outline" : "a story script"}), and rewrite it into a highly original storyboard script consisting of exactly ${numScenes} scenes.
 
 TARGET AUDIENCE & STYLE SETTINGS:
-- Narration/Dialogue Pacing: Write natural, engaging narration or dialogue. Do NOT stuff words just to fill time. The absolute maximum length is ${maxWordCount} words to prevent audio overlapping the video duration, but it is highly recommended to have short, meaningful lines (e.g. 5-10 words) and let the visual animation carry the scene.
-- Cinematic & Cartoon Action Pacing: Design the visual prompts to match the scene's ${defaultShotDuration || 5}s timeline. Describe continuous actions that require time to play out naturally—whether it's dynamic cartoon action (e.g. "two characters in a fast-paced chase running down a street", "characters actively playing a game") or cinematic pacing (e.g. "a dragon flying through clouds", "character walking along a path", "slow wide camera pan") so the physical sequence fills the duration naturally without needing constant narration.
-- Visual Style Constraint: All visual prompts must strictly start with the style preset prefix (e.g., "${selectedStyle} style animation of...") to enforce the visual theme. The visual prompt must be concise, under 20 words, and explicitly name the character (e.g. "Jimmy the cat") so the image adapter can map the reference face portrait.
+- Dialogue Pacing (type: "dialogue" ONLY): Write natural, engaging narration or dialogue. Do NOT stuff words just to fill time. The absolute maximum is ${maxWordCount} words per dialogue scene to prevent TTS audio from running longer than the video clip. Short, punchy lines (5-10 words) are preferred — let the animation carry the scene.
+- Song Lyrics (type: "song" ONLY): The word limit above does NOT apply to song scenes. Songs are played from a user-uploaded Suno MP3, so duration is handled externally. Write the COMPLETE song in a single scene — all verses, chorus, bridge, and repeated hooks as one continuous block of lyrics in the "text" field. A well-written song should have 3-6 verses minimum. NEVER split a single song across multiple scenes: one song = exactly one scene.
+- Director's Shot Brief: You are directing a camera crew who reads ONLY the current shot card — they have zero memory of any previous scene. Every "visualPrompt" must be a complete, self-contained director's brief that includes: (1) the style prefix "${selectedStyle} style animation of...", (2) the character's name AND a brief physical description so the video model can identify them (e.g. "Buddy, a small orange tabby kitten with big green eyes"), (3) the specific action or motion happening in this shot (make it dynamic enough to fill ${defaultShotDuration || 5} seconds of video naturally), and (4) the setting/background. Think like a film director writing a shot card for a crew that has never seen the script.
 - Target Audience Age: The tone of the dialogue, themes, and vocabulary must be tailored specifically for the "${selectedAge}" age bracket.
 - Genre: The story narrative style, pacing, and overall themes must fit the "${selectedGenre}" genre.
 
@@ -114,7 +106,11 @@ ${isSpinOff
 }
 3. CAST ALIGNMENT: You MUST ONLY use the following characters for the speaker roles and dialogue: ${characterNames}. Always assign the speaker roles correctly based on this cast.
 ${useMusicals 
-  ? `4. MUSIC SEGREGATION: You can include both "dialogue" and "song" scene types. For all scenes with type "song", you MUST write catchy kids song lyrics and include a "sunoStylePrompt" key suggesting a musical style/prompt for Suno AI (e.g. "upbeat kids singalong, bright bells, acoustic ukulele, 120bpm").` 
+  ? `4. MUSIC SEGREGATION & SONG STRUCTURE RULES:
+   - You may include both "dialogue" and "song" scene types. Use your judgment as a director — decide how many songs fit the story's genre, pacing, and emotional beats naturally.
+   - For each song scene, you MUST write a COMPLETE song — all verses, chorus, bridge, and any repeated hooks — as one continuous block of lyrics in the "text" field. NEVER put individual bars or lyric lines as separate song scenes. One song = exactly one scene.
+   - Each song scene MUST include a "sunoStylePrompt" key with a Suno AI music style suggestion (e.g. "upbeat kids singalong, bright bells, acoustic ukulele, 120bpm").
+   - The song lyrics in "text" can be as long as the song requires — this is expected and correct. Do NOT truncate lyrics.`
   : `4. DIALOGUE ONLY: You must ONLY generate scenes of type "dialogue". DO NOT generate any "song" scenes or Suno prompts. The entire storyboard timeline must consist of character dialogues/narrations.`
 }
 
@@ -126,7 +122,7 @@ The JSON structure for each scene must follow this schema:
     "character": "One of: ${characterNames}",
     "voice": "en-US-AnaNeural-Female" | "en-US-ChristopherNeural-Male" | "zh-CN-XiaoyiNeural-Female" | "en-US-GuyNeural-Male" | "en-US-AriaNeural-Female",
     "text": "The original polished dialogue spoken${useMusicals ? " or song lyrics sung" : ""} in this scene.",
-    "visualPrompt": "Concise prompt (under 20 words) starting with style, e.g.: \\"${selectedStyle} style animation of [characterName] [doing action], [background]\\".",
+    "visualPrompt": "Full director's shot brief starting with style prefix. Example: \\"${selectedStyle} style animation of [characterName], [brief physical description], [specific dynamic action filling the shot duration], [camera angle], [setting/background detail]\\".",
     "sunoStylePrompt": "Suno style suggestion (only for song types, empty string otherwise)"
   }
 ]
@@ -197,20 +193,11 @@ Note: For child boy character roles (like Jimmy), you must assign "en-US-Christo
             }));
             return NextResponse.json({ scenes: mappedScenes });
         } catch (parseErr: any) {
-            console.warn("[Animated Summarize] Failed to parse AI JSON, returning default mapping:", parseErr);
-            return NextResponse.json({
-                scenes: [
-                    {
-                        id: `scene-fallback-${Date.now()}`,
-                        type: "dialogue",
-                        character: characters?.[0]?.name || "Narrator",
-                        voice: "en-US-GuyNeural-Male",
-                        text: content,
-                        visualPrompt: "A scenic cartoon background, 3d animation",
-                        sunoStylePrompt: ""
-                    }
-                ]
-            });
+            console.error("[Animated Summarize] Failed to parse AI JSON response:", parseErr.message);
+            return NextResponse.json(
+                { error: "AI_RESPONSE_PARSE_ERROR", details: "The AI returned a malformed storyboard response. Please try generating again." },
+                { status: 500 }
+            );
         }
     } catch (err: any) {
         console.error("[Animated Summarize] Error:", err.message);

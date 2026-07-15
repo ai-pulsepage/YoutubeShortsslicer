@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
                 const jobId = data.jobId;
                 const status = data.status === "completed" ? "COMPLETED" : "FAILED";
                 let outputPath = data.outputPath || null;
+                const lastFramePath = data.lastFramePath || null;
                 const errorMsg = data.error || null;
 
                 if (status === "COMPLETED" && outputPath) {
@@ -72,7 +73,12 @@ export async function GET(req: NextRequest) {
                             if (searchQueriesMeta.visualShots && Array.isArray(searchQueriesMeta.visualShots)) {
                                 searchQueriesMeta.visualShots = searchQueriesMeta.visualShots.map((shot: any) => {
                                     if ((shotId && shot.id === shotId) || shot.jobId === jobId) {
-                                        return { ...shot, visualPath: outputPath, jobStatus: "COMPLETED" };
+                                        return {
+                                            ...shot,
+                                            visualPath: outputPath,
+                                            jobStatus: "COMPLETED",
+                                            ...(lastFramePath ? { lastFramePath } : {})
+                                        };
                                     }
                                     return shot;
                                 });
@@ -96,76 +102,6 @@ export async function GET(req: NextRequest) {
             } catch (err) {
                 console.error("[GET Projects Sync] Error processing result:", err);
             }
-        }
-
-        // 2. Retroactive sync check: find all COMPLETED GenJobs and link them if not done yet
-        try {
-            const completedJobs = await prisma.genJob.findMany({
-                where: {
-                    status: "COMPLETED",
-                    outputPath: { not: null }
-                }
-            });
-
-            for (const job of completedJobs) {
-                if (job.outputPath) {
-                    const organizedPath = await organizeCompletedJobAsset(job.id, job.outputPath);
-                    if (organizedPath !== job.outputPath) {
-                        await prisma.genJob.update({
-                            where: { id: job.id },
-                            data: { outputPath: organizedPath }
-                        });
-                        job.outputPath = organizedPath;
-                    }
-                }
-
-                const meta = job.metadata as any;
-                if (meta && (meta.sceneId || meta.shotId) && job.outputPath) {
-                    const sceneId = meta.sceneId;
-                    const shotId = meta.shotId;
-                    let targetScene = null;
-
-                    if (sceneId) {
-                        targetScene = await prisma.docScene.findUnique({ where: { id: sceneId } });
-                    } else if (shotId) {
-                        targetScene = await prisma.docScene.findFirst({
-                            where: { searchQueries: { contains: shotId } }
-                        });
-                    }
-
-                    if (targetScene) {
-                        let updatedPath = job.outputPath;
-                        let searchQueriesMeta: any = {};
-                        try {
-                            searchQueriesMeta = JSON.parse(targetScene.searchQueries || "{}");
-                        } catch {}
-
-                        if (searchQueriesMeta.visualShots && Array.isArray(searchQueriesMeta.visualShots)) {
-                            searchQueriesMeta.visualShots = searchQueriesMeta.visualShots.map((shot: any) => {
-                                if ((shotId && shot.id === shotId) || shot.jobId === job.id) {
-                                    return { ...shot, visualPath: job.outputPath, jobStatus: "COMPLETED" };
-                                }
-                                return shot;
-                            });
-
-                            const allDone = searchQueriesMeta.visualShots.every((s: any) => s.jobStatus === "COMPLETED" || s.visualPath);
-                            if (allDone && searchQueriesMeta.visualShots.length > 0) {
-                                updatedPath = searchQueriesMeta.visualShots[searchQueriesMeta.visualShots.length - 1].visualPath || job.outputPath;
-                            }
-                        }
-
-                        await prisma.docScene.update({
-                            where: { id: targetScene.id },
-                            data: {
-                                assembledPath: updatedPath,
-                                searchQueries: JSON.stringify(searchQueriesMeta)
-                            }
-                        });
-                    }
-                }
-            }
-        } catch (retroErr) {
-            console.error("[GET Projects Sync] Retroactive link check failed:", retroErr);
         }
 
         const projects = await prisma.documentary.findMany({

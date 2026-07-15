@@ -102,7 +102,12 @@ async function processResult(result: ResultMessage): Promise<void> {
                 if (searchQueriesMeta.visualShots && Array.isArray(searchQueriesMeta.visualShots)) {
                     searchQueriesMeta.visualShots = searchQueriesMeta.visualShots.map((shot: any) => {
                         if ((shotId && shot.id === shotId) || shot.jobId === jobId) {
-                            return { ...shot, visualPath: finalPath, jobStatus: "COMPLETED" };
+                            return {
+                                ...shot,
+                                visualPath: finalPath,
+                                jobStatus: "COMPLETED",
+                                ...(lastFramePath ? { lastFramePath } : {})
+                            };
                         }
                         return shot;
                     });

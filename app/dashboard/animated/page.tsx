@@ -525,7 +525,7 @@ export default function KidsStoryBuilderPage() {
             const res = await fetch("/api/animated/scenes/improve-shot-prompt", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ visualPrompt, primaryCharacter, sceneText })
+                body: JSON.stringify({ visualPrompt, primaryCharacter, sceneText, visualStyle })
             });
             const data = await res.json();
 
@@ -714,23 +714,24 @@ export default function KidsStoryBuilderPage() {
             if (!durRes.ok) throw new Error(durData.error || "Failed to resolve audio duration");
 
             const duration = durData.duration || 5.0;
-            const numShots = Math.max(1, Math.ceil(duration / 5.0));
+            const numShots = Math.max(1, Math.ceil(duration / (defaultShotDuration || 5)));
 
             // 2. Plan visual prompts using DeepSeek
+            const shotDur = duration / numShots;
             const planRes = await fetch("/api/animated/scenes/video/plan", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ lyrics, numShots, characters })
+                body: JSON.stringify({ lyrics, numShots, characters, shotDuration: Math.max(3, Math.round(shotDur)), visualStyle })
             });
             const planData = await planRes.json();
             if (!planRes.ok) throw new Error(planData.error || "Failed to plan visual shots");
 
-            const shotDur = duration / numShots;
             const plannedShots = planData.shots.map((s: any, idx: number) => ({
                 id: `shot-${idx}-${Date.now()}`,
                 primaryCharacter: s.primaryCharacter || "Narrator",
                 visualPrompt: s.visualPrompt || "Cartoon scene background",
                 duration: Math.max(3, Math.round(shotDur)),
+                chainFromPrevious: idx === 0 ? false : (s.chainFromPrevious ?? false),
                 jobStatus: "IDLE"
             }));
 

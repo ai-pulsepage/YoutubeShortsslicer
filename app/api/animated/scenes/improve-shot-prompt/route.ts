@@ -6,7 +6,7 @@ export async function POST(req: NextRequest) {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { visualPrompt, primaryCharacter, sceneText } = await req.json();
+    const { visualPrompt, primaryCharacter, sceneText, visualStyle } = await req.json();
     if (!visualPrompt) return NextResponse.json({ error: "visualPrompt is required" }, { status: 400 });
 
     try {
@@ -20,13 +20,14 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "DEEPSEEK_KEY_MISSING", details: "DeepSeek API key is not configured. Please define process.env.DEEPSEEK_API_KEY or save it in settings." }, { status: 400 });
         }
 
+        const activeStyle = visualStyle || "Pixar 3D cartoon";
         const systemPrompt = `You are a 3D animation director writing prompts for a video generation model.
 Your task is to rewrite the provided visual shot prompt so that the focus is on the new primary character/subject specified by the user.
 Make sure the description aligns naturally with the context of the scene.
-Do NOT change the art style (maintain a consistent 3D cartoon style).
+Do NOT change the art style — the style for this project is: "${activeStyle}". All prompts must start with this style prefix.
 Ensure all references to the old primary character are replaced with the new primary character, and their actions/descriptions fit them correctly.
-Additionally, you MUST expand the prompt into a high-quality visual description (specifying background setting, character look, and actions suitable for a video generator, with a Pixar-like cartoon aesthetic).
-CRITICAL: Keep the prompt concise, direct, and under 50 words maximum (typically 2 clear sentences). Avoid excessively long descriptions, fluff, or flowery backstory.
+Expand the prompt into a complete director's shot brief including: character name + brief physical description, a dynamic action that fills the shot duration naturally, camera angle, and setting/background context.
+CRITICAL: The video generator reads ONLY this shot card with no memory of other shots — the prompt must be completely self-contained.
 Return ONLY the newly rewritten prompt text without quotes, notes, or preamble.`;
 
         const userPayload = `Original Prompt: "${visualPrompt}"

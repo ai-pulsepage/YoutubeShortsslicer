@@ -334,7 +334,8 @@ def process_job(job: dict, r: redis.Redis):
 
                 # Generate video clip
                 output_file = os.path.join(tmpdir, f"{job_id}.mp4")
-                duration_secs = job.get("duration", 5)
+                # duration lives inside metadata (set by dispatchJob on the Next.js side)
+                duration_secs = metadata.get("duration", job.get("duration", 5))
                 num_frames = max(33, int(duration_secs * 24))  # 24fps for Wan2.2
                 generate_video(prompt, ref_path, output_file, num_frames=num_frames)
 
@@ -354,8 +355,8 @@ def process_job(job: dict, r: redis.Redis):
                     if os.path.exists(last_frame_file):
                         last_frame_key = f"documentaries/clips/{job_id}_last_frame.png"
                         upload_to_r2(last_frame_file, last_frame_key, "image/png")
-                except Exception:
-                    pass  # Last frame extraction is best-effort
+                except Exception as lfe:
+                    print(f"  ⚠️ Last frame extraction failed (non-critical, chaining will use character avatar): {type(lfe).__name__}: {lfe}")
 
                 result = {
                     "jobId": job_id,

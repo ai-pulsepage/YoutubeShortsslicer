@@ -36,8 +36,6 @@ export async function POST(req: NextRequest) {
         let queuedShotsCount = 0;
 
         // 2. Batch queue pending character avatars
-        // We will update the character assets in postgres
-        const updatedAssets = [];
         for (const asset of project.assets) {
             // If the character doesn't have an avatar face yet, queue it!
             if (!asset.imagePath) {

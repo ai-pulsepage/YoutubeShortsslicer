@@ -6,7 +6,7 @@ export async function POST(req: NextRequest) {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { lyrics, numShots, characters } = await req.json();
+    const { lyrics, numShots, characters, shotDuration, visualStyle } = await req.json();
     if (!lyrics || !numShots) {
         return NextResponse.json({ error: "lyrics and numShots are required" }, { status: 400 });
     }
@@ -23,23 +23,27 @@ export async function POST(req: NextRequest) {
             : "Narrator, Leo, Lily";
 
         if (!apiKey) {
-            // Fallback plan
-            const shots = [];
-            for (let i = 0; i < numShots; i++) {
-                shots.push({
-                    index: i + 1,
-                    primaryCharacter: characters?.[i % characters.length]?.name || "Narrator",
-                    visualPrompt: `Pixar style cartoon scene background, step ${i + 1} of story.`
-                });
-            }
-            return NextResponse.json({ shots });
+            return NextResponse.json(
+                { error: "DEEPSEEK_KEY_MISSING", details: "DeepSeek API key is not configured. Please add it in Settings." },
+                { status: 503 }
+            );
         }
 
-        const systemPrompt = `You are a professional kids TV storyboard director. Break down the provided song lyrics/text into EXACTLY ${numShots} consecutive visual shots (each representing a 5-second video clip).
+        const selectedStyle = visualStyle || "Pixar 3D";
+        const clipDuration = shotDuration || 5;
+
+        const systemPrompt = `You are a professional kids TV storyboard director. Break down the provided song lyrics/text into EXACTLY ${numShots} consecutive visual shots. Each shot represents a ${clipDuration}-second video clip.
+
 CRITICAL RULES:
 1. You MUST generate exactly ${numShots} shots. No more, no less.
-2. For each shot, assign the "primaryCharacter" from the following cast list: ${characterNames}. Choose the character who should be the main subject of that shot.
-3. Write a vivid, 3D Pixar cartoon visual prompt mapping the story beats of the lyrics to that character's action in that shot.
+2. For each shot, assign the "primaryCharacter" from the following cast list: ${characterNames}. Choose the character who is the main subject of that shot.
+3. DIRECTOR'S BRIEF: The video generator reads ONLY this shot card — it has zero memory of any other shot. Every "visualPrompt" must be completely self-contained and include:
+   - Style prefix: "${selectedStyle} style animation of..."
+   - Character name + brief physical description (e.g. "Leo, a cheerful brown bear cub with a red scarf")
+   - A specific, dynamic action that naturally fills ${clipDuration} seconds of motion (e.g. not "standing" but "slowly turning around looking up in wonder" or "running across a meadow, arms pumping")
+   - Camera angle/movement if relevant (e.g. "close-up", "wide shot", "slow pan left")
+   - Setting/background context
+4. CHAINING: Decide whether each shot flows continuously from the previous shot's last frame (chainFromPrevious: true) or starts fresh with a hard cut to a new location/angle (chainFromPrevious: false). Shot index 1 is ALWAYS chainFromPrevious: false. Use chaining when the same character is continuing an uninterrupted action across shots. Use false when there is a location change, time jump, or new character entering.
 
 Return ONLY a valid JSON array of shots without any markdown wrapping or preamble.
 JSON Schema:
@@ -47,7 +51,8 @@ JSON Schema:
   {
     "index": number, // 1-indexed
     "primaryCharacter": "One of: ${characterNames}",
-    "visualPrompt": "Detailed visual animation prompt."
+    "visualPrompt": "Full director's shot brief as described above.",
+    "chainFromPrevious": boolean
   }
 ]`;
 
@@ -93,17 +98,11 @@ JSON Schema:
             const shots = JSON.parse(content);
             return NextResponse.json({ shots: Array.isArray(shots) ? shots : [shots] });
         } catch (parseErr: any) {
-            console.error("[Storyboard Plan] Parse failed:", parseErr);
-            // Return fallback sequence
-            const shots = [];
-            for (let i = 0; i < numShots; i++) {
-                shots.push({
-                    index: i + 1,
-                    primaryCharacter: characters?.[i % characters.length]?.name || "Narrator",
-                    visualPrompt: `A 3D cartoon scene background, Pixar style, part ${i + 1} matching lyrics.`
-                });
-            }
-            return NextResponse.json({ shots });
+            console.error("[Storyboard Plan] Failed to parse AI shot plan JSON:", parseErr.message);
+            return NextResponse.json(
+                { error: "AI_RESPONSE_PARSE_ERROR", details: "The AI returned a malformed shot plan. Please try planning the shots again." },
+                { status: 500 }
+            );
         }
 
     } catch (err: any) {
