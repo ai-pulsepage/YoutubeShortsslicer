@@ -63,14 +63,13 @@ export async function POST(req: NextRequest) {
 CRITICAL RULES:
 1. You MUST generate exactly ${numShots} shots. No more, no less.
 2. For each shot, assign the "primaryCharacter" from the following cast ONLY: ${allCharacterNames}. Never assign a character not in this list.
-3. DIRECTOR'S BRIEF: The video generator reads ONLY this shot card — it has zero memory of any other shot. Every "visualPrompt" must be completely self-contained and begin with the style prefix: "${stylePrefix}" followed by:
-   - Character name + their exact visual description from the CHARACTER ROSTER below
-   - A specific, dynamic action that naturally fills ${clipDuration} seconds of motion
-   - Camera angle/movement if relevant (e.g. "close-up", "wide shot", "slow pan left")
-   - Setting/background context
+3. DIRECTOR'S BRIEF: Every shot contains two prompt components to separate composition from motion:
+   - "imagePrompt": Describes the static starting canvas (background, setting, layout, lighting, character physical description from roster, and starting pose). It MUST start with the style prefix: "${stylePrefix}" followed by the details.
+   - "motionPrompt": Describes ONLY the motion, action, and camera movement that occurs during the ${clipDuration} seconds (e.g. "Lily yawns and points to the right as the camera slowly pans left"). DO NOT repeat style or character physical descriptions here.
+   - "visualPrompt": A copy of "imagePrompt" (for backwards compatibility).
 4. CHAINING: Decide whether each shot flows continuously from the previous shot's last frame (chainFromPrevious: true) or starts fresh with a hard cut (chainFromPrevious: false). Shot index 1 is ALWAYS chainFromPrevious: false.
 
-CHARACTER ROSTER — use these exact descriptions in every visualPrompt:
+CHARACTER ROSTER — use these exact descriptions in every imagePrompt:
 ANCHORED (use verbatim, do not alter):
 ${anchoredRoster || "(none)"}
 
@@ -83,7 +82,9 @@ JSON Schema:
   {
     "index": number, // 1-indexed
     "primaryCharacter": "One of: ${allCharacterNames}",
-    "visualPrompt": "Full director's shot brief as described above.",
+    "imagePrompt": "Detailed visual description starting with style prefix.",
+    "motionPrompt": "Focussed motion/action description.",
+    "visualPrompt": "Copy of imagePrompt.",
     "chainFromPrevious": boolean
   }
 ]`;

@@ -91,86 +91,139 @@ export async function POST(req: NextRequest) {
             const updatedVisualShots = [];
             for (let sIdx = 0; sIdx < visualShots.length; sIdx++) {
                 const shot = visualShots[sIdx];
-                // Queue shot if it's IDLE, FAILED, or missing videoPath
-                if (!shot.visualPath && (shot.jobStatus === "IDLE" || shot.jobStatus === "FAILED" || !shot.jobStatus || shot.jobStatus === "PENDING_AVATAR")) {
-                    const alreadyQueuedVideo = activeJobs.some(j => {
+                // Queue shot if it's IDLE, FAILED, PENDING_PREVIOUS, or missing videoPath
+                if (!shot.visualPath && (shot.jobStatus === "IDLE" || shot.jobStatus === "FAILED" || !shot.jobStatus || shot.jobStatus === "PENDING_PREVIOUS" || shot.jobStatus === "PENDING_AVATAR" || shot.jobStatus === "GENERATING_IMAGE")) {
+                    
+                    // Check if there is already an active job for this shot (either image generation or video animation)
+                    const alreadyQueuedJob = activeJobs.some(j => {
                         const meta = j.metadata as any;
-                        return j.jobType === "shot_video" && meta && meta.sceneId === scene.id && meta.shotId === shot.id;
+                        return meta && meta.sceneId === scene.id && meta.shotId === shot.id;
                     });
                     
-                    if (alreadyQueuedVideo) {
-                        console.log(`[Batch Queue] Video job for shot ${shot.id} is already active. Skipping duplicate.`);
+                    if (alreadyQueuedJob) {
+                        console.log(`[Batch Queue] Active job for shot ${shot.id} already exists. Skipping duplicate.`);
                         updatedVisualShots.push(shot);
                         continue;
                     }
 
-                    let referenceImages: string[] = [];
-                    let hasMissingAvatar = false;
-                    let hasChainedImage = false;
-
-                    // Try to load context frame if transition chaining is enabled
+                    // ─── Case 1: Chained Transitions ───
                     if (shot.chainFromPrevious) {
                         const prevShot = getPreviousShot(project, scene, sIdx);
                         if (prevShot && prevShot.lastFramePath) {
-                            referenceImages = [prevShot.lastFramePath];
-                            hasChainedImage = true;
-                            console.log(`[Batch Queue] Shot ${shot.id} chained from previous frame: ${prevShot.lastFramePath}`);
-                        }
-                    }
+                            // Previous shot is complete, we can dispatch the video animation job immediately!
+                            const jobMetadata = {
+                                shotId: shot.id,
+                                sceneId: scene.id,
+                                duration: shot.duration || 5,
+                                chainFromPrevious: true,
+                                sourceApp: "Animated Shorts",
+                                title: project.title || "Kids Story Project"
+                            };
 
-                    // Fallback to character avatar if not chained or chained frame is missing
-                    if (!hasChainedImage && shot.primaryCharacter && shot.primaryCharacter !== "None") {
-                        const charAsset = project.assets.find(
-                            a => a.label.toLowerCase() === shot.primaryCharacter.toLowerCase()
-                        );
-                        if (charAsset) {
-                            if (charAsset.imagePath) {
-                                referenceImages = [charAsset.imagePath];
-                            } else {
-                                hasMissingAvatar = true;
-                            }
-                        }
-                    }
+                            const job = await prisma.genJob.create({
+                                data: {
+                                    documentaryId: project.id,
+                                    jobType: "shot_video",
+                                    prompt: shot.motionPrompt || shot.visualPrompt,
+                                    status: "QUEUED",
+                                    metadata: jobMetadata as any
+                                }
+                            });
 
-                    if (hasMissingAvatar) {
-                        // Mark as pending avatar, do not dispatch to Redis yet
-                        shot.jobStatus = "PENDING_AVATAR";
-                        modified = true;
-                    } else {
-                        const jobMetadata = {
-                            shotId: shot.id,
-                            sceneId: scene.id,
-                            duration: shot.duration || 5,
-                            chainFromPrevious: !!shot.chainFromPrevious,
-                            sourceApp: "Animated Shorts",
-                            title: project.title || "Kids Story Project"
-                        };
-
-                        // Create a GenJob for video
-                        const job = await prisma.genJob.create({
-                            data: {
+                            await dispatchJob({
+                                jobId: job.id,
                                 documentaryId: project.id,
-                                jobType: "shot_video",
-                                prompt: shot.visualPrompt,
-                                status: "QUEUED",
-                                metadata: jobMetadata as any
+                                type: "shot_video",
+                                prompt: shot.motionPrompt || shot.visualPrompt,
+                                referenceImages: [prevShot.lastFramePath],
+                                metadata: jobMetadata
+                            });
+
+                            shot.jobId = job.id;
+                            shot.jobStatus = "QUEUED";
+                            modified = true;
+                            queuedShotsCount++;
+                        } else {
+                            // Previous shot is not rendered yet, set status to PENDING_PREVIOUS so webhook dispatches it later
+                            if (shot.jobStatus !== "PENDING_PREVIOUS") {
+                                shot.jobStatus = "PENDING_PREVIOUS";
+                                shot.jobId = undefined;
+                                modified = true;
                             }
-                        });
+                        }
+                    } 
+                    // ─── Case 2: Hard Cuts / Unchained (Composition Stage) ───
+                    else {
+                        if (shot.startImagePath) {
+                            // We already generated the starting image, dispatch the video job!
+                            const jobMetadata = {
+                                shotId: shot.id,
+                                sceneId: scene.id,
+                                duration: shot.duration || 5,
+                                chainFromPrevious: false,
+                                sourceApp: "Animated Shorts",
+                                title: project.title || "Kids Story Project"
+                            };
 
-                        // Dispatch to GPU worker queue
-                        await dispatchJob({
-                            jobId: job.id,
-                            documentaryId: project.id,
-                            type: "shot_video",
-                            prompt: shot.visualPrompt,
-                            referenceImages,
-                            metadata: jobMetadata
-                        });
+                            const job = await prisma.genJob.create({
+                                data: {
+                                    documentaryId: project.id,
+                                    jobType: "shot_video",
+                                    prompt: shot.motionPrompt || shot.visualPrompt,
+                                    status: "QUEUED",
+                                    metadata: jobMetadata as any
+                                }
+                            });
 
-                        shot.jobId = job.id;
-                        shot.jobStatus = "QUEUED";
-                        modified = true;
-                        queuedShotsCount++;
+                            await dispatchJob({
+                                jobId: job.id,
+                                documentaryId: project.id,
+                                type: "shot_video",
+                                prompt: shot.motionPrompt || shot.visualPrompt,
+                                referenceImages: [shot.startImagePath],
+                                metadata: jobMetadata
+                            });
+
+                            shot.jobId = job.id;
+                            shot.jobStatus = "QUEUED";
+                            modified = true;
+                            queuedShotsCount++;
+                        } else {
+                            // Generate starting image first using FLUX
+                            const jobMetadata = {
+                                shotId: shot.id,
+                                sceneId: scene.id,
+                                jobPurpose: "shot_start_image",
+                                sourceApp: "Animated Shorts",
+                                model: "flux",
+                                title: project.title || "Kids Story Project"
+                            };
+
+                            const job = await prisma.genJob.create({
+                                data: {
+                                    documentaryId: project.id,
+                                    jobType: "ref_image",
+                                    prompt: shot.imagePrompt || shot.visualPrompt,
+                                    status: "QUEUED",
+                                    metadata: jobMetadata as any
+                                }
+                            });
+
+                            await dispatchJob({
+                                jobId: job.id,
+                                documentaryId: project.id,
+                                type: "ref_image",
+                                prompt: shot.imagePrompt || shot.visualPrompt,
+                                referenceImages: [],
+                                metadata: jobMetadata
+                            });
+
+                            shot.startImageJobId = job.id;
+                            shot.startImageJobStatus = "QUEUED";
+                            shot.jobStatus = "GENERATING_IMAGE";
+                            modified = true;
+                            queuedShotsCount++;
+                        }
                     }
                 }
                 updatedVisualShots.push(shot);

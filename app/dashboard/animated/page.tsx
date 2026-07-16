@@ -18,6 +18,7 @@ import {
     Volume2,
     Music,
     RefreshCw,
+    Clock,
     Check,
     Users,
     Save,
@@ -35,9 +36,14 @@ type Shot = {
     id: string;
     primaryCharacter: string;
     visualPrompt: string;
+    imagePrompt?: string;     // FLUX starting frame prompt
+    motionPrompt?: string;    // Wan motion prompt
+    startImagePath?: string;  // Generated starting webp frame path
+    startImageJobId?: string; // FLUX generation jobId
+    startImageJobStatus?: "IDLE" | "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED";
     visualPath?: string;      // R2 key of generated shot clip
     jobId?: string;           // RunPod Job ID
-    jobStatus?: "IDLE" | "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED" | "PENDING_AVATAR";
+    jobStatus?: "IDLE" | "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED" | "PENDING_AVATAR" | "PENDING_PREVIOUS" | "GENERATING_IMAGE";
     duration?: number;        // Optional custom duration in seconds
     chainFromPrevious?: boolean; // Optional flag to chain keyframe context
 };
@@ -527,7 +533,7 @@ export default function KidsStoryBuilderPage() {
     };
 
     // AI Rewrite Shot Visual Prompt to match Character
-    const handleRewriteShotPrompt = async (sceneId: string, shotId: string, visualPrompt: string, primaryCharacter: string, sceneText: string) => {
+    const handleRewriteShotPrompt = async (sceneId: string, shotId: string, visualPrompt: string, motionPrompt: string | undefined, primaryCharacter: string, sceneText: string) => {
         setError("");
         setInsufficientFunds(false);
         setRewritingShotId(shotId);
@@ -535,7 +541,7 @@ export default function KidsStoryBuilderPage() {
             const res = await fetch("/api/animated/scenes/improve-shot-prompt", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ visualPrompt, primaryCharacter, sceneText, visualStyle })
+                body: JSON.stringify({ visualPrompt, motionPrompt, primaryCharacter, sceneText, visualStyle })
             });
             const data = await res.json();
 
@@ -547,7 +553,11 @@ export default function KidsStoryBuilderPage() {
             if (!res.ok) throw new Error(data.error || "Failed to rewrite visual prompt");
 
             if (data.rewrittenPrompt) {
-                updateShot(sceneId, shotId, { visualPrompt: data.rewrittenPrompt });
+                updateShot(sceneId, shotId, { 
+                    visualPrompt: data.rewrittenPrompt,
+                    imagePrompt: data.rewrittenImagePrompt || data.rewrittenPrompt,
+                    motionPrompt: data.rewrittenMotionPrompt || motionPrompt
+                });
             }
         } catch (err: any) {
             setError(err.message || "Failed to rewrite prompt.");
@@ -847,7 +857,7 @@ export default function KidsStoryBuilderPage() {
                             return {
                                 ...shot,
                                 jobId: data.jobId,
-                                jobStatus: data.pendingAvatar ? "PENDING_AVATAR" : "QUEUED"
+                                jobStatus: data.pendingAvatar ? "PENDING_AVATAR" : (data.generatingImage ? "GENERATING_IMAGE" : "QUEUED")
                             };
                         })
                     };
@@ -1919,7 +1929,7 @@ export default function KidsStoryBuilderPage() {
                                                                         )}
                                                                     </div>
                                                                     {shot.visualPrompt && (
-                                                                        <button onClick={() => handleRewriteShotPrompt(scene.id, shot.id, shot.visualPrompt, shot.primaryCharacter, scene.text)}
+                                                                        <button onClick={() => handleRewriteShotPrompt(scene.id, shot.id, shot.visualPrompt, shot.motionPrompt, shot.primaryCharacter, scene.text)}
                                                                             disabled={rewritingShotId === shot.id}
                                                                             className="flex items-center gap-0.5 text-violet-400 hover:text-violet-300 text-[9px] font-bold disabled:opacity-50 transition-all">
                                                                             {rewritingShotId === shot.id ? (
@@ -1937,17 +1947,29 @@ export default function KidsStoryBuilderPage() {
                                                                     )}
                                                                 </div>
 
-                                                                <textarea value={shot.visualPrompt} onChange={e => updateShot(scene.id, shot.id, { visualPrompt: e.target.value })} rows={2}
-                                                                    className="w-full bg-gray-800 border border-gray-750 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-violet-500 font-sans leading-normal resize-none" />
+                                                                <div className="text-[10px] text-gray-500 mb-0.5 font-bold uppercase tracking-wider">Scene Setup / Canvas Prompt</div>
+                                                                <textarea value={shot.visualPrompt} onChange={e => updateShot(scene.id, shot.id, { visualPrompt: e.target.value, imagePrompt: e.target.value })} rows={2}
+                                                                    className="w-full bg-gray-800 border border-gray-750 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-violet-500 font-sans leading-normal resize-none mb-1.5" />
                                                                 
+                                                                <div className="text-[10px] text-gray-500 mb-0.5 font-bold uppercase tracking-wider flex items-center justify-between">
+                                                                    <span>Motion / Animation Prompt</span>
+                                                                    {shot.chainFromPrevious && <span className="text-[9px] text-violet-400 capitalize">Chained from previous shot</span>}
+                                                                </div>
+                                                                <textarea value={shot.motionPrompt || ""} onChange={e => updateShot(scene.id, shot.id, { motionPrompt: e.target.value })} rows={2} placeholder="Describe the character motion, gestures, and camera movements for this shot..."
+                                                                    className="w-full bg-gray-800 border border-gray-750 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-violet-500 font-sans leading-normal resize-none mb-1.5" />
+
                                                                 <div className="flex items-center justify-between gap-2">
                                                                     <span className="text-[10px] font-mono text-gray-500">
                                                                         {shot.jobStatus === "QUEUED" ? (
                                                                             <span className="flex items-center gap-1 text-gray-450"><RefreshCw className="w-3 h-3 animate-spin" /> Queued</span>
                                                                         ) : shot.jobStatus === "PROCESSING" ? (
-                                                                            <span className="flex items-center gap-1 text-violet-400"><Loader2 className="w-3 h-3 animate-spin" /> Generating...</span>
+                                                                            <span className="flex items-center gap-1 text-violet-400"><Loader2 className="w-3 h-3 animate-spin" /> Animating Video...</span>
                                                                         ) : shot.jobStatus === "PENDING_AVATAR" ? (
                                                                             <span className="flex items-center gap-1 text-amber-400 font-medium"><Users className="w-3 h-3 animate-pulse" /> Pending Avatar</span>
+                                                                        ) : shot.jobStatus === "PENDING_PREVIOUS" ? (
+                                                                            <span className="flex items-center gap-1 text-purple-400 font-medium animate-pulse"><Clock className="w-3 h-3" /> Waiting for chain...</span>
+                                                                        ) : shot.jobStatus === "GENERATING_IMAGE" ? (
+                                                                            <span className="flex items-center gap-1 text-teal-400 font-medium animate-pulse"><Loader2 className="w-3 h-3 animate-spin" /> Generating canvas...</span>
                                                                         ) : shot.jobStatus === "COMPLETED" ? (
                                                                             <span className="flex items-center gap-1 text-emerald-400"><Check className="w-3 h-3" /> Ready</span>
                                                                         ) : shot.jobStatus === "FAILED" ? (

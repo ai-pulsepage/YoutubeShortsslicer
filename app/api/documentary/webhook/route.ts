@@ -109,53 +109,148 @@ export async function POST(req: NextRequest) {
             console.log(`[Webhook]   UGC Avatar ${meta.ugcAvatarId} updated with image path`);
         }
 
-        // Check if this job was for an Animated Short Scene/Shot
+        // Check if this job was for an Animated Short Scene/Shot starting image or final video clip
         if (meta && (meta.sceneId || meta.shotId)) {
             const sceneId = meta.sceneId;
             const shotId = meta.shotId;
-            let targetScene = null;
+            const jobPurpose = meta.jobPurpose;
 
-            if (sceneId) {
-                targetScene = await prisma.docScene.findUnique({ where: { id: sceneId } });
-            } else if (shotId) {
-                targetScene = await prisma.docScene.findFirst({
-                    where: { searchQueries: { contains: shotId } }
-                });
-            }
-
-            if (targetScene) {
-                let updatedPath = finalPath;
-                let searchQueriesMeta: any = {};
-                try {
-                    searchQueriesMeta = JSON.parse(targetScene.searchQueries || "{}");
-                } catch {}
-
-                if (searchQueriesMeta.visualShots && Array.isArray(searchQueriesMeta.visualShots)) {
-                    searchQueriesMeta.visualShots = searchQueriesMeta.visualShots.map((shot: any) => {
-                        if ((shotId && shot.id === shotId) || shot.jobId === jobId) {
-                            return { 
-                                ...shot, 
-                                visualPath: finalPath, 
-                                jobStatus: "COMPLETED",
-                                lastFramePath: lastFramePath || undefined
-                            };
-                        }
-                        return shot;
+            if (jobPurpose === "shot_start_image" && job.jobType === "ref_image") {
+                // This is a completed starting image!
+                let targetScene = null;
+                if (sceneId) {
+                    targetScene = await prisma.docScene.findUnique({ where: { id: sceneId } });
+                } else if (shotId) {
+                    targetScene = await prisma.docScene.findFirst({
+                        where: { searchQueries: { contains: shotId } }
                     });
-
-                    const allDone = searchQueriesMeta.visualShots.every((s: any) => s.jobStatus === "COMPLETED" || s.visualPath);
-                    if (allDone && searchQueriesMeta.visualShots.length > 0) {
-                        updatedPath = searchQueriesMeta.visualShots[searchQueriesMeta.visualShots.length - 1].visualPath || finalPath;
-                    }
                 }
 
-                await prisma.docScene.update({
-                    where: { id: targetScene.id },
-                    data: {
-                        assembledPath: updatedPath,
-                        searchQueries: JSON.stringify(searchQueriesMeta)
+                if (targetScene) {
+                    let searchQueriesMeta: any = {};
+                    try {
+                        searchQueriesMeta = JSON.parse(targetScene.searchQueries || "{}");
+                    } catch {}
+
+                    let shotToDispatch: any = null;
+                    if (searchQueriesMeta.visualShots && Array.isArray(searchQueriesMeta.visualShots)) {
+                        searchQueriesMeta.visualShots = searchQueriesMeta.visualShots.map((shot: any) => {
+                            if ((shotId && shot.id === shotId) || shot.startImageJobId === jobId) {
+                                shotToDispatch = {
+                                    ...shot,
+                                    startImagePath: finalPath,
+                                    startImageJobStatus: "COMPLETED"
+                                };
+                                return shotToDispatch;
+                            }
+                            return shot;
+                        });
                     }
-                });
+
+                    if (shotToDispatch) {
+                        // Immediately dispatch the video job!
+                        const videoMetadata = {
+                            shotId: shotToDispatch.id,
+                            sceneId: targetScene.id,
+                            duration: shotToDispatch.duration || 5,
+                            chainFromPrevious: false,
+                            sourceApp: "Animated Shorts",
+                            title: meta.title || "Kids Story Project"
+                        };
+
+                        const videoJob = await prisma.genJob.create({
+                            data: {
+                                documentaryId: job.documentaryId,
+                                jobType: "shot_video",
+                                prompt: shotToDispatch.motionPrompt || shotToDispatch.visualPrompt,
+                                status: "QUEUED",
+                                metadata: videoMetadata as any
+                            }
+                        });
+
+                        await dispatchJob({
+                            jobId: videoJob.id,
+                            documentaryId: job.documentaryId,
+                            type: "shot_video",
+                            prompt: shotToDispatch.motionPrompt || shotToDispatch.visualPrompt,
+                            referenceImages: [finalPath],
+                            metadata: videoMetadata
+                        });
+
+                        // Update the visualShots array with the new video job info
+                        searchQueriesMeta.visualShots = searchQueriesMeta.visualShots.map((shot: any) => {
+                            if (shot.id === shotToDispatch.id) {
+                                return {
+                                    ...shot,
+                                    jobId: videoJob.id,
+                                    jobStatus: "QUEUED"
+                                };
+                            }
+                            return shot;
+                        });
+                    }
+
+                    await prisma.docScene.update({
+                        where: { id: targetScene.id },
+                        data: {
+                            searchQueries: JSON.stringify(searchQueriesMeta)
+                        }
+                    });
+                }
+            } else {
+                // This is a completed video job or other standard visual shot clip!
+                let targetScene = null;
+                if (sceneId) {
+                    targetScene = await prisma.docScene.findUnique({ where: { id: sceneId } });
+                } else if (shotId) {
+                    targetScene = await prisma.docScene.findFirst({
+                        where: { searchQueries: { contains: shotId } }
+                    });
+                }
+
+                if (targetScene) {
+                    let updatedPath = finalPath;
+                    let searchQueriesMeta: any = {};
+                    try {
+                        searchQueriesMeta = JSON.parse(targetScene.searchQueries || "{}");
+                    } catch {}
+
+                    if (searchQueriesMeta.visualShots && Array.isArray(searchQueriesMeta.visualShots)) {
+                        searchQueriesMeta.visualShots = searchQueriesMeta.visualShots.map((shot: any) => {
+                            if ((shotId && shot.id === shotId) || shot.jobId === jobId) {
+                                return { 
+                                    ...shot, 
+                                    visualPath: finalPath, 
+                                    jobStatus: "COMPLETED",
+                                    lastFramePath: lastFramePath || undefined
+                                };
+                            }
+                            return shot;
+                        });
+
+                        const allDone = searchQueriesMeta.visualShots.every((s: any) => s.jobStatus === "COMPLETED" || s.visualPath);
+                        if (allDone && searchQueriesMeta.visualShots.length > 0) {
+                            updatedPath = searchQueriesMeta.visualShots[searchQueriesMeta.visualShots.length - 1].visualPath || finalPath;
+                        }
+                    }
+
+                    await prisma.docScene.update({
+                        where: { id: targetScene.id },
+                        data: {
+                            assembledPath: updatedPath,
+                            searchQueries: JSON.stringify(searchQueriesMeta)
+                        }
+                    });
+
+                    // Trigger next chained shot if any is waiting for this last frame!
+                    if (lastFramePath && (shotId || job.shotId)) {
+                        try {
+                            await dispatchNextChainedShotIfNeeded(job.documentaryId, shotId || job.shotId || "", lastFramePath);
+                        } catch (chainErr: any) {
+                            console.error("[Webhook Auto-Chain] Failed to check/dispatch chained shot:", chainErr.message);
+                        }
+                    }
+                }
             }
         }
 
@@ -400,6 +495,95 @@ async function dispatchPendingVideoJobsForCharacter(projectId: string, character
                     searchQueries: JSON.stringify(searchQueriesParsed)
                 }
             });
+        }
+    }
+}
+
+async function dispatchNextChainedShotIfNeeded(documentaryId: string, completedShotId: string, completedLastFramePath: string) {
+    const project = await prisma.documentary.findUnique({
+        where: { id: documentaryId },
+        include: {
+            scenes: { orderBy: { sceneIndex: "asc" } }
+        }
+    });
+    if (!project) return;
+
+    // Build a flat list of all shots in the project
+    let allShots: any[] = [];
+    let shotSceneMap: Record<string, string> = {}; // shotId -> sceneId
+    for (const scene of project.scenes) {
+        let meta: any = {};
+        try {
+            meta = JSON.parse(scene.searchQueries || "{}");
+        } catch {}
+        const shots = meta.visualShots || [];
+        for (const s of shots) {
+            allShots.push(s);
+            shotSceneMap[s.id] = scene.id;
+        }
+    }
+
+    // Find the index of the completed shot
+    const compIdx = allShots.findIndex(s => s.id === completedShotId);
+    if (compIdx === -1 || compIdx === allShots.length - 1) return; // Completed shot not found or is the last shot
+
+    const nextShot = allShots[compIdx + 1];
+    const nextShotSceneId = shotSceneMap[nextShot.id];
+
+    if (nextShot && nextShot.chainFromPrevious && (nextShot.jobStatus === "PENDING_PREVIOUS" || nextShot.jobStatus === "IDLE")) {
+        console.log(`[Webhook Auto-Chain] Dispatching next chained shot ${nextShot.id} using lastFramePath: ${completedLastFramePath}`);
+
+        const jobMetadata = {
+            shotId: nextShot.id,
+            sceneId: nextShotSceneId,
+            duration: nextShot.duration || 5,
+            chainFromPrevious: true,
+            sourceApp: "Animated Shorts",
+            title: project.title || "Kids Story Project"
+        };
+
+        const job = await prisma.genJob.create({
+            data: {
+                documentaryId: project.id,
+                jobType: "shot_video",
+                prompt: nextShot.motionPrompt || nextShot.visualPrompt,
+                status: "QUEUED",
+                metadata: jobMetadata as any
+            }
+        });
+
+        await dispatchJob({
+            jobId: job.id,
+            documentaryId: project.id,
+            type: "shot_video",
+            prompt: nextShot.motionPrompt || nextShot.visualPrompt,
+            referenceImages: [completedLastFramePath],
+            metadata: jobMetadata
+        });
+
+        // Update the shot status inside the DB scene
+        const targetScene = project.scenes.find(s => s.id === nextShotSceneId);
+        if (targetScene) {
+            let meta: any = {};
+            try {
+                meta = JSON.parse(targetScene.searchQueries || "{}");
+            } catch {}
+            if (meta.visualShots) {
+                meta.visualShots = meta.visualShots.map((s: any) => {
+                    if (s.id === nextShot.id) {
+                        return {
+                            ...s,
+                            jobId: job.id,
+                            jobStatus: "QUEUED"
+                        };
+                    }
+                    return s;
+                });
+                await prisma.docScene.update({
+                    where: { id: targetScene.id },
+                    data: { searchQueries: JSON.stringify(meta) }
+                });
+            }
         }
     }
 }

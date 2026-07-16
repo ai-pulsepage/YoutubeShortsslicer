@@ -6,7 +6,7 @@ export async function POST(req: NextRequest) {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { visualPrompt, primaryCharacter, sceneText, visualStyle } = await req.json();
+    const { visualPrompt, motionPrompt, primaryCharacter, sceneText, visualStyle } = await req.json();
     if (!visualPrompt) return NextResponse.json({ error: "visualPrompt is required" }, { status: 400 });
 
     try {
@@ -21,16 +21,19 @@ export async function POST(req: NextRequest) {
         }
 
         const activeStyle = visualStyle || "Pixar 3D cartoon";
-        const systemPrompt = `You are a 3D animation director writing prompts for a video generation model.
-Your task is to rewrite the provided visual shot prompt so that the focus is on the new primary character/subject specified by the user.
+        const systemPrompt = `You are a 3D animation director writing prompts.
+Your task is to rewrite the provided visual shot prompt (image composition) and motion prompt (action/movement) so that the focus is on the new primary character/subject specified by the user.
 Make sure the description aligns naturally with the context of the scene.
-Do NOT change the art style — the style for this project is: "${activeStyle}". All prompts must start with this style prefix.
+Do NOT change the art style — the style for this project is: "${activeStyle}". The imagePrompt MUST start with this style prefix.
 Ensure all references to the old primary character are replaced with the new primary character, and their actions/descriptions fit them correctly.
-Expand the prompt into a complete director's shot brief including: character name + brief physical description, a dynamic action that fills the shot duration naturally, camera angle, and setting/background context.
-CRITICAL: The video generator reads ONLY this shot card with no memory of other shots — the prompt must be completely self-contained.
-Return ONLY the newly rewritten prompt text without quotes, notes, or preamble.`;
 
-        const userPayload = `Original Prompt: "${visualPrompt}"
+Return ONLY a valid JSON object with the following keys:
+- "imagePrompt": Detailed static scene visual description starting with style prefix.
+- "motionPrompt": Focussed action description (e.g. "[Character] points at the chalkboard, smiling"). Do not repeat style or physical descriptors.
+- "visualPrompt": Copy of imagePrompt for compatibility.`;
+
+        const userPayload = `Original Image/Visual Prompt: "${visualPrompt}"
+Original Motion Prompt: "${motionPrompt || ""}"
 New Primary Character: "${primaryCharacter}"
 Scene Context Dialogue/Song: "${sceneText || ""}"`;
 
@@ -47,7 +50,7 @@ Scene Context Dialogue/Song: "${sceneText || ""}"`;
                     { role: "user", content: userPayload }
                 ],
                 temperature: 0.6,
-                max_tokens: 300
+                max_tokens: 500
             })
         });
 
@@ -60,9 +63,31 @@ Scene Context Dialogue/Song: "${sceneText || ""}"`;
         }
 
         const data = await res.json();
-        const rewrittenPrompt = data.choices?.[0]?.message?.content?.trim() || visualPrompt;
+        let content = data.choices?.[0]?.message?.content?.trim() || "{}";
+        if (content.startsWith("```")) {
+            content = content.replace(/^```json\s*/, "").replace(/^```\s*/, "").replace(/\s*```$/, "");
+        }
 
-        return NextResponse.json({ rewrittenPrompt });
+        let rewrittenPrompt = visualPrompt;
+        let rewrittenMotionPrompt = motionPrompt || "";
+        let rewrittenImagePrompt = visualPrompt;
+
+        try {
+            const parsed = JSON.parse(content);
+            rewrittenImagePrompt = parsed.imagePrompt || rewrittenImagePrompt;
+            rewrittenMotionPrompt = parsed.motionPrompt || rewrittenMotionPrompt;
+            rewrittenPrompt = parsed.visualPrompt || rewrittenImagePrompt;
+        } catch (parseErr) {
+            // Fallback if model returned plain text
+            rewrittenPrompt = content || visualPrompt;
+            rewrittenImagePrompt = content || visualPrompt;
+        }
+
+        return NextResponse.json({ 
+            rewrittenPrompt, 
+            rewrittenImagePrompt, 
+            rewrittenMotionPrompt 
+        });
 
     } catch (err: any) {
         console.error("[Improve Shot Prompt] Error:", err.message);

@@ -32,12 +32,13 @@ export async function POST(req: NextRequest) {
             sceneId,
             shotId: shotId || undefined,
             duration: duration || 5,
-            chainFromPrevious: !!chainFromPrevious
+            chainFromPrevious: !!chainFromPrevious,
+            sourceApp: "Animated Shorts"
         };
 
-        // Check if we need to auto-generate the character avatar first or resolve chained frame
-        let finalRefImage = refImage;
-        let isPendingAvatar = false;
+        let finalRefImage = null;
+        let isGeneratingImage = false;
+        let isPendingPrevious = false;
 
         if (sceneId) {
             const scene = await prisma.docScene.findUnique({
@@ -55,87 +56,92 @@ export async function POST(req: NextRequest) {
                 const shotIdx = visualShots.findIndex((s: any) => s.id === shotId);
                 const shot = shotIdx !== -1 ? visualShots[shotIdx] : null;
 
-                let hasChainedImage = false;
                 if (chainFromPrevious && shotIdx !== -1) {
                     const prevShot = getPreviousShot(scene.documentary, scene, shotIdx);
                     if (prevShot && prevShot.lastFramePath) {
                         finalRefImage = prevShot.lastFramePath;
-                        hasChainedImage = true;
                         console.log(`[Scene Video Gen] Chaining shot ${shotId} from previous lastFramePath: ${prevShot.lastFramePath}`);
+                    } else {
+                        isPendingPrevious = true;
                     }
-                }
+                } else if (shot) {
+                    if (shot.startImagePath) {
+                        finalRefImage = shot.startImagePath;
+                    } else {
+                        // Automatically trigger start frame image generation first!
+                        console.log(`[Scene Video Gen] Missing start image for shot "${shotId}". Launching FLUX composition job.`);
 
-                if (!hasChainedImage && shot && shot.primaryCharacter && shot.primaryCharacter !== "None") {
-                    const charAsset = scene.documentary.assets.find(
-                        (a: any) => a.label.toLowerCase() === shot.primaryCharacter.toLowerCase()
-                    );
-                    if (charAsset) {
-                        if (charAsset.imagePath) {
-                            finalRefImage = charAsset.imagePath;
-                        } else {
-                            // Automatically trigger ref_image generation first!
-                            console.log(`[Scene Video Gen] Missing avatar for character "${charAsset.label}". Checking for active avatar job.`);
-
-                            // Check if an active job already exists for this character
-                            const activeAvatarJob = await prisma.genJob.findFirst({
-                                where: {
-                                    assetId: charAsset.id,
-                                    jobType: "ref_image",
-                                    status: { in: ["QUEUED", "PROCESSING"] }
-                                }
-                            });
-
-                            if (activeAvatarJob) {
-                                console.log(`[Scene Video Gen] Active avatar job ${activeAvatarJob.id} already exists for character "${charAsset.label}". Reusing.`);
-                            } else {
-                                const avatarJob = await prisma.genJob.create({
-                                    data: {
-                                        documentaryId: activeDocId,
-                                        jobType: "ref_image",
-                                        prompt: charAsset.prompt || "",
-                                        status: "QUEUED",
-                                        assetId: charAsset.id,
-                                        metadata: { characterId: charAsset.id } as any
-                                    }
-                                });
-
-                                await dispatchJob({
-                                    jobId: avatarJob.id,
-                                    documentaryId: activeDocId,
-                                    type: "ref_image",
-                                    prompt: charAsset.prompt || "",
-                                    referenceImages: [],
-                                    metadata: { characterId: charAsset.id, model: "flux", sourceApp: "Animated Shorts", title: scene.documentary.title || "Kids Story Project" }
-                                });
+                        const avatarJob = await prisma.genJob.create({
+                            data: {
+                                documentaryId: activeDocId,
+                                jobType: "ref_image",
+                                prompt: shot.imagePrompt || shot.visualPrompt || visualPrompt,
+                                status: "QUEUED",
+                                metadata: {
+                                    shotId: shot.id,
+                                    sceneId: scene.id,
+                                    jobPurpose: "shot_start_image",
+                                    sourceApp: "Animated Shorts",
+                                    model: "flux",
+                                    title: scene.documentary.title || "Kids Story Project"
+                                } as any
                             }
+                        });
 
-                            // Mark shot as PENDING_AVATAR
-                            const updatedShots = visualShots.map((s: any) => {
-                                if (s.id === shotId) {
-                                    return { ...s, jobStatus: "PENDING_AVATAR" };
-                                }
-                                return s;
-                            });
-                            searchQueriesMeta.visualShots = updatedShots;
-                            
-                            await prisma.docScene.update({
-                                where: { id: sceneId },
-                                data: { searchQueries: JSON.stringify(searchQueriesMeta) }
-                            });
+                        await dispatchJob({
+                            jobId: avatarJob.id,
+                            documentaryId: activeDocId,
+                            type: "ref_image",
+                            prompt: shot.imagePrompt || shot.visualPrompt || visualPrompt,
+                            referenceImages: [],
+                            metadata: {
+                                shotId: shot.id,
+                                sceneId: scene.id,
+                                jobPurpose: "shot_start_image",
+                                sourceApp: "Animated Shorts",
+                                model: "flux",
+                                title: scene.documentary.title || "Kids Story Project"
+                            }
+                        });
 
-                            isPendingAvatar = true;
-                        }
+                        // Mark shot as GENERATING_IMAGE
+                        const updatedShots = visualShots.map((s: any) => {
+                            if (s.id === shotId) {
+                                return { 
+                                    ...s, 
+                                    startImageJobId: avatarJob.id,
+                                    startImageJobStatus: "QUEUED",
+                                    jobStatus: "GENERATING_IMAGE" 
+                                };
+                            }
+                            return s;
+                        });
+                        searchQueriesMeta.visualShots = updatedShots;
+                        
+                        await prisma.docScene.update({
+                            where: { id: sceneId },
+                            data: { searchQueries: JSON.stringify(searchQueriesMeta) }
+                        });
+
+                        isGeneratingImage = true;
                     }
                 }
             }
         }
 
-        if (isPendingAvatar) {
+        if (isPendingPrevious) {
+            return NextResponse.json({
+                error: "PENDING_PREVIOUS",
+                details: "This shot is chained from the previous shot. You must generate the previous shot first to create a reference frame!"
+            }, { status: 400 });
+        }
+
+        if (isGeneratingImage) {
             return NextResponse.json({
                 success: true,
                 docId: activeDocId,
-                pendingAvatar: true,
-                message: "Character avatar is missing. Automatically generating avatar first. Video generation will start once ready!"
+                generatingImage: true,
+                message: "Starting scene image is missing. Automatically generating starting canvas first using FLUX. Video animation will start automatically when ready!"
             });
         }
 
@@ -162,12 +168,27 @@ export async function POST(req: NextRequest) {
             });
         }
 
+        // Resolve motionPrompt if available
+        let activePrompt = visualPrompt;
+        if (sceneId && shotId) {
+            const sceneObj = await prisma.docScene.findUnique({ where: { id: sceneId } });
+            if (sceneObj) {
+                try {
+                    const parsed = JSON.parse(sceneObj.searchQueries || "{}");
+                    const targetShot = (parsed.visualShots || []).find((s: any) => s.id === shotId);
+                    if (targetShot && targetShot.motionPrompt) {
+                        activePrompt = targetShot.motionPrompt;
+                    }
+                } catch {}
+            }
+        }
+
         // Create GenJob record to track progress
         const genJob = await prisma.genJob.create({
             data: {
                 documentaryId: activeDocId,
                 jobType: "shot_video",
-                prompt: visualPrompt,
+                prompt: activePrompt,
                 status: "QUEUED",
                 metadata: jobMetadata as any
             }
@@ -178,10 +199,30 @@ export async function POST(req: NextRequest) {
             jobId: genJob.id,
             documentaryId: activeDocId,
             type: "shot_video",
-            prompt: visualPrompt,
+            prompt: activePrompt,
             referenceImages: finalRefImage ? [finalRefImage] : [],
             metadata: jobMetadata
         });
+
+        // Save jobId and status inside the scene visualShots array
+        if (sceneId && shotId) {
+            const sceneObj = await prisma.docScene.findUnique({ where: { id: sceneId } });
+            if (sceneObj) {
+                try {
+                    const parsed = JSON.parse(sceneObj.searchQueries || "{}");
+                    parsed.visualShots = (parsed.visualShots || []).map((s: any) => {
+                        if (s.id === shotId) {
+                            return { ...s, jobId: genJob.id, jobStatus: "QUEUED" };
+                        }
+                        return s;
+                    });
+                    await prisma.docScene.update({
+                        where: { id: sceneId },
+                        data: { searchQueries: JSON.stringify(parsed) }
+                    });
+                } catch {}
+            }
+        }
 
         return NextResponse.json({
             success: true,
