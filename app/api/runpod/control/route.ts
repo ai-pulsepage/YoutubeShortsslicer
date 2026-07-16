@@ -239,9 +239,8 @@ export async function POST(req: NextRequest) {
 
             if (templateId) {
                 baseInput.templateId = templateId;
-                if (dockerArgsSetting) {
-                    baseInput.dockerArgs = dockerArgsSetting;
-                }
+                baseInput.dockerArgs = dockerArgsSetting || activeDockerArgs;
+                baseInput.env = envArgs;
                 if (volumeId) {
                     baseInput.networkVolumeId = volumeId;
                 }
