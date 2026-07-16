@@ -1643,9 +1643,10 @@ export default function KidsStoryBuilderPage() {
                                         <select value={visualStyle} onChange={e => setVisualStyle(e.target.value)}
                                             className="w-full bg-gray-850 border border-gray-750 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-violet-500 font-semibold cursor-pointer">
                                             <option value="Pixar 3D" className="bg-gray-900 text-white">Pixar 3D</option>
-                                            <option value="Classic Anime" className="bg-gray-900 text-white">Classic Anime</option>
                                             <option value="Studio Ghibli" className="bg-gray-900 text-white">Studio Ghibli</option>
-                                            <option value="Hand-Drawn Sketch/Watercolor" className="bg-gray-900 text-white">Hand-Drawn / Watercolor</option>
+                                            <option value="Classic Anime" className="bg-gray-900 text-white">Classic Anime</option>
+                                            <option value="Claymation" className="bg-gray-900 text-white">Claymation</option>
+                                            <option value="Hand-Drawn / Watercolor" className="bg-gray-900 text-white">Hand-Drawn / Watercolor</option>
                                             <option value="Retro Cartoon (90s)" className="bg-gray-900 text-white">Retro Cartoon (90s)</option>
                                             <option value="Realistic CGI" className="bg-gray-900 text-white">Realistic CGI</option>
                                         </select>

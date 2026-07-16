@@ -18,9 +18,24 @@ export async function POST(req: NextRequest) {
             if (dbKey?.key) apiKey = Buffer.from(dbKey.key, "base64").toString("utf8");
         }
 
-        const characterNames = (characters && Array.isArray(characters) && characters.length > 0)
+        const anchoredCharacters = (characters && Array.isArray(characters))
+            ? characters.filter((c: any) => c.prompt && c.prompt.trim().length > 0)
+            : [];
+        const freeCharacters = (characters && Array.isArray(characters))
+            ? characters.filter((c: any) => !c.prompt || c.prompt.trim().length === 0)
+            : [];
+
+        const allCharacterNames = (characters && Array.isArray(characters) && characters.length > 0)
             ? characters.map((c: any) => c.name).join(", ")
             : "Narrator, Leo, Lily";
+
+        const anchoredRoster = anchoredCharacters.length > 0
+            ? anchoredCharacters.map((c: any) => `- ${c.name}: ${c.prompt.trim()}`).join("\n")
+            : "";
+
+        const freeRoster = freeCharacters.length > 0
+            ? freeCharacters.map((c: any) => `- ${c.name}: invent a specific, vivid physical description on first use and repeat it exactly in every shot — never vary it.`).join("\n")
+            : "";
 
         if (!apiKey) {
             return NextResponse.json(
@@ -32,25 +47,42 @@ export async function POST(req: NextRequest) {
         const selectedStyle = visualStyle || "Pixar 3D";
         const clipDuration = shotDuration || 5;
 
+        const STYLE_PROMPT_PREFIX: Record<string, string> = {
+            "Pixar 3D": "Pixar-style 3D CGI animation, vibrant colors, expressive character faces, smooth subsurface skin shading, cinematic lighting,",
+            "Studio Ghibli": "Studio Ghibli hand-painted anime style, soft impressionistic backgrounds, delicate linework, warm natural lighting, Hayao Miyazaki aesthetic,",
+            "Classic Anime": "classic cel-shaded anime, bold clean outlines, flat vibrant colors, expressive eyes, dynamic pose, 90s anime aesthetic,",
+            "Claymation": "Aardman Animations claymation stop-motion style, textured clay surfaces, fingerprint-visible handcrafted look, warm soft studio lighting,",
+            "Hand-Drawn / Watercolor": "hand-drawn watercolor storybook illustration, soft paint washes, visible brushstroke texture, delicate ink outlines, warm pastel palette,",
+            "Retro Cartoon (90s)": "90s Saturday morning retro cartoon style, thick bold black outlines, flat bright colors, energetic squash-and-stretch animation,",
+            "Realistic CGI": "photorealistic CGI animation, high-fidelity surface textures, ray-traced global illumination, detailed environment rendering,",
+        };
+        const stylePrefix = STYLE_PROMPT_PREFIX[selectedStyle] || `${selectedStyle} style animation,`;
+
         const systemPrompt = `You are a professional kids TV storyboard director. Break down the provided song lyrics/text into EXACTLY ${numShots} consecutive visual shots. Each shot represents a ${clipDuration}-second video clip.
 
 CRITICAL RULES:
 1. You MUST generate exactly ${numShots} shots. No more, no less.
-2. For each shot, assign the "primaryCharacter" from the following cast list: ${characterNames}. Choose the character who is the main subject of that shot.
-3. DIRECTOR'S BRIEF: The video generator reads ONLY this shot card — it has zero memory of any other shot. Every "visualPrompt" must be completely self-contained and include:
-   - Style prefix: "${selectedStyle} style animation of..."
-   - Character name + brief physical description (e.g. "Leo, a cheerful brown bear cub with a red scarf")
-   - A specific, dynamic action that naturally fills ${clipDuration} seconds of motion (e.g. not "standing" but "slowly turning around looking up in wonder" or "running across a meadow, arms pumping")
+2. For each shot, assign the "primaryCharacter" from the following cast ONLY: ${allCharacterNames}. Never assign a character not in this list.
+3. DIRECTOR'S BRIEF: The video generator reads ONLY this shot card — it has zero memory of any other shot. Every "visualPrompt" must be completely self-contained and begin with the style prefix: "${stylePrefix}" followed by:
+   - Character name + their exact visual description from the CHARACTER ROSTER below
+   - A specific, dynamic action that naturally fills ${clipDuration} seconds of motion
    - Camera angle/movement if relevant (e.g. "close-up", "wide shot", "slow pan left")
    - Setting/background context
-4. CHAINING: Decide whether each shot flows continuously from the previous shot's last frame (chainFromPrevious: true) or starts fresh with a hard cut to a new location/angle (chainFromPrevious: false). Shot index 1 is ALWAYS chainFromPrevious: false. Use chaining when the same character is continuing an uninterrupted action across shots. Use false when there is a location change, time jump, or new character entering.
+4. CHAINING: Decide whether each shot flows continuously from the previous shot's last frame (chainFromPrevious: true) or starts fresh with a hard cut (chainFromPrevious: false). Shot index 1 is ALWAYS chainFromPrevious: false.
+
+CHARACTER ROSTER — use these exact descriptions in every visualPrompt:
+ANCHORED (use verbatim, do not alter):
+${anchoredRoster || "(none)"}
+
+FREE (invent once on first appearance, then repeat exactly):
+${freeRoster || "(none)"}
 
 Return ONLY a valid JSON array of shots without any markdown wrapping or preamble.
 JSON Schema:
 [
   {
     "index": number, // 1-indexed
-    "primaryCharacter": "One of: ${characterNames}",
+    "primaryCharacter": "One of: ${allCharacterNames}",
     "visualPrompt": "Full director's shot brief as described above.",
     "chainFromPrevious": boolean
   }

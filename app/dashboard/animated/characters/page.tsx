@@ -470,7 +470,7 @@ export default function AnimatedCastLibraryPage() {
                             <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Visual Style</label>
                             <select value={wizardStyle} onChange={e => setWizardStyle(e.target.value)}
                                 className="w-full bg-gray-850 border border-gray-750 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-violet-500 font-semibold">
-                                {["Pixar 3D", "Claymation", "Anime", "Water Color", "2D Retro Cartoon"].map(s => (
+                                {["Pixar 3D", "Studio Ghibli", "Classic Anime", "Claymation", "Hand-Drawn / Watercolor", "Retro Cartoon (90s)", "Realistic CGI"].map(s => (
                                     <option key={s} value={s} className="bg-gray-900 text-white">{s}</option>
                                 ))}
                             </select>
@@ -567,7 +567,7 @@ export default function AnimatedCastLibraryPage() {
                         <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Style:</span>
                         <select value={styleFilter} onChange={e => setStyleFilter(e.target.value)}
                             className="bg-gray-850 border border-gray-750 rounded-xl px-3 py-2 text-xs text-white font-semibold focus:outline-none cursor-pointer">
-                            {["All", "Pixar 3D", "Claymation", "Anime", "Water Color", "2D Retro Cartoon"].map(s => (
+                            {["All", "Pixar 3D", "Studio Ghibli", "Classic Anime", "Claymation", "Hand-Drawn / Watercolor", "Retro Cartoon (90s)", "Realistic CGI"].map(s => (
                                 <option key={s} value={s} className="bg-gray-900 text-white">{s}</option>
                             ))}
                         </select>

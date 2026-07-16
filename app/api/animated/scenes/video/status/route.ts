@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
                 const jobId = data.jobId;
                 const status = data.status === "completed" ? "COMPLETED" : "FAILED";
                 let outputPath = data.outputPath || null;
+                const lastFramePath = data.lastFramePath || null;
                 const errorMsg = data.error || null;
 
                 if (status === "COMPLETED" && outputPath) {
@@ -113,7 +114,12 @@ export async function GET(req: NextRequest) {
                         if (searchQueriesMeta.visualShots && Array.isArray(searchQueriesMeta.visualShots)) {
                             searchQueriesMeta.visualShots = searchQueriesMeta.visualShots.map((shot: any) => {
                                 if ((shotId && shot.id === shotId) || shot.jobId === jobId) {
-                                    return { ...shot, visualPath: outputPath, jobStatus: "COMPLETED" };
+                                    return {
+                                        ...shot,
+                                        visualPath: outputPath,
+                                        jobStatus: "COMPLETED",
+                                        ...(lastFramePath ? { lastFramePath } : {})
+                                    };
                                 }
                                 return shot;
                             });
