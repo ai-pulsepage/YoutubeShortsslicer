@@ -35,6 +35,51 @@ try:
 except ImportError:
     pass
 
+# Monkey patch torch.library.infer_schema for PyTorch 2.4.0 string type annotation compatibility
+try:
+    import torch.library
+    if hasattr(torch.library, "infer_schema"):
+        _orig_infer_schema = torch.library.infer_schema
+        def patched_infer_schema(func, *args, **kwargs):
+            if hasattr(func, "__annotations__"):
+                import typing
+                new_annotations = {}
+                for name, val in func.__annotations__.items():
+                    if isinstance(val, str):
+                        val_str = val.strip()
+                        # Resolve union and typing structures
+                        if val_str == "torch.Tensor":
+                            new_annotations[name] = torch.Tensor
+                        elif val_str in ("torch.Tensor | None", "Optional[torch.Tensor]", "typing.Optional[torch.Tensor]"):
+                            new_annotations[name] = typing.Optional[torch.Tensor]
+                        elif val_str == "bool":
+                            new_annotations[name] = bool
+                        elif val_str in ("bool | None", "Optional[bool]", "typing.Optional[bool]"):
+                            new_annotations[name] = typing.Optional[bool]
+                        elif val_str == "int":
+                            new_annotations[name] = int
+                        elif val_str in ("int | None", "Optional[int]", "typing.Optional[int]"):
+                            new_annotations[name] = typing.Optional[int]
+                        elif val_str == "float":
+                            new_annotations[name] = float
+                        elif val_str in ("float | None", "Optional[float]", "typing.Optional[float]"):
+                            new_annotations[name] = typing.Optional[float]
+                        elif val_str == "str":
+                            new_annotations[name] = str
+                        elif val_str in ("str | None", "Optional[str]", "typing.Optional[str]"):
+                            new_annotations[name] = typing.Optional[str]
+                        elif "tuple" in val_str:
+                            new_annotations[name] = tuple
+                        else:
+                            new_annotations[name] = val
+                    else:
+                        new_annotations[name] = val
+                func.__annotations__ = new_annotations
+            return _orig_infer_schema(func, *args, **kwargs)
+        torch.library.infer_schema = patched_infer_schema
+except Exception as e:
+    print(f"  ⚠️ Failed to patch torch.library.infer_schema: {e}")
+
 import json
 import gc
 import sys
