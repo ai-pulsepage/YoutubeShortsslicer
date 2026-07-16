@@ -56,10 +56,13 @@ export async function GET(req: NextRequest) {
                     const userId = updatedAsset.documentary?.userId;
                     if (userId && updatedAsset.label) {
                         try {
-                            const siblings = await prisma.docAsset.findMany({
+                             const siblings = await prisma.docAsset.findMany({
                                 where: {
                                     type: "CHARACTER",
-                                    label: updatedAsset.label,
+                                    label: {
+                                        equals: updatedAsset.label,
+                                        mode: "insensitive"
+                                    },
                                     documentary: {
                                         userId: userId
                                     }

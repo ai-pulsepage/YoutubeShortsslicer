@@ -261,19 +261,36 @@ export async function POST(req: NextRequest) {
             for (const char of characters) {
                 const isTempId = char.id.startsWith("char-");
                 
+                let imagePath = char.imagePath || null;
+                if (!imagePath) {
+                    const libraryChar = await prisma.docAsset.findFirst({
+                        where: {
+                            type: "CHARACTER",
+                            label: { equals: char.name, mode: "insensitive" },
+                            documentary: {
+                                userId: session.user.id,
+                                genre: "children_library"
+                            }
+                        }
+                    });
+                    if (libraryChar?.imagePath) {
+                        imagePath = libraryChar.imagePath;
+                    }
+                }
+                
                 await prisma.docAsset.upsert({
                     where: { id: isTempId ? "dummy-non-matching-id" : char.id },
                     update: {
                         label: char.name,
                         prompt: char.prompt,
-                        imagePath: char.imagePath || null
+                        imagePath: imagePath
                     },
                     create: {
                         documentaryId: activeId,
                         type: "CHARACTER",
                         label: char.name,
                         prompt: char.prompt,
-                        imagePath: char.imagePath || null
+                        imagePath: imagePath
                     }
                 });
             }

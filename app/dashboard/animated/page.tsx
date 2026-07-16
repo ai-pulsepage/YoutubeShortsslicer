@@ -362,7 +362,17 @@ export default function KidsStoryBuilderPage() {
             setDocId(proj.id);
             setProjectTitle(proj.title);
             setProjectScript(proj.script);
-            setCharacters(proj.characters);
+            // Match characters with library characters by name to auto-populate images if missing
+            const mappedCharacters = proj.characters.map(c => {
+                if (!c.imagePath) {
+                    const match = libraryCharacters.find(lc => lc.name.toLowerCase() === c.name.toLowerCase());
+                    if (match && match.imagePath) {
+                        return { ...c, imagePath: match.imagePath };
+                    }
+                }
+                return c;
+            });
+            setCharacters(mappedCharacters);
             setScenes(proj.scenes.map(s => ({
                 ...s,
                 type: s.type || "dialogue",

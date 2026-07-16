@@ -68,7 +68,10 @@ export async function POST(req: NextRequest) {
                     const siblings = await prisma.docAsset.findMany({
                         where: {
                             type: "CHARACTER",
-                            label: updatedAsset.label,
+                            label: {
+                                equals: updatedAsset.label,
+                                mode: "insensitive"
+                            },
                             documentary: {
                                 userId: userId
                             }
