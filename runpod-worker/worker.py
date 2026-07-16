@@ -37,9 +37,22 @@ except ImportError:
 
 # Monkey patch torch.library.infer_schema for PyTorch 2.4.0 string type annotation compatibility
 try:
+    import torch
     import torch.library
-    if hasattr(torch.library, "infer_schema"):
+    try:
+        import torch._library
+        import torch._library.infer_schema
+    except ImportError:
+        pass
+
+    # Find the original function
+    _orig_infer_schema = None
+    if hasattr(torch, "_library") and hasattr(torch._library, "infer_schema") and hasattr(torch._library.infer_schema, "infer_schema"):
+        _orig_infer_schema = torch._library.infer_schema.infer_schema
+    elif hasattr(torch, "library") and hasattr(torch.library, "infer_schema"):
         _orig_infer_schema = torch.library.infer_schema
+
+    if _orig_infer_schema is not None:
         def patched_infer_schema(func, *args, **kwargs):
             if hasattr(func, "__annotations__"):
                 import typing
@@ -76,7 +89,20 @@ try:
                         new_annotations[name] = val
                 func.__annotations__ = new_annotations
             return _orig_infer_schema(func, *args, **kwargs)
-        torch.library.infer_schema = patched_infer_schema
+
+        # Apply patch to all namespaces
+        if hasattr(torch, "_library") and hasattr(torch._library, "infer_schema"):
+            torch._library.infer_schema.infer_schema = patched_infer_schema
+        if hasattr(torch, "library") and hasattr(torch.library, "infer_schema"):
+            torch.library.infer_schema = patched_infer_schema
+        
+        # Also patch in sys.modules directly
+        if "torch._library.infer_schema" in sys.modules:
+            sys.modules["torch._library.infer_schema"].infer_schema = patched_infer_schema
+        if "torch.library" in sys.modules:
+            sys.modules["torch.library"].infer_schema = patched_infer_schema
+            
+        print("  ✅ Successfully patched torch.library.infer_schema in all namespaces")
 except Exception as e:
     print(f"  ⚠️ Failed to patch torch.library.infer_schema: {e}")
 
