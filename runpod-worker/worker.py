@@ -81,8 +81,25 @@ try:
                             new_annotations[name] = str
                         elif val_str in ("str | None", "Optional[str]", "typing.Optional[str]"):
                             new_annotations[name] = typing.Optional[str]
-                        elif "tuple" in val_str:
-                            new_annotations[name] = tuple
+                        elif val_str.startswith("tuple[") or val_str.startswith("Tuple[") or "tuple" in val_str.lower():
+                            if "[" in val_str:
+                                inner = val_str[val_str.find("[")+1 : val_str.rfind("]")]
+                                types = [t.strip() for t in inner.split(",")]
+                                resolved_types = []
+                                for t in types:
+                                    if t == "torch.Tensor":
+                                        resolved_types.append(torch.Tensor)
+                                    elif t == "int":
+                                        resolved_types.append(int)
+                                    elif t == "float":
+                                        resolved_types.append(float)
+                                    elif t == "bool":
+                                        resolved_types.append(bool)
+                                    else:
+                                        resolved_types.append(t)
+                                new_annotations[name] = typing.Tuple[tuple(resolved_types)]
+                            else:
+                                new_annotations[name] = tuple
                         else:
                             new_annotations[name] = val
                     else:
