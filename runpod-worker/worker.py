@@ -25,6 +25,16 @@ import os
 # Force Hugging Face cache to live on the persistent storage drive
 os.environ["HF_HOME"] = "/workspace/hf_cache"
 
+# Monkey patch torch.distributed.tensor for PyTorch 2.4.0 compatibility
+import sys
+import torch
+try:
+    if not hasattr(torch.distributed, "tensor"):
+        import torch.distributed._tensor as _tensor
+        sys.modules["torch.distributed.tensor"] = _tensor
+except ImportError:
+    pass
+
 import json
 import gc
 import sys
