@@ -35,6 +35,33 @@ try:
 except ImportError:
     pass
 
+# Mock torch.nn.attention.flex_attention for PyTorch < 2.5 compatibility
+try:
+    import types
+    try:
+        import torch.nn.attention.flex_attention
+    except ImportError:
+        flex_mock = types.ModuleType("torch.nn.attention.flex_attention")
+        
+        def dummy_flex_attention(*args, **kwargs):
+            raise NotImplementedError("flex_attention is not supported on PyTorch < 2.5")
+            
+        def dummy_create_block_mask(*args, **kwargs):
+            raise NotImplementedError("create_block_mask is not supported on PyTorch < 2.5")
+
+        flex_mock.flex_attention = dummy_flex_attention
+        flex_mock.create_block_mask = dummy_create_block_mask
+        
+        sys.modules["torch.nn.attention.flex_attention"] = flex_mock
+        try:
+            import torch.nn.attention
+            torch.nn.attention.flex_attention = flex_mock
+        except ImportError:
+            pass
+        print("  ✅ Successfully mocked torch.nn.attention.flex_attention module for PyTorch < 2.5")
+except Exception as e:
+    print(f"  ⚠️ Failed to mock torch.nn.attention.flex_attention: {e}")
+
 # Monkey patch torch.library.infer_schema for PyTorch 2.4.0 string type annotation compatibility
 try:
     import torch
