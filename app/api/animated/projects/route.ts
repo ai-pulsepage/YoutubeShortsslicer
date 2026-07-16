@@ -49,43 +49,45 @@ export async function GET(req: NextRequest) {
                         });
                     }
 
-                    const meta = job.metadata as any;
-                    if (meta && (meta.sceneId || meta.shotId)) {
-                        const sceneId = meta.sceneId;
-                        const shotId = meta.shotId;
-                        let targetScene = null;
+                const meta = job.metadata as any;
+                if (meta && (meta.sceneId || meta.shotId)) {
+                    const sceneId = meta.sceneId;
+                    const shotId = meta.shotId;
+                    let targetScene = null;
 
-                        if (sceneId) {
-                            targetScene = await prisma.docScene.findUnique({ where: { id: sceneId } });
-                        } else if (shotId) {
-                            targetScene = await prisma.docScene.findFirst({
-                                where: { searchQueries: { contains: shotId } }
+                    if (sceneId) {
+                        targetScene = await prisma.docScene.findUnique({ where: { id: sceneId } });
+                    } else if (shotId) {
+                        targetScene = await prisma.docScene.findFirst({
+                            where: { searchQueries: { contains: shotId } }
+                        });
+                    }
+
+                    if (targetScene) {
+                        let searchQueriesMeta: any = {};
+                        try {
+                            searchQueriesMeta = JSON.parse(targetScene.searchQueries || "{}");
+                        } catch {}
+
+                        if (searchQueriesMeta.visualShots && Array.isArray(searchQueriesMeta.visualShots)) {
+                            searchQueriesMeta.visualShots = searchQueriesMeta.visualShots.map((shot: any) => {
+                                if ((shotId && shot.id === shotId) || shot.jobId === jobId) {
+                                    return {
+                                        ...shot,
+                                        visualPath: status === "COMPLETED" ? (outputPath || shot.visualPath) : shot.visualPath,
+                                        jobStatus: status,
+                                        ...(status === "COMPLETED" && lastFramePath ? { lastFramePath } : {})
+                                    };
+                                }
+                                return shot;
                             });
-                        }
 
-                        if (targetScene) {
-                            let updatedPath = outputPath;
-                            let searchQueriesMeta: any = {};
-                            try {
-                                searchQueriesMeta = JSON.parse(targetScene.searchQueries || "{}");
-                            } catch {}
-
-                            if (searchQueriesMeta.visualShots && Array.isArray(searchQueriesMeta.visualShots)) {
-                                searchQueriesMeta.visualShots = searchQueriesMeta.visualShots.map((shot: any) => {
-                                    if ((shotId && shot.id === shotId) || shot.jobId === jobId) {
-                                        return {
-                                            ...shot,
-                                            visualPath: outputPath,
-                                            jobStatus: "COMPLETED",
-                                            ...(lastFramePath ? { lastFramePath } : {})
-                                        };
-                                    }
-                                    return shot;
-                                });
-
-                                const allDone = searchQueriesMeta.visualShots.every((s: any) => s.jobStatus === "COMPLETED" || s.visualPath);
-                                if (allDone && searchQueriesMeta.visualShots.length > 0) {
-                                    updatedPath = searchQueriesMeta.visualShots[searchQueriesMeta.visualShots.length - 1].visualPath || outputPath;
+                            let updatedPath = targetScene.assembledPath;
+                            const allDone = searchQueriesMeta.visualShots.every((s: any) => s.jobStatus === "COMPLETED" || s.visualPath);
+                            if (allDone && searchQueriesMeta.visualShots.length > 0) {
+                                const lastShot = searchQueriesMeta.visualShots[searchQueriesMeta.visualShots.length - 1];
+                                if (lastShot.visualPath) {
+                                    updatedPath = lastShot.visualPath;
                                 }
                             }
 
@@ -98,6 +100,7 @@ export async function GET(req: NextRequest) {
                             });
                         }
                     }
+                }
                 }
             } catch (err) {
                 console.error("[GET Projects Sync] Error processing result:", err);

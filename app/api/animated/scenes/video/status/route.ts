@@ -94,7 +94,7 @@ export async function GET(req: NextRequest) {
 
                 // C. Update DocScene if it's an Animated Short Scene/Shot
                 const meta = job.metadata as any;
-                if (status === "COMPLETED" && outputPath && meta && (meta.sceneId || meta.shotId)) {
+                if (meta && (meta.sceneId || meta.shotId)) {
                     const sceneId = meta.sceneId;
                     const shotId = meta.shotId;
                     let targetScene = null;
@@ -108,7 +108,6 @@ export async function GET(req: NextRequest) {
                     }
 
                     if (targetScene) {
-                        let updatedPath = outputPath;
                         let searchQueriesMeta: any = {};
                         try {
                             searchQueriesMeta = JSON.parse(targetScene.searchQueries || "{}");
@@ -119,27 +118,31 @@ export async function GET(req: NextRequest) {
                                 if ((shotId && shot.id === shotId) || shot.jobId === jobId) {
                                     return {
                                         ...shot,
-                                        visualPath: outputPath,
-                                        jobStatus: "COMPLETED",
-                                        ...(lastFramePath ? { lastFramePath } : {})
+                                        visualPath: status === "COMPLETED" ? (outputPath || shot.visualPath) : shot.visualPath,
+                                        jobStatus: status,
+                                        ...(status === "COMPLETED" && lastFramePath ? { lastFramePath } : {})
                                     };
                                 }
                                 return shot;
                             });
 
+                            let updatedPath = targetScene.assembledPath;
                             const allDone = searchQueriesMeta.visualShots.every((s: any) => s.jobStatus === "COMPLETED" || s.visualPath);
                             if (allDone && searchQueriesMeta.visualShots.length > 0) {
-                                updatedPath = searchQueriesMeta.visualShots[searchQueriesMeta.visualShots.length - 1].visualPath || outputPath;
+                                const lastShot = searchQueriesMeta.visualShots[searchQueriesMeta.visualShots.length - 1];
+                                if (lastShot.visualPath) {
+                                    updatedPath = lastShot.visualPath;
+                                }
                             }
-                        }
 
-                        await prisma.docScene.update({
-                            where: { id: targetScene.id },
-                            data: {
-                                assembledPath: updatedPath,
-                                searchQueries: JSON.stringify(searchQueriesMeta)
-                            }
-                        });
+                            await prisma.docScene.update({
+                                where: { id: targetScene.id },
+                                data: {
+                                    assembledPath: updatedPath,
+                                    searchQueries: JSON.stringify(searchQueriesMeta)
+                                }
+                            });
+                        }
                     }
                 }
             } catch (err) {
