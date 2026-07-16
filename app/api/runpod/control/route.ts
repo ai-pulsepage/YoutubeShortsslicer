@@ -184,7 +184,7 @@ export async function POST(req: NextRequest) {
                 if (gitToken) {
                     defaultUrl = `https://${gitToken}@github.com/ai-pulsepage/YoutubeShortsslicer.git`;
                 }
-                activeDockerArgs = `bash -c "which git || (apt-get update && apt-get install -y git) && if [ ! -f /workspace/YoutubeShortsslicer/worker.py ]; then git clone ${defaultUrl} /workspace/slicer_temp && mkdir -p /workspace/YoutubeShortsslicer && cp -r /workspace/slicer_temp/runpod-worker/* /workspace/YoutubeShortsslicer/ && rm -rf /workspace/slicer_temp; fi && cd /workspace/YoutubeShortsslicer && pip install -r requirements.txt && python3 worker.py"`;
+                activeDockerArgs = `bash -c "(which git && which ffmpeg) || (apt-get update && apt-get install -y git ffmpeg) && if [ ! -f /workspace/YoutubeShortsslicer/worker.py ]; then git clone ${defaultUrl} /workspace/slicer_temp && mkdir -p /workspace/YoutubeShortsslicer && cp -r /workspace/slicer_temp/runpod-worker/* /workspace/YoutubeShortsslicer/ && rm -rf /workspace/slicer_temp; fi && cd /workspace/YoutubeShortsslicer && pip install -r requirements.txt && python3 worker.py"`;
             }
 
             // Build environment variables array to inject database and credentials
