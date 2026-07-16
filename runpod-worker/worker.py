@@ -55,8 +55,12 @@ try:
             def dummy_create_block_mask(*args, **kwargs):
                 raise NotImplementedError("create_block_mask is not supported on PyTorch < 2.5")
 
+            class DummyBlockMask:
+                pass
+
             flex_mock.flex_attention = dummy_flex_attention
             flex_mock.create_block_mask = dummy_create_block_mask
+            flex_mock.BlockMask = DummyBlockMask
             return flex_mock
 
         def exec_module(self, module):
@@ -70,8 +74,11 @@ try:
         raise NotImplementedError("flex_attention is not supported on PyTorch < 2.5")
     def dummy_create_block_mask(*args, **kwargs):
         raise NotImplementedError("create_block_mask is not supported on PyTorch < 2.5")
+    class DummyBlockMask:
+        pass
     flex_mock.flex_attention = dummy_flex_attention
     flex_mock.create_block_mask = dummy_create_block_mask
+    flex_mock.BlockMask = DummyBlockMask
     sys.modules["torch.nn.attention.flex_attention"] = flex_mock
     
     try:
