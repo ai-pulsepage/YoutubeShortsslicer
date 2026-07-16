@@ -40,55 +40,63 @@ try:
     import types
     from importlib.machinery import ModuleSpec
 
-    class FlexAttentionFinder:
-        def find_spec(self, fullname, path, target=None):
-            if fullname == "torch.nn.attention.flex_attention":
-                return ModuleSpec(fullname, self)
-            return None
+    # First, check if flex_attention is natively available (e.g. PyTorch >= 2.5)
+    try:
+        import torch.nn.attention.flex_attention as native_flex
+        print("  ✅ torch.nn.attention.flex_attention natively available. Skipping mock.")
+    except ImportError:
+        # Not available natively (PyTorch < 2.5), register our mock finder
+        class FlexAttentionFinder:
+            def find_spec(self, fullname, path, target=None):
+                if fullname == "torch.nn.attention.flex_attention":
+                    return ModuleSpec(fullname, self)
+                return None
 
-        def create_module(self, spec):
-            flex_mock = types.ModuleType(spec.name)
-            
-            def dummy_flex_attention(*args, **kwargs):
-                raise NotImplementedError("flex_attention is not supported on PyTorch < 2.5")
+            def create_module(self, spec):
+                flex_mock = types.ModuleType(spec.name)
                 
-            def dummy_create_block_mask(*args, **kwargs):
-                raise NotImplementedError("create_block_mask is not supported on PyTorch < 2.5")
+                def dummy_flex_attention(*args, **kwargs):
+                    raise NotImplementedError("flex_attention is not supported on PyTorch < 2.5")
+                    
+                def dummy_create_block_mask(*args, **kwargs):
+                    raise NotImplementedError("create_block_mask is not supported on PyTorch < 2.5")
 
-            class DummyBlockMask:
+                class DummyBlockMask:
+                    pass
+
+                flex_mock.flex_attention = dummy_flex_attention
+                flex_mock.create_block_mask = dummy_create_block_mask
+                flex_mock.BlockMask = DummyBlockMask
+                flex_mock._DEFAULT_SPARSE_BLOCK_SIZE = 128
+                return flex_mock
+
+            def exec_module(self, module):
                 pass
 
-            flex_mock.flex_attention = dummy_flex_attention
-            flex_mock.create_block_mask = dummy_create_block_mask
-            flex_mock.BlockMask = DummyBlockMask
-            return flex_mock
-
-        def exec_module(self, module):
+        sys.meta_path.insert(0, FlexAttentionFinder())
+        
+        # Pre-inject into sys.modules and force parent package paths
+        flex_mock = types.ModuleType("torch.nn.attention.flex_attention")
+        def dummy_flex_attention(*args, **kwargs):
+            raise NotImplementedError("flex_attention is not supported on PyTorch < 2.5")
+        def dummy_create_block_mask(*args, **kwargs):
+            raise NotImplementedError("create_block_mask is not supported on PyTorch < 2.5")
+        class DummyBlockMask:
             pass
-
-    sys.meta_path.insert(0, FlexAttentionFinder())
-    
-    # Pre-inject into sys.modules and force parent package paths
-    flex_mock = types.ModuleType("torch.nn.attention.flex_attention")
-    def dummy_flex_attention(*args, **kwargs):
-        raise NotImplementedError("flex_attention is not supported on PyTorch < 2.5")
-    def dummy_create_block_mask(*args, **kwargs):
-        raise NotImplementedError("create_block_mask is not supported on PyTorch < 2.5")
-    class DummyBlockMask:
-        pass
-    flex_mock.flex_attention = dummy_flex_attention
-    flex_mock.create_block_mask = dummy_create_block_mask
-    flex_mock.BlockMask = DummyBlockMask
-    sys.modules["torch.nn.attention.flex_attention"] = flex_mock
-    
-    try:
-        import torch.nn.attention
-        if not hasattr(torch.nn.attention, "__path__"):
-            torch.nn.attention.__path__ = []
-        torch.nn.attention.flex_attention = flex_mock
-    except ImportError:
-        pass
-    print("  ✅ Successfully registered FlexAttentionFinder in sys.meta_path for PyTorch < 2.5")
+        flex_mock.flex_attention = dummy_flex_attention
+        flex_mock.create_block_mask = dummy_create_block_mask
+        flex_mock.BlockMask = DummyBlockMask
+        flex_mock._DEFAULT_SPARSE_BLOCK_SIZE = 128
+        sys.modules["torch.nn.attention.flex_attention"] = flex_mock
+        
+        try:
+            import torch.nn.attention
+            if not hasattr(torch.nn.attention, "__path__"):
+                torch.nn.attention.__path__ = []
+            torch.nn.attention.flex_attention = flex_mock
+        except ImportError:
+            pass
+        print("  ✅ Successfully registered FlexAttentionFinder in sys.meta_path for PyTorch < 2.5")
 except Exception as e:
     print(f"  ⚠️ Failed to mock torch.nn.attention.flex_attention: {e}")
 
