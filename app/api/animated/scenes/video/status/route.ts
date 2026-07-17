@@ -127,7 +127,7 @@ export async function GET(req: NextRequest) {
                             });
 
                             let updatedPath = targetScene.assembledPath;
-                            const allDone = searchQueriesMeta.visualShots.every((s: any) => s.jobStatus === "COMPLETED" || s.visualPath);
+                            const allDone = searchQueriesMeta.visualShots.every((s: any) => s.jobStatus === "COMPLETED" || (!s.jobId && s.visualPath));
                             if (allDone && searchQueriesMeta.visualShots.length > 0) {
                                 const lastShot = searchQueriesMeta.visualShots[searchQueriesMeta.visualShots.length - 1];
                                 if (lastShot.visualPath) {
@@ -201,10 +201,10 @@ export async function GET(req: NextRequest) {
                                   return shot;
                             });
 
-                            const allDone = searchQueriesMeta.visualShots.every((s: any) => s.jobStatus === "COMPLETED" || s.visualPath);
-                            if (allDone && searchQueriesMeta.visualShots.length > 0) {
-                                updatedPath = searchQueriesMeta.visualShots[searchQueriesMeta.visualShots.length - 1].visualPath || job.outputPath;
-                            }
+                             const allDone = searchQueriesMeta.visualShots.every((s: any) => s.jobStatus === "COMPLETED" || (!s.jobId && s.visualPath));
+                             if (allDone && searchQueriesMeta.visualShots.length > 0) {
+                                 updatedPath = searchQueriesMeta.visualShots[searchQueriesMeta.visualShots.length - 1].visualPath || job.outputPath;
+                             }
                         }
 
                         await prisma.docScene.update({

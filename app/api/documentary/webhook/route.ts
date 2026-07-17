@@ -228,7 +228,7 @@ export async function POST(req: NextRequest) {
                             return shot;
                         });
 
-                        const allDone = searchQueriesMeta.visualShots.every((s: any) => s.jobStatus === "COMPLETED" || s.visualPath);
+                        const allDone = searchQueriesMeta.visualShots.every((s: any) => s.jobStatus === "COMPLETED" || (!s.jobId && s.visualPath));
                         if (allDone && searchQueriesMeta.visualShots.length > 0) {
                             updatedPath = searchQueriesMeta.visualShots[searchQueriesMeta.visualShots.length - 1].visualPath || finalPath;
                         }

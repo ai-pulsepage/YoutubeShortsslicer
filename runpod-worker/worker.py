@@ -252,6 +252,39 @@ def download_from_r2(r2_key: str, local_path: str):
 # ─── Multi-Model Image Generation ─────────────────────
 _image_pipelines = {}  # Cache: model_name -> pipeline
 
+def unload_image_pipelines():
+    global _image_pipelines
+    if _image_pipelines:
+        for key in list(_image_pipelines.keys()):
+            print(f"  🧹 Unloading image pipeline: {key}...")
+            del _image_pipelines[key]
+        _image_pipelines = {}
+        import gc
+        gc.collect()
+        torch.cuda.empty_cache()
+
+def unload_wan_pipeline():
+    global _wan_pipe
+    if _wan_pipe is not None:
+        print("  🧹 Unloading Wan pipeline...")
+        del _wan_pipe
+        _wan_pipe = None
+        import gc
+        gc.collect()
+        torch.cuda.empty_cache()
+
+def unload_musicgen():
+    global _musicgen_model, _musicgen_processor
+    if _musicgen_model is not None:
+        print("  🧹 Unloading MusicGen model...")
+        del _musicgen_model
+        del _musicgen_processor
+        _musicgen_model = None
+        _musicgen_processor = None
+        import gc
+        gc.collect()
+        torch.cuda.empty_cache()
+
 def get_image_pipeline(model_name: str = "flux"):
     """Lazy-load the requested image generation pipeline.
     
@@ -261,6 +294,10 @@ def get_image_pipeline(model_name: str = "flux"):
       - juggernaut: Juggernaut XL (photorealistic SDXL) — best for true crime/biography
     """
     global _image_pipelines
+    
+    # Free other loaded models to prevent VRAM overflow
+    unload_wan_pipeline()
+    unload_musicgen()
     
     if model_name in _image_pipelines:
         return _image_pipelines[model_name]
@@ -353,6 +390,11 @@ _wan_pipe = None
 def get_wan_pipeline():
     """Lazy-load Wan2.2 image-to-video pipeline."""
     global _wan_pipe
+    
+    # Free other loaded models to prevent VRAM overflow
+    unload_image_pipelines()
+    unload_musicgen()
+    
     if _wan_pipe is None:
         from diffusers import WanImageToVideoPipeline
 
@@ -419,6 +461,11 @@ _musicgen_processor = None
 def get_musicgen():
     """Lazy-load MusicGen medium model (~3.3GB VRAM)."""
     global _musicgen_model, _musicgen_processor
+    
+    # Free other loaded models to prevent VRAM overflow
+    unload_image_pipelines()
+    unload_wan_pipeline()
+    
     if _musicgen_model is None:
         from transformers import AutoProcessor, MusicgenForConditionalGeneration
         model_id = "facebook/musicgen-medium"

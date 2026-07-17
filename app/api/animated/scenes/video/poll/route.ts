@@ -87,14 +87,14 @@ export async function POST(req: NextRequest) {
                                 return shot;
                             });
 
-                            let updatedPath = targetScene.assembledPath;
-                            const allDone = searchQueriesMeta.visualShots.every((s: any) => s.jobStatus === "COMPLETED" || s.visualPath);
-                            if (allDone && searchQueriesMeta.visualShots.length > 0) {
-                                const lastShot = searchQueriesMeta.visualShots[searchQueriesMeta.visualShots.length - 1];
-                                if (lastShot.visualPath) {
-                                    updatedPath = lastShot.visualPath;
-                                }
-                            }
+                             let updatedPath = targetScene.assembledPath;
+                             const allDone = searchQueriesMeta.visualShots.every((s: any) => s.jobStatus === "COMPLETED" || (!s.jobId && s.visualPath));
+                             if (allDone && searchQueriesMeta.visualShots.length > 0) {
+                                 const lastShot = searchQueriesMeta.visualShots[searchQueriesMeta.visualShots.length - 1];
+                                 if (lastShot.visualPath) {
+                                     updatedPath = lastShot.visualPath;
+                                 }
+                             }
 
                             await prisma.docScene.update({
                                 where: { id: targetScene.id },

@@ -187,13 +187,28 @@ export default function KidsStoryBuilderPage() {
         if (projects.length > 0) {
             const params = new URLSearchParams(window.location.search);
             const queryProjId = params.get("project");
+            const queryStep = params.get("step");
             if (queryProjId && queryProjId !== selectedProjectId) {
-                handleSelectProject(queryProjId);
-                // Clear query parameter
-                window.history.replaceState({}, "", "/dashboard/animated");
+                const parsedStep = queryStep ? parseInt(queryStep, 10) : 1;
+                const targetStep = (parsedStep >= 1 && parsedStep <= 5) ? parsedStep : 1;
+                handleSelectProject(queryProjId, targetStep);
             }
         }
-    }, [projects]);
+    }, [projects]);    // Sync project and step index to the URL parameters
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            const params = new URLSearchParams(window.location.search);
+            if (selectedProjectId) {
+                params.set("project", selectedProjectId);
+                params.set("step", String(currentStep));
+            } else {
+                params.delete("project");
+                params.delete("step");
+            }
+            const newUrl = params.toString() ? `/dashboard/animated?${params.toString()}` : "/dashboard/animated";
+            window.history.replaceState({}, "", newUrl);
+        }
+    }, [selectedProjectId, currentStep]);
 
     // Load specific video transcript
     useEffect(() => {
@@ -351,7 +366,7 @@ export default function KidsStoryBuilderPage() {
     };
 
     // Handle Project Selection
-    const handleSelectProject = (projectId: string) => {
+    const handleSelectProject = (projectId: string, defaultStep: number = 1) => {
         if (!projectId) {
             setSelectedProjectId("");
             setDocId(null);
@@ -401,7 +416,7 @@ export default function KidsStoryBuilderPage() {
             setVisualStyle((proj as any).visualStyle || "Pixar 3D");
             setTargetAge((proj as any).targetAge || "Kids");
             setGenre((proj as any).genre || "Adventure");
-            setCurrentStep(1);
+            setCurrentStep(defaultStep);
         }
     };
 
