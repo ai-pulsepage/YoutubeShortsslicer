@@ -2062,12 +2062,10 @@ export default function KidsStoryBuilderPage() {
                                                                 </div>
                                                             </div>
 
-                                                            {/* right side visual preview */}
-                                                            <div className="w-28 aspect-video bg-black/40 border border-gray-850 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center relative">
+                                                             {/* right side visual preview */}
+                                                             <div className="w-28 aspect-video bg-black/40 border border-gray-850 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center">
                                                                  {shot.visualPath ? (
                                                                      <video src={`/api/storage/signed?key=${shot.visualPath}`} controls className="w-full h-full object-cover" />
-                                                                 ) : shot.startImagePath ? (
-                                                                     <img src={`/api/storage/signed?key=${shot.startImagePath}`} className="w-full h-full object-cover" alt="Canvas" />
                                                                  ) : (
                                                                      <Film className="w-5 h-5 text-gray-800" />
                                                                  )}
