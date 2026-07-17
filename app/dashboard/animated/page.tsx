@@ -90,6 +90,7 @@ type Project = {
 type Video = {
     id: string;
     title: string;
+    description?: string | null;
     thumbnail: string | null;
     duration: number | null;
     createdAt: string;
@@ -162,6 +163,8 @@ export default function KidsStoryBuilderPage() {
     const [videos, setVideos] = useState<Video[]>([]);
     const [selectedVideoId, setSelectedVideoId] = useState<string>("");
     const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
+    const [visualAnalysis, setVisualAnalysis] = useState<any>(null);
+    const [runningVisualAnalysis, setRunningVisualAnalysis] = useState(false);
     const [transcriptText, setTranscriptText] = useState("");
     const [videosLoading, setVideosLoading] = useState(false);
     const [transcriptLoading, setTranscriptLoading] = useState(false);
@@ -224,6 +227,21 @@ export default function KidsStoryBuilderPage() {
 
         const videoObj = videos.find(v => v.id === selectedVideoId);
         setSelectedVideo(videoObj || null);
+
+        if (videoObj && videoObj.description) {
+            try {
+                const parsed = JSON.parse(videoObj.description);
+                if (parsed.headcount !== undefined) {
+                    setVisualAnalysis(parsed);
+                } else {
+                    setVisualAnalysis(null);
+                }
+            } catch (e) {
+                setVisualAnalysis(null);
+            }
+        } else {
+            setVisualAnalysis(null);
+        }
 
         setTranscriptLoading(true);
         setTranscriptText("");
@@ -468,7 +486,40 @@ export default function KidsStoryBuilderPage() {
             setVisualStyle((proj as any).visualStyle || "Pixar 3D");
             setTargetAge((proj as any).targetAge || "Kids");
             setGenre((proj as any).genre || "Adventure");
+            setVisualAnalysis((proj as any).visualAnalysis || null);
             setCurrentStep(defaultStep);
+        }
+    };
+
+    // Run Visual Analysis
+    const handleRunVisualAnalysis = async () => {
+        if (!selectedVideoId) return;
+        setError("");
+        setRunningVisualAnalysis(true);
+        try {
+            const res = await fetch("/api/animated/projects/analyze-video", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ videoId: selectedVideoId })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to analyze video");
+            
+            if (data.visualAnalysis) {
+                setVisualAnalysis(data.visualAnalysis);
+                // Update the videos array so it is updated in-place without page reloading
+                setVideos(prev => prev.map(v => {
+                    if (v.id === selectedVideoId) {
+                        return { ...v, description: JSON.stringify(data.visualAnalysis) };
+                    }
+                    return v;
+                }));
+                loadProjects();
+            }
+        } catch (err: any) {
+            setError(err.message || "Failed to analyze video.");
+        } finally {
+            setRunningVisualAnalysis(false);
         }
     };
 
@@ -1643,6 +1694,84 @@ export default function KidsStoryBuilderPage() {
                                     </button>
                                 </div>
                             </div>
+
+                            {sourceMode === "video" && (
+                                <div className="bg-gray-950 border border-gray-850 rounded-2xl p-4 space-y-3.5">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                        <div>
+                                            <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                                                <Sparkles className="w-4 h-4 text-violet-400" /> AI Video Cast Observation (Gemini 2.5 Flash)
+                                            </h4>
+                                            <p className="text-[10px] text-gray-400 mt-0.5 font-sans">
+                                                We seek and inspect the video frame screenshots visually to identify recurring actors and visual layouts.
+                                            </p>
+                                        </div>
+                                        {!visualAnalysis && (
+                                            <button 
+                                                onClick={handleRunVisualAnalysis}
+                                                disabled={runningVisualAnalysis}
+                                                className="px-3 py-1.5 bg-violet-650 hover:bg-violet-700 disabled:bg-violet-900/40 disabled:text-gray-500 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer self-start sm:self-center"
+                                            >
+                                                {runningVisualAnalysis ? (
+                                                    <>
+                                                        <Loader2 className="w-3 h-3 animate-spin" /> Analyzing Video...
+                                                    </>
+                                                ) : (
+                                                    "Analyze Video Roster"
+                                                )}
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {visualAnalysis ? (
+                                        <div className="space-y-3.5 pt-1.5 border-t border-gray-850/60">
+                                            <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">
+                                                Detected Headcount: <span className="text-violet-400 font-bold">{visualAnalysis.headcount}</span> characters
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                                                {visualAnalysis.detectedCharacters?.map((c: any, cIdx: number) => {
+                                                    const alreadyAdded = characters.some(rosterChar => rosterChar.name.toLowerCase() === c.name.toLowerCase());
+                                                    return (
+                                                        <div key={cIdx} className="bg-black/30 border border-gray-850/60 p-3.5 rounded-xl flex items-start justify-between gap-3">
+                                                            <div className="space-y-1">
+                                                                <span className="text-xs font-bold text-gray-250 block">{c.name}</span>
+                                                                <p className="text-[10px] text-gray-400 leading-normal line-clamp-2" title={c.prompt}>
+                                                                    {c.prompt}
+                                                                </p>
+                                                            </div>
+                                                            <button
+                                                                onClick={() => {
+                                                                    if (alreadyAdded) return;
+                                                                    setCharacters(prev => [
+                                                                        ...prev,
+                                                                        { id: `char-${Date.now()}-${cIdx}`, name: c.name, prompt: c.prompt }
+                                                                    ]);
+                                                                }}
+                                                                disabled={alreadyAdded}
+                                                                className={`px-2.5 py-1 rounded text-[10px] font-bold transition-all flex-shrink-0 border ${
+                                                                    alreadyAdded 
+                                                                        ? "bg-emerald-950/20 text-emerald-400 border-emerald-900/35" 
+                                                                        : "bg-violet-600/10 hover:bg-violet-600/25 text-violet-400 border-violet-500/20 cursor-pointer"
+                                                                }`}
+                                                            >
+                                                                {alreadyAdded ? "In Cast" : "Add to Cast"}
+                                                            </button>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    ) : runningVisualAnalysis ? (
+                                        <div className="h-16 flex items-center justify-center gap-2 text-[10px] text-gray-400 border border-dashed border-gray-850/60 rounded-xl bg-black/10 font-sans">
+                                            <Loader2 className="w-4 h-4 animate-spin text-violet-500" /> Seek-extracting frames & running visual AI analysis. Please wait...
+                                        </div>
+                                    ) : (
+                                        <div className="h-14 flex items-center justify-center text-[10px] text-gray-500 border border-dashed border-gray-850/60 rounded-xl bg-black/10 font-sans">
+                                            No visual analysis available yet. Click "Analyze Video Roster" above to detect characters.
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {characters.map(char => (

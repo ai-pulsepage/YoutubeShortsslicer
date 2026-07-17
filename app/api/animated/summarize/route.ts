@@ -1,6 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { analyzeVideoVisually } from "@/lib/documentary/video-analyzer";
+
+const LANGUAGE_VOICES: Record<string, { childFemale: string; male: string; default: string }> = {
+    spanish: {
+        childFemale: "es-MX-DaliaNeural-Female",
+        male: "es-ES-AlvaroNeural-Male",
+        default: "es-MX-DaliaNeural-Female"
+    },
+    french: {
+        childFemale: "fr-FR-DeniseNeural-Female",
+        male: "fr-FR-HenriNeural-Male",
+        default: "fr-FR-DeniseNeural-Female"
+    },
+    german: {
+        childFemale: "de-DE-AmalaNeural-Female",
+        male: "de-DE-KillianNeural-Male",
+        default: "de-DE-AmalaNeural-Female"
+    },
+    italian: {
+        childFemale: "it-IT-ElsaNeural-Female",
+        male: "it-IT-DiegoNeural-Male",
+        default: "it-IT-ElsaNeural-Female"
+    },
+    korean: {
+        childFemale: "ko-KR-SunHiNeural-Female",
+        male: "ko-KR-InJoonNeural-Male",
+        default: "ko-KR-SunHiNeural-Female"
+    },
+    chinese: {
+        childFemale: "zh-CN-XiaoyiNeural-Female",
+        male: "zh-CN-YunxiNeural-Male",
+        default: "zh-CN-XiaoyiNeural-Female"
+    }
+};
 
 export async function POST(req: NextRequest) {
     const session = await auth();
@@ -117,9 +151,24 @@ export async function POST(req: NextRequest) {
 
         // Phase 1: High-Level Concept Summary Extraction (only in Spin-off Mode for Ingested Videos)
         let premiseOutline = contentToProcess;
+        let visualAnalysis = null;
+        if (videoId) {
+            const video = await prisma.video.findUnique({ where: { id: videoId } });
+            if (video?.description) {
+                try {
+                    visualAnalysis = JSON.parse(video.description);
+                } catch (e) {}
+            }
+            if (!visualAnalysis) {
+                console.log(`[Summarize] Visual analysis not found for video ${videoId}. Running visual analyzer...`);
+                visualAnalysis = await analyzeVideoVisually(videoId);
+            }
+        }
+
         if (videoId && isSpinOff) {
             console.log(`[Summarize] Performing Step 1 concept summary on long video transcript...`);
-            const summaryPrompt = `You are a children's content director. Read the following ingested video transcript, and output ONLY a simple 1-paragraph summary outline of the core events, character actions, and themes (e.g. "Jimmy wakes up, Lily greets him, Buddy plays in a cape, mother Jenny serves juice, they sing together"). Do NOT output dialogues, verses or songs. Make it plain, descriptive prose.`;
+            const summaryPrompt = `You are a children's content director. Read the following ingested video transcript, and output a simple 1-paragraph abstracted, generic concept outline of the core events, character roles, and beats (e.g. "Character A wakes up, Character B greets him, they play in a fantasy cloud environment, they transition to an underwater scene and meet a funny sea animal, they sing together"). 
+            DO NOT mention specific copyrighted nouns, names (like Cocomelon), or bizarre custom visual accessories (like a whale with a mustache or a cat dancing with a giraffe). Translate all events into generic character roles and actions so it acts as a clean, copyright-safe outline skeleton. Do NOT output dialogues, verses or songs. Make it plain, descriptive prose.`;
             
             try {
                 const outlineRes = await fetch("https://api.deepseek.com/v1/chat/completions", {
@@ -153,51 +202,28 @@ export async function POST(req: NextRequest) {
 
         // Phase 2: Creative Composition
         const maxWordCount = Math.round((defaultShotDuration || 5) * 2.5);
-        const systemPrompt = `You are an expert children's content writer. Read the following input (which is ${isSpinOff ? "a simple narrative premise outline" : "a story script"}), and rewrite it into a highly original storyboard script consisting of exactly ${numScenes} scenes.
-
-TARGET AUDIENCE & STYLE SETTINGS:
-- Dialogue Pacing (type: "dialogue" ONLY): Write natural, engaging narration or dialogue. Do NOT stuff words just to fill time. The absolute maximum is ${maxWordCount} words per dialogue scene to prevent TTS audio from running longer than the video clip. Short, punchy lines (5-10 words) are preferred — let the animation carry the scene.
-- Song Lyrics (type: "song" ONLY): The word limit above does NOT apply to song scenes. Songs are played from a user-uploaded Suno MP3, so duration is handled externally. Write the COMPLETE song in a single scene — all verses, chorus, bridge, and repeated hooks as one continuous block of lyrics in the "text" field. A well-written song should have 3-6 verses minimum. NEVER split a single song across multiple scenes: one song = exactly one scene.
-- Director's Shot Brief: You are directing a camera crew who reads ONLY the current shot card — they have zero memory of any previous scene. Every "visualPrompt" must be a complete, self-contained director's brief that includes: (1) the style prefix "${stylePrefix}", (2) the character's name AND a brief physical description so the video model can identify them (e.g. "Buddy, a small orange tabby kitten with big green eyes"), (3) the specific action or motion happening in this shot (make it dynamic enough to fill ${defaultShotDuration || 5} seconds of video naturally), and (4) the setting/background. Think like a film director writing a shot card for a crew that has never seen the script.
-- Tone & Register: ${toneBrief}
+        const systemPrompt = `You are an expert children's content writer and a copyright compliance specialist. Read the following input (which is ${isSpinOff ? "a simple generic narrative premise outline" : "a story script"}), and rewrite it into a highly original storyboard script consisting of exactly ${numScenes} scenes.
+ 
+CRITICAL COMPLIANCE RULES (COPYRIGHT PROTECTION & ORIGINALITY):
+1. PROCEDURAL WHIMSICAL SUBSTITUTION: You are strictly forbidden from copying specific creative concept pairings, unusual whimsical characters, accessories, or settings from the source. 
+   - If the source describes a highly specific or bizarre combination (e.g. a "whale with a mustache", "a cat dancing with a giraffe", "candy clouds", "an ice cream mountain", "a baby whale jumping off an atom"), you MUST dynamically substitute it with an entirely different, equally whimsical concept of your own creation (e.g. "a tiny squirrel wearing oversized glasses reading a map on a giant leaf", "a clumsy elephant trying to hula-hoop with a Saturn ring", "a forest of glowing musical mushrooms", "starry waterfalls").
+   - Never copy specific nouns, adjectives, or action pairings verbatim from the source.
+2. COMPLETE ORIGINALITY: Compose all dialogue and song lyrics entirely from scratch. Do NOT reuse existing song lyrics or word-for-word structures. Use completely different metaphors, rhyming patterns, and vocabularies to guarantee 100% legal safety.
+3. Dialogue Pacing (type: "dialogue" ONLY): Write natural, engaging narration or dialogue. Do NOT stuff words just to fill time. The absolute maximum is ${maxWordCount} words per dialogue scene to prevent TTS audio from running longer than the video clip. Short, punchy lines (5-10 words) are preferred — let the animation carry the scene.
+4. Song Lyrics (type: "song" ONLY): The word limit above does NOT apply to song scenes. Songs are played from a user-uploaded Suno MP3, so duration is handled externally. Write the COMPLETE song in a single scene — all verses, chorus, bridge, and repeated hooks as one continuous block of lyrics in the "text" field. A well-written song should have 3-6 verses minimum. NEVER split a single song across multiple scenes: one song = exactly one scene.
+5. Director's Shot Brief: You are directing a camera crew who reads ONLY the current shot card — they have zero memory of any previous scene. Every "visualPrompt" must be a complete, self-contained director's brief that includes: (1) the style prefix "${stylePrefix}", (2) the character's name AND a brief physical description so the video model can identify them (e.g. "Buddy, a small orange tabby kitten with big green eyes"), (3) the specific action or motion happening in this shot (make it dynamic enough to fill ${defaultShotDuration || 5} seconds of video naturally), and (4) the setting/background. Think like a film director writing a shot card for a crew that has never seen the script.
+6. Tone & Register: ${toneBrief}
 
 CRITICAL COMPLIANCE RULES:
-1. COMPLETE ORIGINALITY & COPYRIGHT PROTECTION: You must compose all dialogue and song lyrics entirely from scratch. Do NOT reuse existing song lyrics or word-for-word structures. Use completely different metaphors, rhyming patterns, and vocabularies to guarantee 100% legal safety.
-${isSpinOff 
-  ? `2. CREATIVE SPIN-OFF: The input is a raw premise outline. You are NOT bound to the scene counts or ordering of any original video. Write a completely fresh, organic children's story sequence. Decide naturally where to place song numbers (if musicals are enabled) to help narrate the outline's theme.`
-  : `2. DIRECT REWRITE / PARAPHRASE: Keep the exact same pacing, structure, and scene-by-scene sequence as the input script, but rephrase all dialogues and lyrics to be legally distinct.`
-}
-3. CAST ALIGNMENT — CHARACTER VISUAL IDENTITY:
+1. CAST ALIGNMENT — CHARACTER VISUAL IDENTITY:
 You MUST ONLY use the following characters anywhere in the entire storyboard output — including speaker fields, dialogue text, AND visualPrompt scene descriptions. Never name, reference, or imply the existence of any character not in this list, regardless of any characters you may have encountered in source material or prior context. Background figures must be described generically (e.g. "a group of children", "nearby animals") without names. This rule is absolute — no exceptions for songs, imagination sequences, or dream scenes.
 
 ANCHORED CHARACTERS (use this exact visual description in every visualPrompt they appear in — do not alter or invent variations):
 ${anchoredRoster || "(none)"}
 
 FREE CHARACTERS (invent a specific vivid physical description on first use, then repeat it exactly in every scene — never vary it):
-${freeRoster || "(none)"}
-${useMusicals 
-  ? `4. MUSIC SEGREGATION & SONG STRUCTURE RULES:
-   - You may include both "dialogue" and "song" scene types. Use your judgment as a director — decide how many songs fit the story's genre, pacing, and emotional beats naturally.
-   - For each song scene, you MUST write a COMPLETE song — all verses, chorus, bridge, and any repeated hooks — as one continuous block of lyrics in the "text" field. NEVER put individual bars or lyric lines as separate song scenes. One song = exactly one scene.
-   - Each song scene MUST include a "sunoStylePrompt" key with a Suno AI music style suggestion (e.g. "upbeat kids singalong, bright bells, acoustic ukulele, 120bpm").
-   - The song lyrics in "text" can be as long as the song requires — this is expected and correct. Do NOT truncate lyrics.`
-  : `4. DIALOGUE ONLY: You must ONLY generate scenes of type "dialogue". DO NOT generate any "song" scenes or Suno prompts. The entire storyboard timeline must consist of character dialogues/narrations.`
-}
+${freeRoster || "(none)"}`;
 
-Return ONLY a valid JSON array of scenes without any markdown wrapping or preamble.
-The JSON structure for each scene must follow this schema:
-[
-  {
-    "type": "${useMusicals ? "dialogue | song" : "dialogue"}",
-    "character": "One of: ${allCharacterNames}",
-    "voice": "en-US-AnaNeural-Female" | "en-US-ChristopherNeural-Male" | "zh-CN-XiaoyiNeural-Female" | "en-US-GuyNeural-Male" | "en-US-AriaNeural-Female",
-    "text": "The original polished dialogue spoken${useMusicals ? " or song lyrics sung" : ""} in this scene.",
-    "visualPrompt": "Full director's shot brief starting with style prefix. Example: \\"${selectedStyle} style animation of [characterName], [brief physical description], [specific dynamic action filling the shot duration], [camera angle], [setting/background detail]\\".",
-    "sunoStylePrompt": "Suno style suggestion (only for song types, empty string otherwise)"
-  }
-]
-
-Note: For child boy character roles (like Jimmy), you must assign "en-US-ChristopherNeural-Male" instead of the adult voice.`;
 
         let content = "";
         try {

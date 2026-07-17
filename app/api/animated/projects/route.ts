@@ -194,11 +194,25 @@ export async function GET(req: NextRequest) {
         });
 
         // Map database projects to client structures
-        const mapped = projects.map(p => {
+        const mapped = await Promise.all(projects.map(async (p) => {
             const metaConfig = (p.rawArticles && typeof p.rawArticles === "object")
                 ? (p.rawArticles as Record<string, any>)
                 : {};
             
+            const videoId = p.sourceUrls && p.sourceUrls.length > 0 ? p.sourceUrls[0] : "";
+            let visualAnalysis = null;
+            if (videoId) {
+                const video = await prisma.video.findUnique({
+                    where: { id: videoId },
+                    select: { description: true }
+                });
+                if (video?.description) {
+                    try {
+                        visualAnalysis = JSON.parse(video.description);
+                    } catch (e) {}
+                }
+            }
+
             return {
                 id: p.id,
                 title: p.title,
@@ -213,6 +227,7 @@ export async function GET(req: NextRequest) {
                 visualStyle: metaConfig.visualStyle || "Pixar 3D",
                 targetAge: metaConfig.targetAge || "Kids",
                 genre: metaConfig.genre || "Adventure",
+                visualAnalysis,
                 characters: p.assets.map(a => ({
                     id: a.id,
                     name: a.label,
@@ -261,7 +276,7 @@ export async function GET(req: NextRequest) {
                     };
                 })
             };
-        });
+        }));
 
         return NextResponse.json({ projects: mapped });
 
