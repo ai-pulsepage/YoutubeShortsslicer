@@ -429,10 +429,10 @@ export default function KidsStoryBuilderPage() {
                 let visualShots = s.visualShots || [];
                 if (Array.isArray(visualShots)) {
                     visualShots = visualShots.map((shot: any) => {
-                        if (shot.visualPath && shot.visualPath.endsWith(".webp") && !shot.startImagePath) {
+                        if (shot.visualPath && shot.visualPath.endsWith(".webp")) {
                             return {
                                 ...shot,
-                                startImagePath: shot.visualPath,
+                                startImagePath: shot.startImagePath || shot.visualPath,
                                 startImageJobStatus: "COMPLETED",
                                 startImageJobId: shot.startImageJobId || shot.jobId,
                                 visualPath: undefined,
@@ -605,10 +605,20 @@ export default function KidsStoryBuilderPage() {
         setInsufficientFunds(false);
         setRewritingShotId(shotId);
         try {
+            const charObj = characters.find(c => c.name.toLowerCase() === primaryCharacter.toLowerCase());
+            const characterPrompt = charObj ? charObj.prompt : "";
+
             const res = await fetch("/api/animated/scenes/improve-shot-prompt", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ visualPrompt, motionPrompt, primaryCharacter, sceneText, visualStyle })
+                body: JSON.stringify({ 
+                    visualPrompt, 
+                    motionPrompt, 
+                    primaryCharacter, 
+                    characterPrompt, 
+                    sceneText, 
+                    visualStyle 
+                })
             });
             const data = await res.json();
 
@@ -1074,6 +1084,9 @@ export default function KidsStoryBuilderPage() {
     };
 
     const deleteScene = (id: string) => {
+        if (typeof window !== "undefined" && !window.confirm("Are you sure you want to delete this entire scene? This will remove all associated dialogue and visual shots.")) {
+            return;
+        }
         setScenes(prev => prev.filter(s => s.id !== id));
     };
 
@@ -1301,6 +1314,9 @@ export default function KidsStoryBuilderPage() {
 
     // Delete shot from scene
     const deleteShotFromScene = (sceneId: string, shotId: string) => {
+        if (typeof window !== "undefined" && !window.confirm("Are you sure you want to delete this visual shot from the scene?")) {
+            return;
+        }
         setScenes(prev =>
             prev.map(s => {
                 if (s.id !== sceneId || !s.visualShots) return s;

@@ -6,7 +6,7 @@ export async function POST(req: NextRequest) {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { visualPrompt, motionPrompt, primaryCharacter, sceneText, visualStyle } = await req.json();
+    const { visualPrompt, motionPrompt, primaryCharacter, characterPrompt, sceneText, visualStyle } = await req.json();
     if (!visualPrompt) return NextResponse.json({ error: "visualPrompt is required" }, { status: 400 });
 
     try {
@@ -27,6 +27,10 @@ Make sure the description aligns naturally with the context of the scene.
 Do NOT change the art style — the style for this project is: "${activeStyle}". The imagePrompt MUST start with this style prefix.
 Ensure all references to the old primary character are replaced with the new primary character, and their actions/descriptions fit them correctly.
 
+You MUST describe the new character using the following physical description profile verbatim:
+"${characterPrompt || primaryCharacter}"
+Never invent a different physical appearance for this character name (for example, if they are described as a dog, kitten, or other animal, do not describe them as a human, boy, or child, and vice versa).
+
 Return ONLY a valid JSON object with the following keys:
 - "imagePrompt": Detailed static scene visual description starting with style prefix.
 - "motionPrompt": Focussed action description (e.g. "[Character] points at the chalkboard, smiling"). Do not repeat style or physical descriptors.
@@ -35,6 +39,7 @@ Return ONLY a valid JSON object with the following keys:
         const userPayload = `Original Image/Visual Prompt: "${visualPrompt}"
 Original Motion Prompt: "${motionPrompt || ""}"
 New Primary Character: "${primaryCharacter}"
+Character Description Profile: "${characterPrompt || "(none)"}"
 Scene Context Dialogue/Song: "${sceneText || ""}"`;
 
         const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
