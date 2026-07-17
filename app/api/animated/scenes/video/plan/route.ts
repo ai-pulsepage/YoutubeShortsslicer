@@ -123,12 +123,18 @@ JSON Schema:
         const data = await res.json();
         let content = data.choices?.[0]?.message?.content?.trim() || "";
 
-        if (content.startsWith("```")) {
-            content = content.replace(/^```json\s*/, "").replace(/^```\s*/, "").replace(/\s*```$/, "");
+        // Bulletproof JSON block extractor: search for the first '[' and last ']'
+        let jsonContent = content.trim();
+        const firstBracket = jsonContent.indexOf("[");
+        const lastBracket = jsonContent.lastIndexOf("]");
+        if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+            jsonContent = jsonContent.slice(firstBracket, lastBracket + 1);
+        } else if (jsonContent.startsWith("```")) {
+            jsonContent = jsonContent.replace(/^```json\s*/, "").replace(/^```\s*/, "").replace(/\s*```$/, "").trim();
         }
 
         try {
-            const shots = JSON.parse(content);
+            const shots = JSON.parse(jsonContent);
             return NextResponse.json({ shots: Array.isArray(shots) ? shots : [shots] });
         } catch (parseErr: any) {
             console.error("[Storyboard Plan] Failed to parse AI shot plan JSON:", parseErr.message);

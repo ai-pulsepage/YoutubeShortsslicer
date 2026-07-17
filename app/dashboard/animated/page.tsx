@@ -849,7 +849,7 @@ export default function KidsStoryBuilderPage() {
     // Probe Suno Duration and Plan Shots
     const probeAndPlanShots = async (sceneId: string, audioKey: string, lyrics: string) => {
         setError("");
-        updateScene(sceneId, { planningShots: true });
+        setScenes(prev => prev.map(s => s.id === sceneId ? { ...s, planningShots: true } : s));
         
         try {
             // 1. Probe duration using ffprobe
@@ -883,15 +883,28 @@ export default function KidsStoryBuilderPage() {
                 jobStatus: "IDLE"
             }));
 
-            updateScene(sceneId, {
-                sunoDuration: duration,
-                visualShots: plannedShots
+            // Use functional state updater to avoid stale state races and get the exact latest array
+            setScenes(prev => {
+                const nextScenes = prev.map(s => {
+                    if (s.id === sceneId) {
+                        return {
+                            ...s,
+                            sunoAudioKey: audioKey, // Make sure we preserve/enforce this key!
+                            sunoDuration: duration,
+                            visualShots: plannedShots,
+                            planningShots: false
+                        };
+                    }
+                    return s;
+                });
+                // Persist directly to DB
+                handleSaveProject(nextScenes);
+                return nextScenes;
             });
 
         } catch (err: any) {
             setError(err.message || "Failed to plan visual shots sequence.");
-        } finally {
-            updateScene(sceneId, { planningShots: false });
+            setScenes(prev => prev.map(s => s.id === sceneId ? { ...s, planningShots: false } : s));
         }
     };
 
