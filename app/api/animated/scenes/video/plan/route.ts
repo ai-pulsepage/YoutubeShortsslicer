@@ -7,11 +7,9 @@ export async function POST(req: NextRequest) {
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { lyrics, numShots, characters, shotDuration, visualStyle } = await req.json();
-    if (!numShots) {
-        return NextResponse.json({ error: "numShots is required" }, { status: 400 });
+    if (!lyrics || !numShots) {
+        return NextResponse.json({ error: "lyrics and numShots are required" }, { status: 400 });
     }
-
-    const songLyrics = lyrics || "A happy, cheerful children's song playing in a colorful fantasy playground.";
 
     try {
         let apiKey = process.env.DEEPSEEK_API_KEY;
@@ -106,7 +104,7 @@ JSON Schema:
                     },
                     {
                         role: "user",
-                        content: songLyrics
+                        content: lyrics
                     }
                 ],
                 temperature: 0.7,
