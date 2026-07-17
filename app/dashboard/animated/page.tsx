@@ -194,8 +194,12 @@ export default function KidsStoryBuilderPage() {
                 handleSelectProject(queryProjId, targetStep);
             }
         }
-    }, [projects]);    // Sync project and step index to the URL parameters
+    }, [projects]);
+
+    // Sync project and step index to the URL parameters
     useEffect(() => {
+        if (projects.length === 0) return; // Wait until projects have loaded from the database
+
         if (typeof window !== "undefined") {
             const params = new URLSearchParams(window.location.search);
             if (selectedProjectId) {
@@ -208,7 +212,7 @@ export default function KidsStoryBuilderPage() {
             const newUrl = params.toString() ? `/dashboard/animated?${params.toString()}` : "/dashboard/animated";
             window.history.replaceState({}, "", newUrl);
         }
-    }, [selectedProjectId, currentStep]);
+    }, [selectedProjectId, currentStep, projects]);
 
     // Load specific video transcript
     useEffect(() => {
