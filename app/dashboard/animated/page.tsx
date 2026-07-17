@@ -883,24 +883,22 @@ export default function KidsStoryBuilderPage() {
                 jobStatus: "IDLE"
             }));
 
-            // Use functional state updater to avoid stale state races and get the exact latest array
-            setScenes(prev => {
-                const nextScenes = prev.map(s => {
-                    if (s.id === sceneId) {
-                        return {
-                            ...s,
-                            sunoAudioKey: audioKey, // Make sure we preserve/enforce this key!
-                            sunoDuration: duration,
-                            visualShots: plannedShots,
-                            planningShots: false
-                        };
-                    }
-                    return s;
-                });
-                // Persist directly to DB
-                handleSaveProject(nextScenes);
-                return nextScenes;
+            // Compute updated scenes list synchronously outside of state updater
+            const nextScenes = scenes.map(s => {
+                if (s.id === sceneId) {
+                    return {
+                        ...s,
+                        sunoAudioKey: audioKey, // Make sure we preserve/enforce this key!
+                        sunoDuration: duration,
+                        visualShots: plannedShots,
+                        planningShots: false
+                    };
+                }
+                return s;
             });
+
+            setScenes(nextScenes);
+            await handleSaveProject(nextScenes);
 
         } catch (err: any) {
             setError(err.message || "Failed to plan visual shots sequence.");
