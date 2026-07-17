@@ -394,8 +394,7 @@ export async function POST(req: NextRequest) {
             // Insert current scenes list
             for (let idx = 0; idx < scenes.length; idx++) {
                 const s = scenes[idx];
-                const isTempId = s.id.startsWith("scene-");
-                const finalSceneId = isTempId ? `scene-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 5)}` : s.id;
+                const finalSceneId = s.id || `scene-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 5)}`;
 
                 // Automatically relocate custom Suno MP3 uploads from UGC folders to kids animated project folder
                 let sunoAudioKey = s.sunoAudioKey || "";
