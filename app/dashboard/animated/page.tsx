@@ -251,6 +251,9 @@ export default function KidsStoryBuilderPage() {
                     if (shot.jobId && shot.jobStatus !== "COMPLETED" && shot.jobStatus !== "FAILED") {
                         pendingJobs.push({ sceneId: s.id, shotId: shot.id, jobId: shot.jobId });
                     }
+                    if (shot.startImageJobId && shot.startImageJobStatus !== "COMPLETED" && shot.startImageJobStatus !== "FAILED") {
+                        pendingJobs.push({ sceneId: s.id, shotId: shot.id, jobId: shot.startImageJobId });
+                    }
                 });
             }
         });
@@ -277,16 +280,40 @@ export default function KidsStoryBuilderPage() {
                     prev.map(scene => {
                         if (!scene.visualShots) return scene;
                         const updatedShots = scene.visualShots.map(shot => {
-                            const matchingJob = updatedJobs.find((j: any) => j.id === shot.jobId);
-                            if (!matchingJob) return shot;
-                            return {
-                                ...shot,
-                                jobStatus: (matchingJob.status === "QUEUED" ? "QUEUED" 
-                                         : matchingJob.status === "PROCESSING" ? "PROCESSING"
-                                         : matchingJob.status === "COMPLETED" ? "COMPLETED"
-                                         : "FAILED") as Shot["jobStatus"],
-                                visualPath: matchingJob.outputPath || shot.visualPath
-                            };
+                            let updatedShot = { ...shot };
+
+                            // Update start image job state if matching
+                            if (shot.startImageJobId) {
+                                const matchingStartJob = updatedJobs.find((j: any) => j.id === shot.startImageJobId);
+                                if (matchingStartJob) {
+                                    updatedShot.startImageJobStatus = (matchingStartJob.status === "QUEUED" ? "QUEUED"
+                                                                     : matchingStartJob.status === "PROCESSING" ? "PROCESSING"
+                                                                     : matchingStartJob.status === "COMPLETED" ? "COMPLETED"
+                                                                     : "FAILED") as any;
+                                    if (matchingStartJob.status === "COMPLETED" && matchingStartJob.outputPath) {
+                                        updatedShot.startImagePath = matchingStartJob.outputPath;
+                                        // Auto-migrate if it was saved to visualPath by old bugs
+                                        if (updatedShot.visualPath === matchingStartJob.outputPath) {
+                                            updatedShot.visualPath = undefined;
+                                            updatedShot.jobStatus = "IDLE";
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Update final video job state if matching
+                            if (shot.jobId) {
+                                const matchingVideoJob = updatedJobs.find((j: any) => j.id === shot.jobId);
+                                if (matchingVideoJob) {
+                                    updatedShot.jobStatus = (matchingVideoJob.status === "QUEUED" ? "QUEUED"
+                                                           : matchingVideoJob.status === "PROCESSING" ? "PROCESSING"
+                                                           : matchingVideoJob.status === "COMPLETED" ? "COMPLETED"
+                                                           : "FAILED") as Shot["jobStatus"];
+                                    updatedShot.visualPath = matchingVideoJob.outputPath || shot.visualPath;
+                                }
+                            }
+
+                            return updatedShot;
                         });
 
                         const allDone = updatedShots.every(s => s.jobStatus === "COMPLETED");
@@ -398,12 +425,33 @@ export default function KidsStoryBuilderPage() {
                 return c;
             });
             setCharacters(mappedCharacters);
-            setScenes(proj.scenes.map(s => ({
-                ...s,
-                type: s.type || "dialogue",
-                character: s.character || "Leo",
-                voice: s.voice || "en-US-AnaNeural-Female"
-            })));
+            const cleanedScenes = proj.scenes.map(s => {
+                let visualShots = s.visualShots || [];
+                if (Array.isArray(visualShots)) {
+                    visualShots = visualShots.map((shot: any) => {
+                        if (shot.visualPath && shot.visualPath.endsWith(".webp") && !shot.startImagePath) {
+                            return {
+                                ...shot,
+                                startImagePath: shot.visualPath,
+                                startImageJobStatus: "COMPLETED",
+                                startImageJobId: shot.startImageJobId || shot.jobId,
+                                visualPath: undefined,
+                                jobStatus: shot.jobStatus === "COMPLETED" ? "IDLE" : shot.jobStatus,
+                                jobId: undefined
+                            };
+                        }
+                        return shot;
+                    });
+                }
+                return {
+                    ...s,
+                    type: s.type || "dialogue",
+                    character: s.character || "Leo",
+                    voice: s.voice || "en-US-AnaNeural-Female",
+                    visualShots
+                };
+            });
+            setScenes(cleanedScenes);
             
             // Restore video ingestion source mode and ID
             if (proj.sourceUrls && proj.sourceUrls.length > 0) {
@@ -2015,13 +2063,15 @@ export default function KidsStoryBuilderPage() {
                                                             </div>
 
                                                             {/* right side visual preview */}
-                                                            <div className="w-28 aspect-video bg-black/40 border border-gray-850 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center">
-                                                                {shot.visualPath ? (
-                                                                    <video src={`/api/storage/signed?key=${shot.visualPath}`} controls className="w-full h-full object-cover" />
-                                                                ) : (
-                                                                    <Film className="w-5 h-5 text-gray-800" />
-                                                                )}
-                                                            </div>
+                                                            <div className="w-28 aspect-video bg-black/40 border border-gray-850 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center relative">
+                                                                 {shot.visualPath ? (
+                                                                     <video src={`/api/storage/signed?key=${shot.visualPath}`} controls className="w-full h-full object-cover" />
+                                                                 ) : shot.startImagePath ? (
+                                                                     <img src={`/api/storage/signed?key=${shot.startImagePath}`} className="w-full h-full object-cover" alt="Canvas" />
+                                                                 ) : (
+                                                                     <Film className="w-5 h-5 text-gray-800" />
+                                                                 )}
+                                                             </div>
 
                                                         </div>
                                                     ))}
