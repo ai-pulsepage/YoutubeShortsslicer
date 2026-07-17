@@ -202,6 +202,7 @@ export async function POST(req: NextRequest) {
 
         // Phase 2: Creative Composition
         const maxWordCount = Math.round((defaultShotDuration || 5) * 2.5);
+
         const systemPrompt = `You are an expert children's content writer and a copyright compliance specialist. Read the following input (which is ${isSpinOff ? "a simple generic narrative premise outline" : "a story script"}), and rewrite it into a highly original storyboard script consisting of exactly ${numScenes} scenes.
  
 CRITICAL COMPLIANCE RULES (COPYRIGHT PROTECTION & ORIGINALITY):
@@ -222,7 +223,30 @@ ANCHORED CHARACTERS (use this exact visual description in every visualPrompt the
 ${anchoredRoster || "(none)"}
 
 FREE CHARACTERS (invent a specific vivid physical description on first use, then repeat it exactly in every scene — never vary it):
-${freeRoster || "(none)"}`;
+${freeRoster || "(none)"}
+${useMusicals 
+  ? `2. MUSIC SEGREGATION & SONG STRUCTURE RULES:
+   - You may include both "dialogue" and "song" scene types. Use your judgment as a director — decide how many songs fit the story's genre, pacing, and emotional beats naturally.
+   - For each song scene, you MUST write a COMPLETE song — all verses, chorus, bridge, and any repeated hooks — as one continuous block of lyrics in the "text" field. NEVER put individual bars or lyric lines as separate song scenes. One song = exactly one scene.
+   - Each song scene MUST include a "sunoStylePrompt" key with a Suno AI music style suggestion (e.g. "upbeat kids singalong, bright bells, acoustic ukulele, 120bpm").
+   - The song lyrics in "text" can be as long as the song requires — this is expected and correct. Do NOT truncate lyrics.`
+  : `2. DIALOGUE ONLY: You must ONLY generate scenes of type "dialogue". DO NOT generate any "song" scenes or Suno prompts. The entire storyboard timeline must consist of character dialogues/narrations.`
+}
+
+Return ONLY a valid JSON array of scenes without any markdown wrapping, preamble, or comments.
+The JSON structure for each scene must follow this schema:
+[
+  {
+    "type": "${useMusicals ? "dialogue | song" : "dialogue"}",
+    "character": "One of: ${allCharacterNames}",
+    "voice": "en-US-AnaNeural-Female" | "en-US-ChristopherNeural-Male" | "zh-CN-XiaoyiNeural-Female" | "en-US-GuyNeural-Male" | "en-US-AriaNeural-Female",
+    "text": "The original polished dialogue spoken${useMusicals ? " or song lyrics sung" : ""} in this scene.",
+    "visualPrompt": "Full director's shot brief starting with style prefix. Example: \\"${stylePrefix} [characterName], [brief physical description], [specific dynamic action filling the shot duration], [camera angle], [setting/background detail]\\".",
+    "sunoStylePrompt": "Suno style suggestion (only for song types, empty string otherwise)"
+  }
+]
+
+Note: For child boy character roles, you must assign "en-US-ChristopherNeural-Male" instead of the adult voice.`;
 
 
         let content = "";
