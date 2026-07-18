@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
                         assetId: asset.id,
                         metadata: { 
                             characterId: asset.id,
-                            r2Key: `animated/projects/${project.id}/characters/${asset.id}_avatar.webp`
+                            r2Key: `animated/avatars/${asset.id}.webp`
                         } as any
                     }
                 });
@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
                         model: "flux", 
                         sourceApp: "Animated Shorts", 
                         title: project.title || "Kids Story Project",
-                        r2Key: `animated/projects/${project.id}/characters/${asset.id}_avatar.webp`
+                        r2Key: `animated/avatars/${asset.id}.webp`
                     }
                 });
 
