@@ -466,7 +466,10 @@ export default function KidsStoryBuilderPage() {
                     type: s.type || "dialogue",
                     character: s.character || "Leo",
                     voice: s.voice || "en-US-AnaNeural-Female",
-                    visualShots
+                    visualShots,
+                    // Restore voiceStatus from the persisted narrationPath so the UI
+                    // correctly reflects already-generated audio after a page reload.
+                    voiceStatus: s.narrationPath ? "READY" : (s.voiceStatus || "IDLE")
                 };
             });
             setScenes(cleanedScenes);
@@ -794,7 +797,8 @@ export default function KidsStoryBuilderPage() {
 
     // Batch Generate Dialogue Voiceovers
     const handleGenerateAllVoices = async () => {
-        const dialogueScenes = scenes.filter(s => s.type === "dialogue" && s.voiceStatus !== "READY");
+        // Use narrationPath as ground truth (voiceStatus is UI-only and resets on page load)
+        const dialogueScenes = scenes.filter(s => s.type === "dialogue" && !s.narrationPath);
         if (dialogueScenes.length === 0) {
             alert("All dialogue voiceovers are already generated!");
             return;

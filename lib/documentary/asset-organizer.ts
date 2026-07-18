@@ -48,8 +48,31 @@ export async function organizeCompletedJobAsset(jobId: string, rawOutputPath: st
         }
 
         console.log(`[AssetOrganizer] Moving R2 object: ${rawOutputPath} -> ${destKey}`);
-        await moveR2Object(rawOutputPath, destKey);
-        return destKey;
+
+        // The GPU worker may still be uploading when this runs. Retry a few
+        // times before giving up so a brief race doesn't permanently fail.
+        const MAX_ATTEMPTS = 5;
+        const RETRY_DELAY_MS = 2000;
+        let lastErr: Error | null = null;
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            try {
+                await moveR2Object(rawOutputPath, destKey);
+                return destKey; // success
+            } catch (e: any) {
+                lastErr = e;
+                const isNotFound =
+                    e.message?.includes("does not exist") ||
+                    e.message?.includes("NoSuchKey") ||
+                    e.$metadata?.httpStatusCode === 404;
+                if (isNotFound && attempt < MAX_ATTEMPTS) {
+                    console.warn(`[AssetOrganizer] Source key not found yet (attempt ${attempt}/${MAX_ATTEMPTS}), retrying in ${RETRY_DELAY_MS}ms…`);
+                    await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+                } else {
+                    throw e; // non-404 error or out of retries
+                }
+            }
+        }
+        throw lastErr;
     } catch (err: any) {
         console.error(`[AssetOrganizer] Failed to organize asset for job ${jobId}:`, err.message);
         return rawOutputPath;

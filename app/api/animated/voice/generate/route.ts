@@ -80,6 +80,18 @@ export async function POST(req: NextRequest) {
         // Clean up temp local folder
         fs.rmSync(tempDir, { recursive: true, force: true });
 
+        // Persist narrationPath directly to the DocScene record so it survives
+        // page reloads without requiring the user to manually click Save.
+        try {
+            await prisma.docScene.update({
+                where: { id: sceneId },
+                data: { narrationPath: r2Key }
+            });
+        } catch (dbErr: any) {
+            // sceneId may be a temp client-only ID (project not yet saved) — log and continue
+            console.warn(`[Voice Gen] Could not persist narrationPath to DB for scene ${sceneId}:`, dbErr.message);
+        }
+
         return NextResponse.json({
             success: true,
             narrationPath: r2Key
