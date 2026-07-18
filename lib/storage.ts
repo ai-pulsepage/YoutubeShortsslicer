@@ -294,7 +294,7 @@ export async function copyR2Object(sourceKey: string, destKey: string): Promise<
     await s3.send(
         new CopyObjectCommand({
             Bucket: BUCKET,
-            CopySource: encodeURI(`/${BUCKET}/${sourceKey}`),
+            CopySource: `/${BUCKET}/${encodeURIComponent(sourceKey)}`,
             Key: destKey,
         })
     );
