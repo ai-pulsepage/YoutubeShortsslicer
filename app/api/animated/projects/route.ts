@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getRedis, CHANNELS, dispatchJob } from "@/lib/documentary/redis-client";
 import { organizeCompletedJobAsset } from "@/lib/documentary/asset-organizer";
-import { moveR2Object } from "@/lib/storage";
+import { moveR2Object, listR2Objects, deleteMultipleFromR2 } from "@/lib/storage";
 
 export async function GET(req: NextRequest) {
     const session = await auth();
@@ -527,6 +527,21 @@ export async function DELETE(req: NextRequest) {
     if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
 
     try {
+        // 1. Delete all R2 files under this project
+        try {
+            console.log(`[Delete Project] Listing R2 assets for project ${id}...`);
+            const prefix = `animated/projects/${id}/`;
+            const objects = await listR2Objects(prefix);
+            if (objects.length > 0) {
+                const keys = objects.map(o => o.key);
+                console.log(`[Delete Project] Deleting ${keys.length} R2 assets for project ${id}...`);
+                await deleteMultipleFromR2(keys);
+            }
+        } catch (r2Err: any) {
+            console.error(`[Delete Project] Failed to clean up R2 assets for project ${id}:`, r2Err.message);
+        }
+
+        // 2. Delete project from PostgreSQL
         await prisma.documentary.delete({
             where: {
                 id,

@@ -162,18 +162,22 @@ export default function AnimatedProjectsManagerPage() {
                                     </p>
                                 )}
 
-                                <div className="flex flex-wrap items-center gap-4 text-[10px] text-gray-500 pt-1">
-                                    <span className="flex items-center gap-1 font-sans">
-                                        <Users className="w-3.5 h-3.5 text-violet-400/80" /> {proj.characters?.length || 0} Cast
-                                    </span>
-                                    <span className="flex items-center gap-1 font-sans">
-                                        <Film className="w-3.5 h-3.5 text-blue-400/80" /> {proj.scenes?.length || 0} Scenes
-                                    </span>
-                                    <span className="flex items-center gap-1 font-sans">
-                                        <Calendar className="w-3.5 h-3.5 text-emerald-400/80" /> ID: {proj.id.substring(0, 8)}...
-                                    </span>
-                                </div>
-                            </div>
+                                 <div className="flex flex-wrap items-center gap-4 text-[10px] text-gray-500 pt-1">
+                                     <span className="flex items-center gap-1 font-sans">
+                                         <Users className="w-3.5 h-3.5 text-violet-400/80" /> {proj.characters?.length || 0} Cast
+                                     </span>
+                                     <span className="flex items-center gap-1 font-sans">
+                                         <Film className="w-3.5 h-3.5 text-blue-400/80" /> {proj.scenes?.length || 0} Scenes
+                                     </span>
+                                 </div>
+
+                                 <div className="mt-2.5 px-3 py-1.5 bg-gray-950/45 border border-gray-850/80 rounded-xl flex items-center justify-between text-xs text-gray-300 font-mono font-bold select-all">
+                                     <span className="flex items-center gap-1.5 overflow-hidden text-ellipsis whitespace-nowrap">
+                                         <span className="text-[9px] uppercase text-emerald-400 tracking-wider font-sans font-extrabold flex-shrink-0">ID:</span>
+                                         <span className="overflow-hidden text-ellipsis whitespace-nowrap">{proj.id}</span>
+                                     </span>
+                                 </div>
+                             </div>
 
                             <div className="flex gap-2 pt-3 border-t border-gray-850/60 justify-end">
                                 <button 
