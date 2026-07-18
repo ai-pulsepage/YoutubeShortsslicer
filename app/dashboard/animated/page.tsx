@@ -654,10 +654,43 @@ export default function KidsStoryBuilderPage() {
                 setDocId(data.project.id);
                 setSelectedProjectId(data.project.id);
                 if (data.project.characters) {
-                    setCharacters(data.project.characters);
+                    // Merge: preserve ttsProvider/ttsVoiceId from current client state
+                    setCharacters(prev => {
+                        const serverChars: typeof characters = data.project.characters;
+                        return serverChars.map((sc: any) => {
+                            const clientChar = prev.find(c => c.id === sc.id || c.name === sc.name);
+                            return {
+                                ...sc,
+                                ttsProvider: clientChar?.ttsProvider || sc.ttsProvider,
+                                ttsVoiceId: clientChar?.ttsVoiceId || sc.ttsVoiceId,
+                            };
+                        });
+                    });
                 }
                 if (data.project.scenes) {
-                    setScenes(data.project.scenes);
+                    // Merge server scenes with current client state.
+                    // Preserve narrationPath/voiceStatus/planningShots from the client because
+                    // those may have been set optimistically AFTER the save was triggered
+                    // (e.g. voice generation completing while probeAndPlanShots was running).
+                    setScenes(prev => {
+                        const serverScenes: typeof scenes = data.project.scenes;
+                        return serverScenes.map((ss: any) => {
+                            const clientScene = prev.find(cs => cs.id === ss.id);
+                            return {
+                                ...ss,
+                                // Prefer client narrationPath if it exists (more up-to-date)
+                                narrationPath: clientScene?.narrationPath || ss.narrationPath,
+                                // Derive voiceStatus from the merged narrationPath
+                                voiceStatus: (clientScene?.narrationPath || ss.narrationPath)
+                                    ? "READY"
+                                    : (clientScene?.voiceStatus === "GENERATING"
+                                        ? "GENERATING"
+                                        : ss.voiceStatus || "IDLE"),
+                                // Keep planningShots flag from client so spinner doesn't disappear
+                                planningShots: clientScene?.planningShots || false,
+                            };
+                        });
+                    });
                 }
                 loadProjects();
                 return {
@@ -1014,21 +1047,26 @@ export default function KidsStoryBuilderPage() {
                 jobStatus: "IDLE"
             }));
 
-            // Compute updated scenes list synchronously outside of state updater
-            const nextScenes = scenes.map(s => {
-                if (s.id === sceneId) {
-                    return {
-                        ...s,
-                        sunoAudioKey: audioKey, // Make sure we preserve/enforce this key!
-                        sunoDuration: duration,
-                        visualShots: plannedShots,
-                        planningShots: false
-                    };
-                }
-                return s;
+            // Use functional updater to avoid stale closure — narrationPath may have just been
+            // written by generateSceneVoiceover and won't be in the `scenes` closure yet.
+            let nextScenes: typeof scenes = [];
+            setScenes(prev => {
+                nextScenes = prev.map(s => {
+                    if (s.id === sceneId) {
+                        return {
+                            ...s,
+                            sunoAudioKey: audioKey,
+                            sunoDuration: duration,
+                            visualShots: plannedShots,
+                            planningShots: false
+                        };
+                    }
+                    return s;
+                });
+                return nextScenes;
             });
-
-            setScenes(nextScenes);
+            // Give React one tick to flush, then save the latest state
+            await new Promise(r => setTimeout(r, 50));
             await handleSaveProject(nextScenes);
 
         } catch (err: any) {
