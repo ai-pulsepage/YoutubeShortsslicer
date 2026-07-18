@@ -14,3 +14,4 @@ redis
 boto3
 requests
 scipy
+psutil

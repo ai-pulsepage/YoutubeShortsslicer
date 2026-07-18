@@ -64,10 +64,15 @@ CRITICAL RULES:
 1. You MUST generate exactly ${numShots} shots. No more, no less.
 2. For each shot, assign the "primaryCharacter" from the following cast ONLY: ${allCharacterNames}. Never assign a character not in this list.
 3. DIRECTOR'S BRIEF: Every shot contains two prompt components to separate composition from motion:
-   - "imagePrompt": Describes the static starting canvas (background, setting, layout, lighting, character physical description from roster, and starting pose). It MUST start with the style prefix: "${stylePrefix}" followed by the details.
-   - "motionPrompt": Describes ONLY the motion, action, and camera movement that occurs during the ${clipDuration} seconds (e.g. "Lily yawns and points to the right as the camera slowly pans left"). DO NOT repeat style or character physical descriptions here.
+   - "imagePrompt": Describes the static starting canvas (background, setting, layout, lighting, character physical description from roster, and starting pose). 
+     * TOKEN CONSTRAINT: Keep this prompt strictly under 45 words (60 tokens) to prevent truncation by the CLIP encoder.
+     * ORDER PRIORITIZATION: It MUST start with the style prefix: "${stylePrefix}" followed immediately by the character name, roster features, and key pose. Place minor background details at the very end.
+   - "motionPrompt": Describes ONLY the motion, action, and camera movement that occurs during the ${clipDuration} seconds (e.g. "Lily yawns and points to the right as the camera slowly pans left"). DO NOT repeat style or character physical descriptions here. Keep this under 30 words.
    - "visualPrompt": A copy of "imagePrompt" (for backwards compatibility).
-4. CHAINING: Decide whether each shot flows continuously from the previous shot's last frame (chainFromPrevious: true) or starts fresh with a hard cut (chainFromPrevious: false). Shot index 1 is ALWAYS chainFromPrevious: false.
+4. CHAINING: Decide whether each shot flows continuously from the previous shot's last frame (chainFromPrevious: true) or starts fresh with a hard cut (chainFromPrevious: false). 
+   - Shot index 1 is ALWAYS chainFromPrevious: false.
+   - For subsequent shots, if the primaryCharacter remains the same and they are continuing their action or movement in the same environment, set chainFromPrevious: true to maintain perfect visual flow (strive for at least 40% of sequential same-character shots to be chained).
+   - Set chainFromPrevious: false ONLY when there is a hard cut, change of location, or change of speaker/focus.
 
 CHARACTER ROSTER — use these exact descriptions in every imagePrompt:
 ANCHORED (use verbatim, do not alter):

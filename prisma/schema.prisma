@@ -96,6 +96,7 @@ model User {
   ugcAvatars  UGCAvatar[]
   ugcProducts UGCProduct[]
   ugcJobs     UGCJob[]
+  ugcCampaigns UGCCampaign[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -271,7 +272,10 @@ model ChannelFlag {
 
 model PublishJob {
   id              String        @id @default(cuid())
-  shortVideoId    String
+  shortVideoId    String?
+  documentaryId   String?
+  ugcJobId        String?
+  podcastEpisodeId String?
   channelId       String
   scheduleId      String?       // optional: which schedule this belongs to
   title           String?
@@ -283,7 +287,10 @@ model PublishJob {
   platformVideoId String?       // ID on YouTube/Instagram/Whop
   errorMsg        String?       @db.Text
 
-  shortVideo      ShortVideo       @relation(fields: [shortVideoId], references: [id], onDelete: Cascade)
+  shortVideo      ShortVideo?      @relation(fields: [shortVideoId], references: [id], onDelete: Cascade)
+  documentary     Documentary?     @relation(fields: [documentaryId], references: [id], onDelete: Cascade)
+  ugcJob          UGCJob?          @relation(fields: [ugcJobId], references: [id], onDelete: Cascade)
+  podcastEpisode  PodcastEpisode?  @relation(fields: [podcastEpisodeId], references: [id], onDelete: Cascade)
   channel         Channel          @relation(fields: [channelId], references: [id], onDelete: Cascade)
   schedule        ContentSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
 
@@ -477,6 +484,7 @@ model Documentary {
   scenes         DocScene[]
   assets         DocAsset[]
   genJobs        GenJob[]
+  publishJobs    PublishJob[]
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -788,6 +796,7 @@ model PodcastEpisode {
   show              PodcastShow           @relation(fields: [showId], references: [id], onDelete: Cascade)
   segments          EpisodeSegment[]
   participants      EpisodeParticipant[]
+  publishJobs       PublishJob[]
 
   createdAt         DateTime              @default(now())
   updatedAt         DateTime              @updatedAt
@@ -995,6 +1004,7 @@ model UGCAvatar {
 model UGCProduct {
   id            String    @id @default(cuid())
   userId        String
+  campaignId    String?
   sourceUrl     String
   name          String
   description   String?   @db.Text
@@ -1005,8 +1015,9 @@ model UGCProduct {
   category      String?
   scrapedAt     DateTime?
 
-  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  ugcJobs UGCJob[]
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaign  UGCCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  ugcJobs   UGCJob[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1015,6 +1026,7 @@ model UGCProduct {
 model UGCJob {
   id          String       @id @default(cuid())
   userId      String
+  campaignId  String?
   avatarId    String
   productId   String
   hookStyle   UGCHookStyle @default(TESTIMONIAL)
@@ -1027,10 +1039,26 @@ model UGCJob {
   errorMsg    String?      @db.Text
   metadata    Json?
 
-  user    User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  avatar  UGCAvatar  @relation(fields: [avatarId], references: [id], onDelete: Cascade)
-  product UGCProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaign UGCCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  avatar   UGCAvatar    @relation(fields: [avatarId], references: [id], onDelete: Cascade)
+  product  UGCProduct   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  publishJobs PublishJob[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model UGCCampaign {
+  id          String       @id @default(cuid())
+  userId      String
+  name        String
+  description String?      @db.Text
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  products    UGCProduct[]
+  jobs        UGCJob[]
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 }

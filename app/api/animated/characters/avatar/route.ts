@@ -48,7 +48,10 @@ export async function POST(req: NextRequest) {
                 prompt: prompt,
                 status: "QUEUED",
                 assetId: characterId,
-                metadata: { characterId } as any
+                metadata: { 
+                    characterId,
+                    r2Key: `animated/projects/${docId}/characters/${characterId}_avatar.webp`
+                } as any
             }
         });
 
@@ -59,7 +62,11 @@ export async function POST(req: NextRequest) {
             type: "ref_image",
             prompt: prompt,
             referenceImages: [],
-            metadata: { characterId, model: "flux" }
+            metadata: { 
+                characterId, 
+                model: "flux",
+                r2Key: `animated/projects/${docId}/characters/${characterId}_avatar.webp`
+            }
         });
 
         return NextResponse.json({

@@ -39,6 +39,9 @@ export async function POST(req: Request) {
                         },
                     },
                 },
+                documentary: true,
+                ugcJob: true,
+                podcastEpisode: true,
                 channel: {
                     select: {
                         id: true,
@@ -72,8 +75,13 @@ export async function POST(req: Request) {
             data: { status: "PUBLISHING" },
         });
 
-        // Download the rendered short from R2
-        const storagePath = job.shortVideo.storagePath;
+        // Download the rendered creative asset
+        const storagePath = 
+            job.shortVideo?.storagePath || 
+            job.documentary?.finalVideoPath || 
+            job.ugcJob?.outputUrl || 
+            job.podcastEpisode?.audioUrl;
+
         if (!storagePath) {
             await prisma.publishJob.update({
                 where: { id: publishJobId },
@@ -111,8 +119,8 @@ export async function POST(req: Request) {
         }
 
         // Upload to YouTube
-        const title = job.title || job.shortVideo.segment.title || "Short";
-        const description = job.description || job.shortVideo.segment.description || "";
+        const title = job.title || job.shortVideo?.segment?.title || job.documentary?.title || job.podcastEpisode?.title || "Short Video";
+        const description = job.description || job.shortVideo?.segment?.description || job.podcastEpisode?.description || "";
 
         const result = await uploadToYouTube(
             job.channel.id,

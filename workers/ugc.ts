@@ -27,12 +27,28 @@ async function generateScriptWithDeepSeek(job: any): Promise<string> {
         apiKey = await getDbApiKey("deepseek_api_key") || "";
     }
 
+    const hookStyle = job.hookStyle;
+    let styleInstruction = "";
+    if (hookStyle === "CONTRARIAN") {
+        styleInstruction = "Open with a shocking, contrarian hook (e.g., 'Stop buying expensive alternative X, here is a secret hack...'), position this product as the smart alternative, and focus on practical value.";
+    } else if (hookStyle === "INFORMERCIAL" || hookStyle === "SALES_PITCH") {
+        styleInstruction = "Write in an energetic sales pitch style. Highlight the core features, the pricing value, special offers, and conclude with a strong Call-To-Action.";
+    } else if (hookStyle === "TESTIMONIAL") {
+        styleInstruction = "Write from a customer's personal perspective. Describe a pain point they struggled with, introduce the product as the savior, and contrast the before-and-after experience.";
+    } else if (hookStyle === "DRAMA") {
+        styleInstruction = "Open with a narrative hook that sounds like a personal story (e.g., 'You will not believe what happened when...'). Tell an engaging, relatable story centering around the product.";
+    } else {
+        styleInstruction = `Focus on hook style: ${hookStyle}. Keep it highly engaging and natural.`;
+    }
+
     const systemPrompt = `You are a viral short-form content creator. Write a short, highly engaging 30-45 second video script for the following product:
 Name: ${job.product.name}
 Description: ${job.product.description || "N/A"}
 Price: ${job.product.price || "N/A"}
-Hook style: ${job.hookStyle}
 Avatar persona: ${job.avatar.persona || "A generic presenter"}
+
+Style Guidelines:
+${styleInstruction}
 
 The script must be optimized for a TikTok UGC video. Output ONLY the words spoken by the presenter. Do NOT include scene directions, sound effects, timestamps, or speaker labels.`;
 
@@ -357,16 +373,43 @@ export const ugcWorker = new Worker(
             // 7. Stack composite layout
             const finalVideoPath = path.join(tempDir, "final.mp4");
 
-            // Crop input to a clean 1:1 ratio, centered, scale both streams to 1080x960, and stack.
+            // Extract layout configurations from job metadata
+            const meta = (ugcJob.metadata as any) || {};
+            const layoutType = meta.layoutType || "SPLIT"; // SPLIT, GREEN_SCREEN, PIP
+            console.log(`[UGC Worker] Selected layout type: ${layoutType}`);
+
             if (bRollLocalPath && fs.existsSync(bRollLocalPath)) {
-                console.log("[UGC Worker] Compositing talking head + Wan B-roll stacked...");
-                execSync(
-                    `ffmpeg -i "${talkingHeadLocalPath}" -i "${bRollLocalPath}" -filter_complex ` +
-                    `"[0:v]crop='min(iw,ih)':'min(iw,ih)',scale=1080:960[top];` +
-                    `[1:v]crop='min(iw,ih)':'min(iw,ih)',scale=1080:960[bot];` +
-                    `[top][bot]vstack=inputs=2[v]" ` +
-                    `-map "[v]" -map 0:a -c:v libx264 -preset fast -crf 23 -c:a aac "${finalVideoPath}" -y`
-                );
+                if (layoutType === "GREEN_SCREEN") {
+                    console.log("[UGC Worker] Compositing green screen key overlay...");
+                    execSync(
+                        `ffmpeg -i "${talkingHeadLocalPath}" -i "${bRollLocalPath}" -filter_complex ` +
+                        `"[0:v]colorkey=0x00FF00:0.12:0.12[ck];` +
+                        `[ck]scale=1080:1080[avatar];` +
+                        `[1:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[bg];` +
+                        `[bg][avatar]overlay=0:H-h[v]" ` +
+                        `-map "[v]" -map 0:a -c:v libx264 -preset fast -crf 23 -c:a aac "${finalVideoPath}" -y`
+                    );
+                } else if (layoutType === "PIP") {
+                    console.log("[UGC Worker] Compositing Picture-in-Picture circle bubble...");
+                    execSync(
+                        `ffmpeg -i "${talkingHeadLocalPath}" -i "${bRollLocalPath}" -filter_complex ` +
+                        `"[0:v]scale=360:360[av_scaled];` +
+                        `[av_scaled]geq=r='if(lte(hypot(X-180,Y-180),180),r(X,Y),0)':g='if(lte(hypot(X-180,Y-180),180),g(X,Y),0)':b='if(lte(hypot(X-180,Y-180),180),b(X,Y),0)':a='if(lte(hypot(X-180,Y-180),180),255,0)'[masked];` +
+                        `[1:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[bg];` +
+                        `[bg][masked]overlay=W-w-50:H-h-50[v]" ` +
+                        `-map "[v]" -map 0:a -c:v libx264 -preset fast -crf 23 -c:a aac "${finalVideoPath}" -y`
+                    );
+                } else {
+                    // Default SPLIT Layout
+                    console.log("[UGC Worker] Compositing talking head + Wan B-roll stacked...");
+                    execSync(
+                        `ffmpeg -i "${talkingHeadLocalPath}" -i "${bRollLocalPath}" -filter_complex ` +
+                        `"[0:v]crop='min(iw,ih)':'min(iw,ih)',scale=1080:960[top];` +
+                        `[1:v]crop='min(iw,ih)':'min(iw,ih)',scale=1080:960[bot];` +
+                        `[top][bot]vstack=inputs=2[v]" ` +
+                        `-map "[v]" -map 0:a -c:v libx264 -preset fast -crf 23 -c:a aac "${finalVideoPath}" -y`
+                    );
+                }
             } else if (ugcJob.product.imageUrls && ugcJob.product.imageUrls.length > 0) {
                 console.log("[UGC Worker] Compositing talking head + static product image stacked...");
                 const productImagePath = path.join(tempDir, "product.jpg");
@@ -382,13 +425,36 @@ export const ugcWorker = new Worker(
                 }
 
                 if (fs.existsSync(productImagePath)) {
-                    execSync(
-                        `ffmpeg -i "${talkingHeadLocalPath}" -loop 1 -i "${productImagePath}" -filter_complex ` +
-                        `"[0:v]crop='min(iw,ih)':'min(iw,ih)',scale=1080:960[top];` +
-                        `[1:v]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960[bot];` +
-                        `[top][bot]vstack=inputs=2[v]" ` +
-                        `-map "[v]" -map 0:a -c:v libx264 -preset fast -crf 23 -t ${duration} -c:a aac "${finalVideoPath}" -y`
-                    );
+                    if (layoutType === "GREEN_SCREEN") {
+                        console.log("[UGC Worker] Compositing green screen overlay over product image background...");
+                        execSync(
+                            `ffmpeg -i "${talkingHeadLocalPath}" -loop 1 -i "${productImagePath}" -filter_complex ` +
+                            `"[0:v]colorkey=0x00FF00:0.12:0.12[ck];` +
+                            `[ck]scale=1080:1080[avatar];` +
+                            `[1:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[bg];` +
+                            `[bg][avatar]overlay=0:H-h[v]" ` +
+                            `-map "[v]" -map 0:a -c:v libx264 -preset fast -crf 23 -t ${duration} -c:a aac "${finalVideoPath}" -y`
+                        );
+                    } else if (layoutType === "PIP") {
+                        console.log("[UGC Worker] Compositing PiP circle bubble over product image background...");
+                        execSync(
+                            `ffmpeg -i "${talkingHeadLocalPath}" -loop 1 -i "${productImagePath}" -filter_complex ` +
+                            `"[0:v]scale=360:360[av_scaled];` +
+                            `[av_scaled]geq=r='if(lte(hypot(X-180,Y-180),180),r(X,Y),0)':g='if(lte(hypot(X-180,Y-180),180),g(X,Y),0)':b='if(lte(hypot(X-180,Y-180),180),b(X,Y),0)':a='if(lte(hypot(X-180,Y-180),180),255,0)'[masked];` +
+                            `[1:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[bg];` +
+                            `[bg][masked]overlay=W-w-50:H-h-50[v]" ` +
+                            `-map "[v]" -map 0:a -c:v libx264 -preset fast -crf 23 -t ${duration} -c:a aac "${finalVideoPath}" -y`
+                        );
+                    } else {
+                        // Default SPLIT Layout
+                        execSync(
+                            `ffmpeg -i "${talkingHeadLocalPath}" -loop 1 -i "${productImagePath}" -filter_complex ` +
+                            `"[0:v]crop='min(iw,ih)':'min(iw,ih)',scale=1080:960[top];` +
+                            `[1:v]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960[bot];` +
+                            `[top][bot]vstack=inputs=2[v]" ` +
+                            `-map "[v]" -map 0:a -c:v libx264 -preset fast -crf 23 -t ${duration} -c:a aac "${finalVideoPath}" -y`
+                        );
+                    }
                 } else {
                     bRollLocalPath = ""; // trigger avatar only pad
                 }
@@ -405,14 +471,22 @@ export const ugcWorker = new Worker(
             }
 
             // 8. Upload results to R2 storage & save
-            const finalR2Key = `ugc/jobs/${ugcJob.userId}/${jobId}/final.mp4`;
+            const campaignId = ugcJob.campaignId;
+            const productId = ugcJob.productId;
+            let finalR2Key = `ugc/products/${productId}/ads/${jobId}/final.mp4`;
+            let thumbR2Key = `ugc/products/${productId}/ads/${jobId}/thumb.jpg`;
+
+            if (campaignId) {
+                finalR2Key = `ugc/campaigns/${campaignId}/products/${productId}/ads/${jobId}/final.mp4`;
+                thumbR2Key = `ugc/campaigns/${campaignId}/products/${productId}/ads/${jobId}/thumb.jpg`;
+            }
+
             console.log(`[UGC Worker] Uploading final video to R2 key: ${finalR2Key}`);
             await uploadFileToR2(finalVideoPath, finalR2Key, "video/mp4");
 
             // Extract a thumbnail frame
             const thumbnailPath = path.join(tempDir, "thumb.jpg");
             execSync(`ffmpeg -i "${finalVideoPath}" -ss 00:00:00.5 -vframes 1 "${thumbnailPath}" -y`);
-            const thumbR2Key = `ugc/jobs/${ugcJob.userId}/${jobId}/thumb.jpg`;
             await uploadFileToR2(thumbnailPath, thumbR2Key, "image/jpeg");
 
             // Update status in DB to DONE

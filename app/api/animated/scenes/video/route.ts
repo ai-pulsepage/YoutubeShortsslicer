@@ -71,6 +71,16 @@ export async function POST(req: NextRequest) {
                         // Automatically trigger start frame image generation first!
                         console.log(`[Scene Video Gen] Missing start image for shot "${shotId}". Launching FLUX composition job.`);
 
+                        let characterRefImage: string | null = null;
+                        if (shot.primaryCharacter && shot.primaryCharacter !== "None" && shot.primaryCharacter !== "Narrator") {
+                            const charAsset = scene.documentary.assets.find(
+                                (a: any) => a.type === "CHARACTER" && a.label === shot.primaryCharacter
+                            );
+                            if (charAsset && charAsset.imagePath) {
+                                characterRefImage = charAsset.imagePath;
+                            }
+                        }
+
                         const avatarJob = await prisma.genJob.create({
                             data: {
                                 documentaryId: activeDocId,
@@ -83,7 +93,8 @@ export async function POST(req: NextRequest) {
                                     jobPurpose: "shot_start_image",
                                     sourceApp: "Animated Shorts",
                                     model: "flux",
-                                    title: scene.documentary.title || "Kids Story Project"
+                                    title: scene.documentary.title || "Kids Story Project",
+                                    r2Key: `animated/projects/${activeDocId}/scenes/${scene.id}/shots/shot_${shot.id}_start.webp`
                                 } as any
                             }
                         });
@@ -93,14 +104,15 @@ export async function POST(req: NextRequest) {
                             documentaryId: activeDocId,
                             type: "ref_image",
                             prompt: shot.imagePrompt || shot.visualPrompt || visualPrompt,
-                            referenceImages: [],
+                            referenceImages: characterRefImage ? [characterRefImage] : [],
                             metadata: {
                                 shotId: shot.id,
                                 sceneId: scene.id,
                                 jobPurpose: "shot_start_image",
                                 sourceApp: "Animated Shorts",
                                 model: "flux",
-                                title: scene.documentary.title || "Kids Story Project"
+                                title: scene.documentary.title || "Kids Story Project",
+                                r2Key: `animated/projects/${activeDocId}/scenes/${scene.id}/shots/shot_${shot.id}_start.webp`
                             }
                         });
 

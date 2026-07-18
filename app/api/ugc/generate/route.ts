@@ -21,12 +21,27 @@ async function generateScriptWithDeepSeek(avatar: any, product: any, hookStyle: 
         apiKey = await getDbApiKey("deepseek_api_key") || "";
     }
 
+    let styleInstruction = "";
+    if (hookStyle === "CONTRARIAN") {
+        styleInstruction = "Open with a shocking, contrarian hook (e.g., 'Stop buying expensive alternative X, here is a secret hack...'), position this product as the smart alternative, and focus on practical value.";
+    } else if (hookStyle === "INFORMERCIAL" || hookStyle === "SALES_PITCH") {
+        styleInstruction = "Write in an energetic sales pitch style. Highlight the core features, the pricing value, special offers, and conclude with a strong Call-To-Action.";
+    } else if (hookStyle === "TESTIMONIAL") {
+        styleInstruction = "Write from a customer's personal perspective. Describe a pain point they struggled with, introduce the product as the savior, and contrast the before-and-after experience.";
+    } else if (hookStyle === "DRAMA") {
+        styleInstruction = "Open with a narrative hook that sounds like a personal story (e.g., 'You will not believe what happened when...'). Tell an engaging, relatable story centering around the product.";
+    } else {
+        styleInstruction = `Focus on hook style: ${hookStyle}. Keep it highly engaging and natural.`;
+    }
+
     const systemPrompt = `You are a viral short-form content creator. Write a short, highly engaging 30-45 second video script for the following product:
 Name: ${product.name}
 Description: ${product.description || "N/A"}
 Price: ${product.price || "N/A"}
-Hook style: ${hookStyle}
 Avatar persona: ${avatar.persona || "A generic presenter"}
+
+Style Guidelines:
+${styleInstruction}
 
 The script must be optimized for a TikTok UGC video. Output ONLY the words spoken by the presenter. Do NOT include scene directions, sound effects, timestamps, or speaker labels.`;
 
@@ -66,7 +81,7 @@ export async function POST(req: Request) {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { avatarId, productId, hookStyle, customScript } = await req.json();
+    const { avatarId, productId, campaignId, hookStyle, customScript, layoutType } = await req.json();
 
     if (!avatarId || !productId) {
         return NextResponse.json({ error: "Missing avatarId or productId" }, { status: 400 });
@@ -84,6 +99,14 @@ export async function POST(req: Request) {
     });
     if (!product) return NextResponse.json({ error: "Product not found" }, { status: 404 });
 
+    // Verify campaign ownership if campaignId is provided
+    if (campaignId) {
+        const campaign = await prisma.uGCCampaign.findFirst({
+            where: { id: campaignId, userId: session.user.id }
+        });
+        if (!campaign) return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+    }
+
     // Generate script if not provided
     let script = customScript || "";
     if (!script) {
@@ -96,9 +119,11 @@ export async function POST(req: Request) {
             userId: session.user.id,
             avatarId,
             productId,
+            campaignId: campaignId || null,
             hookStyle: hookStyle || "TESTIMONIAL",
             script,
-            status: "PENDING"
+            status: "PENDING",
+            metadata: layoutType ? { layoutType } : undefined
         }
     });
 

@@ -403,8 +403,13 @@ def get_wan_pipeline():
         _wan_pipe = WanImageToVideoPipeline.from_pretrained(
             model_id,
             torch_dtype=torch.bfloat16,
+            low_cpu_mem_usage=True,
         )
-        _wan_pipe.enable_model_cpu_offload()
+        if torch.cuda.is_available():
+            print("  🚀 Moving Wan pipeline to GPU VRAM for maximum inference speed...")
+            _wan_pipe.to("cuda")
+        else:
+            _wan_pipe.enable_model_cpu_offload()
         _wan_pipe.vae.enable_slicing()
         _wan_pipe.vae.enable_tiling()
         print(f"✅ {model_id} loaded")
@@ -417,7 +422,7 @@ def generate_video(
     output_path: str,
     num_frames: int = 81,  # ~3.4 seconds at 24fps
     width: int = 1280,
-    height: int = 720,
+    height: int = 704,
 ):
     """Generate a video clip with Wan2.2 image-to-video."""
     import gc
@@ -510,6 +515,21 @@ def generate_music(prompt: str, output_path: str, duration_sec: int = 15):
     torch.cuda.empty_cache()
 
 
+def check_and_free_memory():
+    """Monitor host system RAM usage and proactively reclaim memory if high (>75%)."""
+    try:
+        import psutil
+        ram = psutil.virtual_memory()
+        print(f"📊 System Memory Status: {ram.used / (1024**3):.2f} GB / {ram.total / (1024**3):.2f} GB ({ram.percent}%)")
+        if ram.percent > 75:
+            print("⚠️ High system RAM utilization detected. Clearing model caches...")
+            unload_image_pipelines()
+            unload_wan_pipeline()
+            unload_musicgen()
+    except Exception as me:
+        print(f"⚠️ Memory check helper failed: {me}")
+
+
 def process_job(job: dict, r: redis.Redis):
     """Process a single generation job."""
     job_id = job.get("jobId", "unknown")
@@ -533,7 +553,7 @@ def process_job(job: dict, r: redis.Redis):
                 generate_image(prompt, output_file, model=image_model)
 
                 # Upload to R2
-                r2_key = f"documentaries/assets/{job_id}.webp"
+                r2_key = metadata.get("r2Key") or f"documentaries/assets/{job_id}.webp"
                 upload_to_r2(output_file, r2_key, "image/webp")
 
                 # Publish result
@@ -564,7 +584,7 @@ def process_job(job: dict, r: redis.Redis):
                 generate_video(prompt, ref_path, output_file, num_frames=num_frames)
 
                 # Upload to R2
-                r2_key = f"documentaries/clips/{job_id}.mp4"
+                r2_key = metadata.get("r2Key") or f"documentaries/clips/{job_id}.mp4"
                 upload_to_r2(output_file, r2_key, "video/mp4")
 
                 # Extract last frame for visual continuity
@@ -577,7 +597,7 @@ def process_job(job: dict, r: redis.Redis):
                         "-frames:v", "1", "-q:v", "2", last_frame_file, "-y"
                     ], capture_output=True, timeout=30)
                     if os.path.exists(last_frame_file):
-                        last_frame_key = f"documentaries/clips/{job_id}_last_frame.png"
+                        last_frame_key = metadata.get("r2KeyLastFrame") or f"documentaries/clips/{job_id}_last_frame.png"
                         upload_to_r2(last_frame_file, last_frame_key, "image/png")
                 except Exception as lfe:
                     print(f"  ⚠️ Last frame extraction failed (non-critical, chaining will use character avatar): {type(lfe).__name__}: {lfe}")
@@ -621,6 +641,7 @@ def process_job(job: dict, r: redis.Redis):
         # Report result via webhook (primary) and Redis (fallback)
         report_result(r, result)
         print(f"✅ Job {job_id} completed → {result.get('outputPath', 'N/A')}")
+        check_and_free_memory()
 
     except Exception as e:
         error_msg = f"{type(e).__name__}: {str(e)}"
@@ -633,6 +654,7 @@ def process_job(job: dict, r: redis.Redis):
             "error": error_msg,
         }
         report_result(r, result)
+        check_and_free_memory()
 
 
 # ─── Result Reporting ──────────────────────────────────

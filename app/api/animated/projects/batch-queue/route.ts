@@ -55,7 +55,10 @@ export async function POST(req: NextRequest) {
                         prompt: asset.prompt || "",
                         status: "QUEUED",
                         assetId: asset.id,
-                        metadata: { characterId: asset.id } as any
+                        metadata: { 
+                            characterId: asset.id,
+                            r2Key: `animated/projects/${project.id}/characters/${asset.id}_avatar.webp`
+                        } as any
                     }
                 });
 
@@ -66,7 +69,13 @@ export async function POST(req: NextRequest) {
                     type: "ref_image",
                     prompt: asset.prompt || "",
                     referenceImages: [],
-                    metadata: { characterId: asset.id, model: "flux", sourceApp: "Animated Shorts", title: project.title || "Kids Story Project" }
+                    metadata: { 
+                        characterId: asset.id, 
+                        model: "flux", 
+                        sourceApp: "Animated Shorts", 
+                        title: project.title || "Kids Story Project",
+                        r2Key: `animated/projects/${project.id}/characters/${asset.id}_avatar.webp`
+                    }
                 });
 
                 queuedAvatarsCount++;
@@ -117,7 +126,9 @@ export async function POST(req: NextRequest) {
                                 duration: shot.duration || 5,
                                 chainFromPrevious: true,
                                 sourceApp: "Animated Shorts",
-                                title: project.title || "Kids Story Project"
+                                title: project.title || "Kids Story Project",
+                                r2Key: `animated/projects/${project.id}/scenes/${scene.id}/shots/shot_${shot.id}_video.mp4`,
+                                r2KeyLastFrame: `animated/projects/${project.id}/scenes/${scene.id}/shots/shot_${shot.id}_last_frame.png`
                             };
 
                             const job = await prisma.genJob.create({
@@ -162,7 +173,9 @@ export async function POST(req: NextRequest) {
                                 duration: shot.duration || 5,
                                 chainFromPrevious: false,
                                 sourceApp: "Animated Shorts",
-                                title: project.title || "Kids Story Project"
+                                title: project.title || "Kids Story Project",
+                                r2Key: `animated/projects/${project.id}/scenes/${scene.id}/shots/shot_${shot.id}_video.mp4`,
+                                r2KeyLastFrame: `animated/projects/${project.id}/scenes/${scene.id}/shots/shot_${shot.id}_last_frame.png`
                             };
 
                             const job = await prisma.genJob.create({
@@ -196,7 +209,8 @@ export async function POST(req: NextRequest) {
                                 jobPurpose: "shot_start_image",
                                 sourceApp: "Animated Shorts",
                                 model: "flux",
-                                title: project.title || "Kids Story Project"
+                                title: project.title || "Kids Story Project",
+                                r2Key: `animated/projects/${project.id}/scenes/${scene.id}/shots/shot_${shot.id}_start.webp`
                             };
 
                             const job = await prisma.genJob.create({
@@ -209,12 +223,22 @@ export async function POST(req: NextRequest) {
                                 }
                             });
 
+                            let characterRefImage: string | null = null;
+                            if (shot.primaryCharacter && shot.primaryCharacter !== "None" && shot.primaryCharacter !== "Narrator") {
+                                const charAsset = project.assets.find(
+                                    (a: any) => a.type === "CHARACTER" && a.label === shot.primaryCharacter
+                                );
+                                if (charAsset && charAsset.imagePath) {
+                                    characterRefImage = charAsset.imagePath;
+                                }
+                            }
+
                             await dispatchJob({
                                 jobId: job.id,
                                 documentaryId: project.id,
                                 type: "ref_image",
                                 prompt: shot.imagePrompt || shot.visualPrompt,
-                                referenceImages: [],
+                                referenceImages: characterRefImage ? [characterRefImage] : [],
                                 metadata: jobMetadata
                             });
 

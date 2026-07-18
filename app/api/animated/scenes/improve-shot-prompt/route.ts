@@ -32,8 +32,10 @@ You MUST describe the new character using the following physical description pro
 Never invent a different physical appearance for this character name (for example, if they are described as a dog, kitten, or other animal, do not describe them as a human, boy, or child, and vice versa).
 
 Return ONLY a valid JSON object with the following keys:
-- "imagePrompt": Detailed static scene visual description starting with style prefix.
-- "motionPrompt": Focussed action description (e.g. "[Character] points at the chalkboard, smiling"). Do not repeat style or physical descriptors.
+- "imagePrompt": Detailed static scene visual description.
+  * TOKEN CONSTRAINT: Keep this prompt strictly under 45 words (60 tokens) to prevent truncation by the CLIP encoder.
+  * ORDER PRIORITIZATION: It MUST start with the style prefix: "${activeStyle}," followed immediately by the character name, character description profile features verbatim, and key pose. Place minor background details at the very end.
+- "motionPrompt": Focussed action description (e.g. "[Character] points at the chalkboard, smiling"). Do not repeat style or physical descriptors. Keep this under 30 words.
 - "visualPrompt": Copy of imagePrompt for compatibility.`;
 
         const userPayload = `Original Image/Visual Prompt: "${visualPrompt}"

@@ -17,7 +17,7 @@ export async function GET(req: Request) {
     const channelId = searchParams.get("channel") || "";
 
     const where: any = {
-        shortVideo: { segment: { video: { userId: session.user.id } } },
+        channel: { userId: session.user.id }
     };
     if (status) where.status = status;
     if (channelId) where.channelId = channelId;
@@ -33,6 +33,20 @@ export async function GET(req: Request) {
                     },
                 },
             },
+            documentary: {
+                select: { title: true, genre: true }
+            },
+            ugcJob: {
+                include: {
+                    product: { select: { name: true } },
+                    campaign: { select: { name: true } }
+                }
+            },
+            podcastEpisode: {
+                include: {
+                    show: { select: { name: true } }
+                }
+            },
             channel: { select: { channelName: true, platform: true } },
         },
     });
@@ -46,37 +60,46 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { shortVideoId, channelId, scheduledAt, title, description, hashtags } =
-        await req.json();
+    const {
+        shortVideoId,
+        documentaryId,
+        ugcJobId,
+        podcastEpisodeId,
+        channelId,
+        scheduledAt,
+        title,
+        description,
+        hashtags,
+    } = await req.json();
 
-    if (!shortVideoId || !channelId) {
+    if (!channelId) {
         return NextResponse.json(
-            { error: "shortVideoId and channelId are required" },
+            { error: "channelId is required" },
+            { status: 400 }
+        );
+    }
+
+    if (!shortVideoId && !documentaryId && !ugcJobId && !podcastEpisodeId) {
+        return NextResponse.json(
+            { error: "At least one asset identifier (shortVideoId, documentaryId, ugcJobId, podcastEpisodeId) must be provided" },
             { status: 400 }
         );
     }
 
     const job = await prisma.publishJob.create({
         data: {
-            shortVideoId,
+            shortVideoId: shortVideoId || null,
+            documentaryId: documentaryId || null,
+            ugcJobId: ugcJobId || null,
+            podcastEpisodeId: podcastEpisodeId || null,
             channelId,
+            title: title || "Scheduled Post",
+            description: description || "",
+            hashtags: Array.isArray(hashtags) ? hashtags : hashtags ? [hashtags] : [],
             scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
             status: scheduledAt ? "SCHEDULED" : "DRAFT",
         },
     });
-
-    // Also create a draft post if metadata provided
-    if (title || description || hashtags) {
-        await prisma.draftPost.create({
-            data: {
-                shortVideoId,
-                channelId,
-                title: title || "",
-                description: description || "",
-                hashtags: Array.isArray(hashtags) ? hashtags : hashtags ? [hashtags] : [],
-            },
-        });
-    }
 
     return NextResponse.json(job, { status: 201 });
 }
@@ -97,7 +120,7 @@ export async function PATCH(req: Request) {
     const existing = await prisma.publishJob.findFirst({
         where: {
             id: jobId,
-            shortVideo: { segment: { video: { userId: session.user.id } } },
+            channel: { userId: session.user.id },
         },
     });
 
@@ -135,7 +158,7 @@ export async function DELETE(req: Request) {
     const existing = await prisma.publishJob.findFirst({
         where: {
             id: jobId,
-            shortVideo: { segment: { video: { userId: session.user.id } } },
+            channel: { userId: session.user.id },
         },
     });
 

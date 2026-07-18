@@ -189,6 +189,8 @@ export async function POST(req: NextRequest) {
 
             // Build environment variables array to inject database and credentials
             const envArgs = [
+                { key: "HF_HOME", value: "/workspace/cache/huggingface" },
+                { key: "TORCH_HOME", value: "/workspace/cache/torch" },
                 { key: "REDIS_URL", value: activeRedisUrl },
                 { key: "DATABASE_URL", value: process.env.DATABASE_URL || "" },
                 { key: "R2_ACCESS_KEY_ID", value: process.env.R2_ACCESS_KEY_ID || process.env.R2_ACCESS_KEY || "" },
@@ -230,7 +232,7 @@ export async function POST(req: NextRequest) {
             // Deduplicate, keeping preferred GPU first
             const gpuList = Array.from(new Set([primaryGpu, ...fallbackGpus]));
 
-            const baseInput: any = {
+             const baseInput: any = {
                 cloudType: cloudType === "SECURE" ? "SECURE" : cloudType === "COMMUNITY" ? "COMMUNITY" : "ALL",
                 gpuCount: 1,
                 ports: "8888/http,22/tcp,8000/http",

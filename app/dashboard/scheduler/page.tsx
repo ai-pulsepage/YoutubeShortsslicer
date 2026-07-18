@@ -48,13 +48,25 @@ type PublishJob = {
     description: string | null;
     errorMsg: string | null;
     scheduleId: string | null;
-    shortVideo: {
+    shortVideo?: {
         id: string;
         segment: {
             title: string;
             video: { title: string };
         };
-    };
+    } | null;
+    documentary?: {
+        title: string | null;
+        genre: string;
+    } | null;
+    ugcJob?: {
+        product: { name: string };
+        campaign?: { name: string } | null;
+    } | null;
+    podcastEpisode?: {
+        title: string | null;
+        show?: { name: string } | null;
+    } | null;
     channel: {
         channelName: string;
         platform: string;
@@ -87,6 +99,48 @@ export default function SchedulerPage() {
     const [showAssignModal, setShowAssignModal] = useState(false);
     const [editingJob, setEditingJob] = useState<PublishJob | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
+
+    const getAssetDetails = (job: PublishJob) => {
+        if (job.shortVideo) {
+            return {
+                type: "Video Slicer",
+                title: job.shortVideo.segment?.title || "Rendered Short",
+                source: job.shortVideo.segment?.video?.title || "Video Source",
+                badgeClass: "bg-violet-500/10 text-violet-400 border-violet-500/20"
+            };
+        }
+        if (job.documentary) {
+            const isKids = job.documentary.genre === "children";
+            return {
+                type: isKids ? "Kids Animation" : "Documentary Factory",
+                title: job.documentary.title || "Storybook Video",
+                source: isKids ? "Animated Short" : "Documentary Film",
+                badgeClass: isKids ? "bg-pink-500/10 text-pink-400 border-pink-500/20" : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+            };
+        }
+        if (job.ugcJob) {
+            return {
+                type: "UGC Ad",
+                title: `Ad for ${job.ugcJob.product?.name || "Product"}`,
+                source: job.ugcJob.campaign?.name || "UGC Studio",
+                badgeClass: "bg-blue-500/10 text-blue-400 border-blue-500/20"
+            };
+        }
+        if (job.podcastEpisode) {
+            return {
+                type: "Podcast",
+                title: job.podcastEpisode.title || "Episode Audio",
+                source: job.podcastEpisode.show?.name || "Podcast Show",
+                badgeClass: "bg-amber-500/10 text-amber-400 border-amber-500/20"
+            };
+        }
+        return {
+            type: "Generic Creative",
+            title: job.title || "Custom Creative",
+            source: "Campaigns Catalog",
+            badgeClass: "bg-gray-500/10 text-gray-400 border-gray-500/20"
+        };
+    };
 
     useEffect(() => {
         Promise.all([
@@ -413,60 +467,72 @@ export default function SchedulerPage() {
                                     const bDate = b.scheduledAt ? new Date(b.scheduledAt).getTime() : 0;
                                     return aDate - bDate;
                                 })
-                                .map((job) => (
-                                    <div
-                                        key={job.id}
-                                        className="flex items-center gap-4 bg-gray-900/50 border border-gray-800 rounded-xl px-4 py-3 hover:border-gray-700 transition-colors"
-                                    >
-                                        <Youtube className="w-5 h-5 text-red-400 flex-shrink-0" />
-                                        <div className="flex-1 min-w-0">
-                                            <h3 className="text-sm font-medium text-white truncate">
-                                                {job.title || job.shortVideo?.segment?.title || "Short"}
-                                            </h3>
-                                            <p className="text-xs text-gray-500">
-                                                {job.channel.channelName} ·{" "}
-                                                {job.scheduledAt
-                                                    ? new Date(job.scheduledAt).toLocaleDateString("en-US", {
-                                                        month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-                                                    })
-                                                    : "No date set"}
-                                            </p>
-                                            {job.status === "FAILED" && job.errorMsg && (
-                                                <p className="text-[10px] text-red-400 mt-0.5 flex items-center gap-1">
-                                                    <AlertCircle className="w-2.5 h-2.5" />
-                                                    {job.errorMsg}
+                                .map((job) => {
+                                    const asset = getAssetDetails(job);
+                                    return (
+                                        <div
+                                            key={job.id}
+                                            className="flex items-center gap-4 bg-gray-900/50 border border-gray-800 rounded-xl px-4 py-3 hover:border-gray-700 transition-colors"
+                                        >
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded border uppercase tracking-wider", asset.badgeClass)}>
+                                                        {asset.type}
+                                                    </span>
+                                                    <span className="text-[10px] text-gray-500 truncate">
+                                                        Source: {asset.source}
+                                                    </span>
+                                                </div>
+                                                <h3 className="text-sm font-semibold text-white truncate">
+                                                    {asset.title}
+                                                </h3>
+                                                <p className="text-xs text-gray-400 mt-1">
+                                                    Channel: <span className="text-gray-300 font-medium">{job.channel.channelName}</span> ({job.channel.platform}) ·{" "}
+                                                    {job.scheduledAt
+                                                        ? new Date(job.scheduledAt).toLocaleDateString("en-US", {
+                                                            month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                                                        })
+                                                        : "No date set"}
                                                 </p>
-                                            )}
+                                                {job.status === "FAILED" && job.errorMsg && (
+                                                    <p className="text-[10px] text-red-400 mt-1 flex items-center gap-1 bg-red-500/5 border border-red-500/10 px-2 py-1 rounded">
+                                                        <AlertCircle className="w-3.5 h-3.5" />
+                                                        Error: {job.errorMsg}
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <span
+                                                className={cn(
+                                                    "text-[10px] font-semibold px-2.5 py-1 rounded-full border uppercase tracking-wide",
+                                                    STATUS_COLORS[job.status] || STATUS_COLORS.DRAFT
+                                                )}
+                                            >
+                                                {job.status}
+                                            </span>
+                                            <div className="flex items-center gap-1">
+                                                <button
+                                                    onClick={() => setEditingJob(job)}
+                                                    className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+                                                    title="Edit job"
+                                                >
+                                                    <Edit3 className="w-4 h-4" />
+                                                </button>
+                                                <button
+                                                    onClick={() => deleteJob(job.id)}
+                                                    disabled={deletingId === job.id}
+                                                    className="p-2 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                                                    title="Delete job"
+                                                >
+                                                    {deletingId === job.id ? (
+                                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                                    ) : (
+                                                        <Trash2 className="w-4 h-4" />
+                                                    )}
+                                                </button>
+                                            </div>
                                         </div>
-                                    <span
-                                            className={cn(
-                                                "text-xs font-medium px-2.5 py-1 rounded-full border",
-                                                STATUS_COLORS[job.status] || STATUS_COLORS.DRAFT
-                                            )}
-                                        >
-                                            {job.status}
-                                        </span>
-                                        <button
-                                            onClick={() => setEditingJob(job)}
-                                            className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
-                                            title="Edit job"
-                                        >
-                                            <Edit3 className="w-4 h-4" />
-                                        </button>
-                                        <button
-                                            onClick={() => deleteJob(job.id)}
-                                            disabled={deletingId === job.id}
-                                            className="p-2 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
-                                            title="Delete job"
-                                        >
-                                            {deletingId === job.id ? (
-                                                <Loader2 className="w-4 h-4 animate-spin" />
-                                            ) : (
-                                                <Trash2 className="w-4 h-4" />
-                                            )}
-                                        </button>
-                                    </div>
-                                ))
+                                    );
+                                })
                         )}
                     </div>
                 )}

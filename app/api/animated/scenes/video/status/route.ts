@@ -265,10 +265,21 @@ export async function GET(req: NextRequest) {
 
                         if (searchQueriesMeta.visualShots && Array.isArray(searchQueriesMeta.visualShots)) {
                             searchQueriesMeta.visualShots = searchQueriesMeta.visualShots.map((shot: any) => {
-                                if ((shotId && shot.id === shotId) || shot.jobId === job.id) {
-                                    return { ...shot, visualPath: job.outputPath, jobStatus: "COMPLETED" };
+                                if (job.jobType === "ref_image" && (shot.startImageJobId === job.id || (shotId && shot.id === shotId && shot.startImageJobStatus !== "COMPLETED"))) {
+                                    return { 
+                                        ...shot, 
+                                        startImagePath: job.outputPath, 
+                                        startImageJobStatus: "COMPLETED",
+                                        jobStatus: shot.jobStatus === "GENERATING_IMAGE" ? "QUEUED" : shot.jobStatus
+                                    };
+                                } else if (job.jobType === "shot_video" && (shot.jobId === job.id || (shotId && shot.id === shotId && shot.jobStatus !== "COMPLETED"))) {
+                                    return { 
+                                        ...shot, 
+                                        visualPath: job.outputPath, 
+                                        jobStatus: "COMPLETED" 
+                                    };
                                 }
-                                  return shot;
+                                return shot;
                             });
 
                              const allDone = searchQueriesMeta.visualShots.every((s: any) => s.jobStatus === "COMPLETED" || (!s.jobId && s.visualPath));

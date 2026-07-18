@@ -49,6 +49,8 @@ const topNavItems = [
 
 const aiStudioItems = [
     { label: "Documentary", href: "/dashboard/documentary", icon: Video },
+    { label: "Video Slicer", href: "/dashboard/clipper", icon: Scissors },
+    { label: "Video Editor", href: "/dashboard/editor", icon: Wand2 },
     { label: "Podcasts", href: "/dashboard/podcasts", icon: Headphones },
     { label: "Characters", href: "/dashboard/podcasts/characters", icon: Users },
     { label: "UGC Studio", href: "/dashboard/ugc", icon: Sparkles },
@@ -132,41 +134,15 @@ export default function Sidebar() {
                 {topNavItems.map((item) => renderNavLink(item))}
 
                 {/* AI Studio group */}
-                <div className="pt-2">
-                    <button
-                        onClick={() => setStudioOpen(!studioOpen)}
-                        className={cn(
-                            "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 w-full",
-                            isInStudio
-                                ? "text-violet-400"
-                                : "text-gray-400 hover:text-white hover:bg-gray-800/60"
-                        )}
-                        title={collapsed ? "AI Studio" : undefined}
-                    >
-                        <Sparkles
-                            className={cn(
-                                "w-5 h-5 flex-shrink-0",
-                                isInStudio ? "text-violet-400" : "text-gray-500"
-                            )}
-                        />
-                        {!collapsed && (
-                            <>
-                                <span className="flex-1 text-left">AI Studio</span>
-                                <ChevronDown
-                                    className={cn(
-                                        "w-4 h-4 text-gray-500 transition-transform duration-200",
-                                        studioOpen && "rotate-180"
-                                    )}
-                                />
-                            </>
-                        )}
-                    </button>
-
-                    {(studioOpen || collapsed) && (
-                        <div className={cn("space-y-0.5", !collapsed && "mt-0.5")}>
-                            {aiStudioItems.map((item) => renderNavLink(item, true))}
-                        </div>
+                <div className="pt-3 pb-1">
+                    {!collapsed && (
+                        <span className="px-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-2">
+                            AI Studio
+                        </span>
                     )}
+                    <div className="space-y-0.5">
+                        {aiStudioItems.map((item) => renderNavLink(item, true))}
+                    </div>
                 </div>
 
                 {/* Bottom nav items */}
