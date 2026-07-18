@@ -1988,6 +1988,26 @@ export default function KidsStoryBuilderPage() {
                                                         <option value="dialogue">Dialogue</option>
                                                         <option value="song">Song / Lyric</option>
                                                     </select>
+
+                                                    {/* Audio status badge — visible at a glance */}
+                                                    {scene.type === "dialogue" && (
+                                                        <span title={scene.narrationPath ? `Audio ready: ${scene.narrationPath}` : "No audio generated yet"}
+                                                            className={`ml-auto flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold border ${
+                                                                scene.voiceStatus === "GENERATING"
+                                                                    ? "bg-yellow-900/30 border-yellow-700/40 text-yellow-400"
+                                                                    : scene.voiceStatus === "FAILED"
+                                                                    ? "bg-red-900/30 border-red-700/40 text-red-400"
+                                                                    : scene.narrationPath
+                                                                    ? "bg-green-900/30 border-green-700/40 text-green-400"
+                                                                    : "bg-gray-800 border-gray-700 text-gray-500"
+                                                            }`}>
+                                                            <Volume2 className="w-2.5 h-2.5" />
+                                                            {scene.voiceStatus === "GENERATING" ? "Generating…"
+                                                                : scene.voiceStatus === "FAILED" ? "Failed"
+                                                                : scene.narrationPath ? "Audio ✓"
+                                                                : "No Audio"}
+                                                        </span>
+                                                    )}
                                                 </div>
 
                                                 {/* dialogue character mapping */}
