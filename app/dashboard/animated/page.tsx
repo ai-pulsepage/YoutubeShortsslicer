@@ -680,12 +680,14 @@ export default function KidsStoryBuilderPage() {
                                 ...ss,
                                 // Prefer client narrationPath if it exists (more up-to-date)
                                 narrationPath: clientScene?.narrationPath || ss.narrationPath,
-                                // Derive voiceStatus from the merged narrationPath
+                                // Derive voiceStatus — preserve FAILED so red badge stays visible
                                 voiceStatus: (clientScene?.narrationPath || ss.narrationPath)
                                     ? "READY"
-                                    : (clientScene?.voiceStatus === "GENERATING"
-                                        ? "GENERATING"
-                                        : ss.voiceStatus || "IDLE"),
+                                    : clientScene?.voiceStatus === "FAILED"
+                                    ? "FAILED"
+                                    : clientScene?.voiceStatus === "GENERATING"
+                                    ? "GENERATING"
+                                    : "IDLE",
                                 // Keep planningShots flag from client so spinner doesn't disappear
                                 planningShots: clientScene?.planningShots || false,
                             };
@@ -2288,6 +2290,90 @@ export default function KidsStoryBuilderPage() {
                                     </button>
                                 </div>
                             </div>
+                            {/* ── Audio Status Summary Bar ──────────────────────────────── */}
+                            {(() => {
+                                const dialogueOnly = scenes.filter(s => s.type === "dialogue");
+                                const ready   = dialogueOnly.filter(s => !!s.narrationPath).length;
+                                const failed  = dialogueOnly.filter(s => s.voiceStatus === "FAILED").length;
+                                const generating = dialogueOnly.filter(s => s.voiceStatus === "GENERATING").length;
+                                const total   = dialogueOnly.length;
+                                if (total === 0) return null;
+                                const pct = Math.round((ready / total) * 100);
+                                return (
+                                    <div className="mb-4 bg-gray-900/60 border border-gray-800 rounded-xl p-3">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <div className="flex items-center gap-2">
+                                                <Volume2 className="w-3.5 h-3.5 text-gray-400" />
+                                                <span className="text-[11px] font-bold text-gray-300">
+                                                    Dialogue Audio: <span className={ready === total ? "text-green-400" : "text-white"}>{ready}/{total} ready</span>
+                                                    {generating > 0 && <span className="text-yellow-400 ml-2">· {generating} synthesizing…</span>}
+                                                    {failed > 0 && <span className="text-red-400 ml-2">· {failed} failed</span>}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                {failed > 0 && (
+                                                    <button
+                                                        onClick={async () => {
+                                                            // Retry all FAILED scenes
+                                                            const failedScenes = scenes.filter(s => s.type === "dialogue" && s.voiceStatus === "FAILED");
+                                                            for (const s of failedScenes) {
+                                                                const charMatch = characters.find(c => c.name === s.character);
+                                                                const effectiveProvider: TtsProvider = s.ttsProvider || charMatch?.ttsProvider || "edge_tts";
+                                                                const effectiveVoiceId: string = s.ttsVoiceId || charMatch?.ttsVoiceId || s.voice;
+                                                                await generateSceneVoiceover(s.id, s.text, s.voice, effectiveProvider, effectiveVoiceId);
+                                                            }
+                                                        }}
+                                                        className="flex items-center gap-1 px-2.5 py-1 bg-red-900/30 hover:bg-red-900/50 border border-red-700/40 text-red-400 hover:text-red-300 text-[10px] font-bold rounded-lg transition-all"
+                                                    >
+                                                        🔁 Retry {failed} Failed
+                                                    </button>
+                                                )}
+                                                {ready < total && !generatingAllVoices && (
+                                                    <button
+                                                        onClick={handleGenerateAllVoices}
+                                                        className="flex items-center gap-1 px-2.5 py-1 bg-blue-900/30 hover:bg-blue-900/50 border border-blue-700/40 text-blue-400 hover:text-blue-300 text-[10px] font-bold rounded-lg transition-all"
+                                                    >
+                                                        <Volume2 className="w-3 h-3" /> Generate Missing ({total - ready})
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                        {/* Progress bar */}
+                                        <div className="w-full bg-gray-800 rounded-full h-1.5 overflow-hidden">
+                                            <div
+                                                className={`h-full rounded-full transition-all duration-500 ${
+                                                    ready === total ? "bg-green-500" : failed > 0 ? "bg-gradient-to-r from-green-500 to-red-500" : "bg-blue-500"
+                                                }`}
+                                                style={{ width: `${pct}%` }}
+                                            />
+                                        </div>
+                                        {/* Per-scene audio dots */}
+                                        <div className="flex flex-wrap gap-1 mt-2">
+                                            {scenes.map((s, i) => {
+                                                if (s.type !== "dialogue") return (
+                                                    <span key={s.id} title={`Scene ${i+1}: Song`}
+                                                        className="w-5 h-5 rounded text-[8px] flex items-center justify-center bg-gray-800 border border-gray-700 text-gray-600">
+                                                        ♪
+                                                    </span>
+                                                );
+                                                const status = s.narrationPath ? "ready" : s.voiceStatus === "FAILED" ? "failed" : s.voiceStatus === "GENERATING" ? "gen" : "none";
+                                                return (
+                                                    <span key={s.id}
+                                                        title={`Scene ${i+1}: ${status === "ready" ? "Audio ready ✓" : status === "failed" ? "FAILED — click Retry" : status === "gen" ? "Synthesizing..." : "No audio yet"}`}
+                                                        className={`w-5 h-5 rounded text-[8px] flex items-center justify-center font-bold border transition-all ${
+                                                            status === "ready"  ? "bg-green-900/40 border-green-700/50 text-green-400" :
+                                                            status === "failed" ? "bg-red-900/40 border-red-700/50 text-red-400 animate-pulse" :
+                                                            status === "gen"    ? "bg-yellow-900/40 border-yellow-700/50 text-yellow-400 animate-pulse" :
+                                                                                  "bg-gray-800 border-gray-700 text-gray-600"
+                                                        }`}>
+                                                        {i + 1}
+                                                    </span>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
 
                             <div className="space-y-6">
                                 {scenes.map((scene, idx) => (
@@ -2315,19 +2401,19 @@ export default function KidsStoryBuilderPage() {
 
                                                     {/* Audio status badge — visible at a glance */}
                                                     {scene.type === "dialogue" && (
-                                                        <span title={scene.narrationPath ? `Audio ready: ${scene.narrationPath}` : "No audio generated yet"}
-                                                            className={`ml-auto flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold border ${
+                                                        <span title={scene.narrationPath ? `Audio ready: ${scene.narrationPath}` : scene.voiceStatus === "FAILED" ? "Audio generation FAILED — click Retry Failed above" : "No audio generated yet"}
+                                                            className={`ml-auto flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold border transition-all ${
                                                                 scene.voiceStatus === "GENERATING"
-                                                                    ? "bg-yellow-900/30 border-yellow-700/40 text-yellow-400"
+                                                                    ? "bg-yellow-900/30 border-yellow-700/40 text-yellow-400 animate-pulse"
                                                                     : scene.voiceStatus === "FAILED"
-                                                                    ? "bg-red-900/30 border-red-700/40 text-red-400"
+                                                                    ? "bg-red-600/30 border-red-500/60 text-red-300 animate-pulse ring-1 ring-red-500/30"
                                                                     : scene.narrationPath
                                                                     ? "bg-green-900/30 border-green-700/40 text-green-400"
                                                                     : "bg-gray-800 border-gray-700 text-gray-500"
                                                             }`}>
                                                             <Volume2 className="w-2.5 h-2.5" />
-                                                            {scene.voiceStatus === "GENERATING" ? "Generating…"
-                                                                : scene.voiceStatus === "FAILED" ? "Failed"
+                                                            {scene.voiceStatus === "GENERATING" ? "Synthesizing…"
+                                                                : scene.voiceStatus === "FAILED" ? "⚠ FAILED"
                                                                 : scene.narrationPath ? "Audio ✓"
                                                                 : "No Audio"}
                                                         </span>
