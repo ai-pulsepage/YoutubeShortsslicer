@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import {
-    ChevronLeft, Loader2, Plus, Trash2, Sparkles, Tv, Users, ArrowLeft, Folder, Copy, Upload
+    ChevronLeft, Loader2, Plus, Trash2, Sparkles, Tv, Users, ArrowLeft, Folder, Copy, Upload, Download, Eye
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -606,15 +606,24 @@ export default function AnimatedCastLibraryPage() {
                                     ) : (
                                         <Users className="w-8 h-8 text-gray-750" />
                                     )}
-                                    <label className="absolute inset-0 bg-black/75 opacity-0 group-hover/avatar:opacity-100 flex flex-col items-center justify-center transition-all cursor-pointer text-center p-1 text-[9px] font-bold text-violet-400">
-                                        <Upload className="w-4 h-4 mb-0.5 text-violet-450" />
-                                        Upload
-                                        <input type="file" accept="image/*" className="hidden"
-                                            onChange={e => {
-                                                const file = e.target.files?.[0];
-                                                if (file) handleUploadAvatarImage(char.name, file);
-                                            }} />
-                                    </label>
+                                    <div className="absolute inset-0 bg-black/85 opacity-0 group-hover/avatar:opacity-100 flex flex-col items-center justify-center transition-all p-1.5 text-[9px] font-bold text-violet-400 gap-1.5">
+                                        <label className="w-full flex items-center justify-center gap-0.5 py-1 px-1 bg-violet-600 hover:bg-violet-500 rounded text-white cursor-pointer transition-colors">
+                                            <Upload className="w-3 h-3" />
+                                            <span>Upload</span>
+                                            <input type="file" accept="image/*" className="hidden"
+                                                onChange={e => {
+                                                    const file = e.target.files?.[0];
+                                                    if (file) handleUploadAvatarImage(char.name, file);
+                                                }} />
+                                        </label>
+                                        {char.imagePath && (
+                                            <a href={`/api/storage/signed?key=${char.imagePath}`} download={`${char.name}_avatar.webp`} target="_blank" rel="noreferrer"
+                                                className="w-full flex items-center justify-center gap-0.5 py-1 px-1 bg-gray-800 hover:bg-gray-700 border border-gray-700/60 rounded text-gray-300 hover:text-white cursor-pointer no-underline transition-colors">
+                                                <Download className="w-3 h-3" />
+                                                <span>Save</span>
+                                            </a>
+                                        )}
+                                    </div>
                                 </div>
 
                                 <div className="flex-1 min-w-0 space-y-1">
