@@ -406,8 +406,8 @@ def get_wan_pipeline():
             low_cpu_mem_usage=True,
         )
         if torch.cuda.is_available():
-            print("  🚀 Moving Wan pipeline to GPU VRAM for maximum inference speed...")
-            _wan_pipe.to("cuda")
+            print("  🚀 Enabling CPU offload for Wan pipeline to prevent VRAM overflow...")
+            _wan_pipe.enable_model_cpu_offload()
         else:
             _wan_pipe.enable_model_cpu_offload()
         _wan_pipe.vae.enable_slicing()
