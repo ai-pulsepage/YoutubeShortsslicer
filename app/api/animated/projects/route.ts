@@ -5,49 +5,44 @@ import { getRedis, CHANNELS, dispatchJob } from "@/lib/documentary/redis-client"
 import { organizeCompletedJobAsset } from "@/lib/documentary/asset-organizer";
 import { moveR2Object, listR2Objects, deleteMultipleFromR2 } from "@/lib/storage";
 
-export async function GET(req: NextRequest) {
-    const session = await auth();
-    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
+async function drainRedisResultsSafe() {
     try {
-        // 1. Drain pending finished task results from Redis to update PostgreSQL states
-        try {
-            const redis = getRedis();
-            for (let i = 0; i < 50; i++) {
-                const result = await redis.rpop(CHANNELS.DOCUMENTARY_RESULTS);
-                if (!result) break;
+        const redis = getRedis();
+        for (let i = 0; i < 50; i++) {
+            const result = await redis.rpop(CHANNELS.DOCUMENTARY_RESULTS);
+            if (!result) break;
 
-                try {
-                    const data = JSON.parse(result);
-                    const jobId = data.jobId;
-                    const status = data.status === "completed" ? "COMPLETED" : "FAILED";
-                    let outputPath = data.outputPath || null;
-                    const lastFramePath = data.lastFramePath || null;
-                    const errorMsg = data.error || null;
+            try {
+                const data = JSON.parse(result);
+                const jobId = data.jobId;
+                const status = data.status === "completed" ? "COMPLETED" : "FAILED";
+                let outputPath = data.outputPath || null;
+                const lastFramePath = data.lastFramePath || null;
+                const errorMsg = data.error || null;
 
-                    if (status === "COMPLETED" && outputPath) {
-                        outputPath = await organizeCompletedJobAsset(jobId, outputPath);
+                if (status === "COMPLETED" && outputPath) {
+                    outputPath = await organizeCompletedJobAsset(jobId, outputPath);
+                }
+
+                const job = await prisma.genJob.update({
+                    where: { id: jobId },
+                    data: { status, outputPath, errorMsg }
+                });
+
+                if (status === "COMPLETED" && outputPath) {
+                    if (job.assetId) {
+                        await prisma.docAsset.update({
+                            where: { id: job.assetId },
+                            data: { imagePath: outputPath }
+                        });
                     }
 
-                    const job = await prisma.genJob.update({
-                        where: { id: jobId },
-                        data: { status, outputPath, errorMsg }
-                    });
-
-                    if (status === "COMPLETED" && outputPath) {
-                        if (job.assetId) {
-                            await prisma.docAsset.update({
-                                where: { id: job.assetId },
-                                data: { imagePath: outputPath }
-                            });
-                        }
-
-                        if (job.shotId && job.jobType === "shot_video") {
-                            await prisma.docShot.update({
-                                where: { id: job.shotId },
-                                data: { clipPath: outputPath }
-                            });
-                        }
+                    if (job.shotId && job.jobType === "shot_video") {
+                        await prisma.docShot.update({
+                            where: { id: job.shotId },
+                            data: { clipPath: outputPath }
+                        });
+                    }
 
                     const meta = job.metadata as any;
                     if (meta && (meta.sceneId || meta.shotId)) {
@@ -171,14 +166,23 @@ export async function GET(req: NextRequest) {
                             }
                         }
                     }
-                    }
-                } catch (err) {
-                    console.error("[GET Projects Sync] Error processing result:", err);
                 }
+            } catch (err) {
+                console.error("[Background Redis Sync] Error processing result:", err);
             }
-        } catch (redisErr: any) {
-            console.error("[GET Projects] Redis connection/pop failed:", redisErr.message);
         }
+    } catch (redisErr: any) {
+        console.error("[Background Redis] Connection/pop failed:", redisErr.message);
+    }
+}
+
+export async function GET(req: NextRequest) {
+    const session = await auth();
+    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    try {
+        // Drain pending finished task results from Redis asynchronously in the background
+        drainRedisResultsSafe().catch(err => console.error("Uncaught background drain error:", err));
 
         const projects = await prisma.documentary.findMany({
             where: {
