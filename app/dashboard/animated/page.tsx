@@ -194,6 +194,8 @@ export default function KidsStoryBuilderPage() {
     const [generatingAllVoices, setGeneratingAllVoices] = useState(false);
     const [isLibraryOpen, setIsLibraryOpen] = useState(false);
     const [librarySearchQuery, setLibrarySearchQuery] = useState("");
+    const [isTtsSettingsOpen, setIsTtsSettingsOpen] = useState(false);
+    const [ttsTestStatus, setTtsTestStatus] = useState<Record<string, "idle"|"testing"|"ok"|"fail">>({});
 
     const [docId, setDocId] = useState<string | null>(null);
     const [scenes, setScenes] = useState<Scene[]>([]);
@@ -445,11 +447,13 @@ export default function KidsStoryBuilderPage() {
                 body: JSON.stringify({
                     name: char.name,
                     prompt: char.prompt,
-                    imagePath: char.imagePath
+                    imagePath: char.imagePath,
+                    ttsProvider: char.ttsProvider || null,
+                    ttsVoiceId: char.ttsVoiceId || null,
                 })
             });
             if (!res.ok) throw new Error("Failed to save to library");
-            alert(`"${char.name}" has been saved to your global character library!`);
+            alert(`"${char.name}" saved to library with TTS profile: ${char.ttsProvider || "Edge TTS"}.`);
             loadLibraryCharacters();
         } catch (err: any) {
             setError(err.message || "Error saving to library.");
@@ -1679,6 +1683,101 @@ export default function KidsStoryBuilderPage() {
                 ))}
             </div>
 
+            {/* Global TTS Provider Settings Panel */}
+            <div className="mb-4">
+                <button
+                    onClick={() => setIsTtsSettingsOpen(o => !o)}
+                    className="flex items-center gap-2 w-full px-4 py-2.5 bg-gray-900/40 border border-gray-850 rounded-2xl text-xs font-bold text-gray-400 hover:text-white hover:border-gray-700 transition-all"
+                >
+                    <span className="text-sm">🎙</span>
+                    <span>TTS Provider Settings</span>
+                    <span className="ml-auto text-gray-600">{isTtsSettingsOpen ? "▲ hide" : "▼ configure"}</span>
+                </button>
+
+                {isTtsSettingsOpen && (
+                    <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3 p-4 bg-gray-900/30 border border-gray-850 rounded-2xl">
+
+                        {/* Edge TTS */}
+                        <div className="bg-black/30 border border-gray-800 rounded-xl p-3 space-y-2">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-white">⚡ Edge TTS (MoneyPrinter)</span>
+                                <button onClick={async () => {
+                                    setTtsTestStatus(s => ({ ...s, edge_tts: "testing" }));
+                                    const r = await fetch("/api/animated/tts/test?engine=edge_tts").then(r => r.json()).catch(() => ({ ok: false, message: "Network error" }));
+                                    setTtsTestStatus(s => ({ ...s, edge_tts: r.ok ? "ok" : "fail" }));
+                                }} className="text-[9px] px-2 py-0.5 bg-gray-800 border border-gray-700 text-gray-400 hover:text-white rounded font-bold transition-all">
+                                    {ttsTestStatus.edge_tts === "testing" ? "Testing…" : ttsTestStatus.edge_tts === "ok" ? "✅ Connected" : ttsTestStatus.edge_tts === "fail" ? "❌ Failed" : "Test"}
+                                </button>
+                            </div>
+                            <p className="text-[9px] text-gray-500 leading-relaxed">Free, fast. US voices are most reliable. UK/AU voices can timeout and auto-fallback to US equivalents.</p>
+                            <p className="text-[9px] text-emerald-400/60 font-mono">No API key needed — uses MoneyPrinter URL from .env</p>
+                        </div>
+
+                        {/* Gemini TTS */}
+                        <div className="bg-black/30 border border-gray-800 rounded-xl p-3 space-y-2">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-white">✨ Gemini 2.5 Flash TTS</span>
+                                <button onClick={async () => {
+                                    setTtsTestStatus(s => ({ ...s, gemini: "testing" }));
+                                    const r = await fetch("/api/animated/tts/test?engine=gemini").then(r => r.json()).catch(() => ({ ok: false, message: "Network error" }));
+                                    setTtsTestStatus(s => ({ ...s, gemini: r.ok ? "ok" : "fail" }));
+                                }} className="text-[9px] px-2 py-0.5 bg-gray-800 border border-gray-700 text-gray-400 hover:text-white rounded font-bold transition-all">
+                                    {ttsTestStatus.gemini === "testing" ? "Testing…" : ttsTestStatus.gemini === "ok" ? "✅ Connected" : ttsTestStatus.gemini === "fail" ? "❌ Failed" : "Test"}
+                                </button>
+                            </div>
+                            <p className="text-[9px] text-gray-500 leading-relaxed">21 high-quality English voices. Returns WAV audio. Best for expressive narration.</p>
+                            <p className="text-[9px] text-blue-400/60 font-mono">Uses GEMINI_API_KEY from .env or Admin → API Keys → gemini_api_key</p>
+                            <p className="text-[9px] text-yellow-400/60 font-mono">Voices: Aoede, Kore, Puck, Fenrir, Charon, Zephyr…</p>
+                        </div>
+
+                        {/* ElevenLabs */}
+                        <div className="bg-black/30 border border-gray-800 rounded-xl p-3 space-y-2">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-white">🎙 ElevenLabs</span>
+                                <button onClick={async () => {
+                                    setTtsTestStatus(s => ({ ...s, elevenlabs: "testing" }));
+                                    const r = await fetch("/api/animated/tts/test?engine=elevenlabs").then(r => r.json()).catch(() => ({ ok: false, message: "Network error" }));
+                                    setTtsTestStatus(s => ({ ...s, elevenlabs: r.ok ? "ok" : "fail" }));
+                                }} className="text-[9px] px-2 py-0.5 bg-gray-800 border border-gray-700 text-gray-400 hover:text-white rounded font-bold transition-all">
+                                    {ttsTestStatus.elevenlabs === "testing" ? "Testing…" : ttsTestStatus.elevenlabs === "ok" ? "✅ Connected" : ttsTestStatus.elevenlabs === "fail" ? "❌ Failed" : "Test"}
+                                </button>
+                            </div>
+                            <p className="text-[9px] text-gray-500 leading-relaxed">Premium ultra-realistic voices. Supports SSML markup for precise pacing control.</p>
+                            <div className="bg-gray-900 border border-gray-800 rounded-lg p-2 font-mono text-[8px] text-blue-300 space-y-0.5">
+                                <div>{'<break time="1.5s"/>'} → pause</div>
+                                <div>{'<break time="0.5s"/>'} → short beat</div>
+                                <div>{'...'} → trailing pause</div>
+                                <div className="text-gray-500">Wrap in {'<speak>'} tags for multi-break scripts</div>
+                            </div>
+                            <p className="text-[9px] text-blue-400/60 font-mono">Admin → API Keys → elevenlabs</p>
+                        </div>
+
+                        {/* Dia TTS */}
+                        <div className="bg-black/30 border border-gray-800 rounded-xl p-3 space-y-2">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-white">🖥 Dia TTS (RunPod)</span>
+                                <button onClick={async () => {
+                                    setTtsTestStatus(s => ({ ...s, dia: "testing" }));
+                                    const r = await fetch("/api/animated/tts/test?engine=dia").then(r => r.json()).catch(() => ({ ok: false, message: "Network error" }));
+                                    setTtsTestStatus(s => ({ ...s, dia: r.ok ? "ok" : "fail" }));
+                                }} className="text-[9px] px-2 py-0.5 bg-gray-800 border border-gray-700 text-gray-400 hover:text-white rounded font-bold transition-all">
+                                    {ttsTestStatus.dia === "testing" ? "Testing…" : ttsTestStatus.dia === "ok" ? "✅ Connected" : ttsTestStatus.dia === "fail" ? "❌ Failed" : "Test"}
+                                </button>
+                            </div>
+                            <p className="text-[9px] text-gray-500 leading-relaxed">Self-hosted Nari Labs Dia 1.6B. 43 predefined voices + voice cloning. Supports non-verbal cues.</p>
+                            <div className="bg-gray-900 border border-gray-800 rounded-lg p-2 font-mono text-[8px] text-amber-300 space-y-0.5">
+                                <div>(laughs) (sighs) (clears throat)</div>
+                                <div>(singing) (gasps) (screams)</div>
+                                <div>(chuckle) (inhales) (exhales)</div>
+                                <div className="text-gray-500">Use in dialogue text, Dia renders them as audio</div>
+                            </div>
+                            <p className="text-[9px] text-amber-400/60 font-mono">Set DIA_TTS_URL in .env (RunPod proxy URL)</p>
+                        </div>
+
+                    </div>
+                )}
+            </div>
+
             {/* Step Content Blocks */}
             <div className="bg-gray-900/20 border border-gray-850 rounded-3xl p-6 min-h-[460px] flex flex-col justify-between">
                 
@@ -1902,12 +2001,76 @@ export default function KidsStoryBuilderPage() {
                                                 </label>
                                             </div>
 
-                                            <div className="flex-1 space-y-2 min-w-0">
+                                        <div className="flex-1 space-y-2 min-w-0">
                                                 <input type="text" placeholder="Character Name" value={char.name} onChange={e => updateCharacterProfile(char.id, { name: e.target.value })}
                                                     className="bg-gray-800 border border-gray-750 rounded-lg px-2 py-0.5 text-xs font-bold text-white focus:outline-none focus:border-violet-500" />
                                                 <textarea placeholder="Appearance prompt details..." value={char.prompt} onChange={e => updateCharacterProfile(char.id, { prompt: e.target.value })} rows={2}
                                                     className="w-full bg-gray-800 border border-gray-750 rounded-lg p-1.5 text-[10px] text-gray-350 focus:outline-none focus:border-violet-500 leading-normal font-sans" />
                                             </div>
+                                        </div>
+
+                                        {/* TTS Voice Profile — travels with character to library */}
+                                        <div className="bg-black/20 border border-gray-850 rounded-xl p-2.5 space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Voice Profile</span>
+                                                {char.ttsProvider && (
+                                                    <span className="text-[8px] px-1.5 py-0.5 bg-violet-600/20 border border-violet-500/30 text-violet-300 rounded font-bold">
+                                                        {TTS_PROVIDERS.find(p => p.id === char.ttsProvider)?.icon} {char.ttsProvider}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {/* Engine chips */}
+                                            <div className="flex flex-wrap gap-0.5">
+                                                {TTS_PROVIDERS.map(p => (
+                                                    <button key={p.id}
+                                                        title={p.desc}
+                                                        onClick={() => updateCharacterProfile(char.id, { ttsProvider: p.id as TtsProvider, ttsVoiceId: undefined })}
+                                                        className={`px-1.5 py-0.5 rounded text-[8px] font-bold border transition-all ${
+                                                            (char.ttsProvider || "edge_tts") === p.id
+                                                                ? "bg-violet-600/30 border-violet-500/50 text-violet-300"
+                                                                : "bg-gray-850 border-gray-750 text-gray-500 hover:text-gray-400"
+                                                        }`}>
+                                                        {p.icon} {p.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            {/* Voice selector */}
+                                            {(() => {
+                                                const provider: TtsProvider = char.ttsProvider || "edge_tts";
+                                                const voices = getVoicesForProvider(provider);
+                                                if (provider === "elevenlabs") {
+                                                    return (
+                                                        <input
+                                                            value={char.ttsVoiceId || ""}
+                                                            onChange={e => updateCharacterProfile(char.id, { ttsVoiceId: e.target.value })}
+                                                            placeholder="ElevenLabs Voice ID"
+                                                            className="w-full bg-gray-850 border border-gray-750 rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-violet-500 font-mono"
+                                                        />
+                                                    );
+                                                }
+                                                return voices.length > 0 ? (
+                                                    <select
+                                                        value={char.ttsVoiceId || ""}
+                                                        onChange={e => updateCharacterProfile(char.id, { ttsVoiceId: e.target.value })}
+                                                        className="w-full bg-gray-850 border border-gray-750 rounded-lg px-1.5 py-1 text-[10px] text-white focus:outline-none focus:border-violet-500"
+                                                    >
+                                                        <option value="">— Default voice —</option>
+                                                        {voices.map(v => <option key={v.id} value={v.id} className="bg-gray-900 text-white">{v.label}</option>)}
+                                                    </select>
+                                                ) : null;
+                                            })()}
+                                            {/* Dia vocal effects helper */}
+                                            {char.ttsProvider === "dia" && (
+                                                <p className="text-[8px] text-amber-400/70 font-mono leading-relaxed">
+                                                    Tip: Add (laughs) (sighs) (clears throat) (singing) in dialogue text
+                                                </p>
+                                            )}
+                                            {/* ElevenLabs SSML helper */}
+                                            {char.ttsProvider === "elevenlabs" && (
+                                                <p className="text-[8px] text-blue-400/70 font-mono leading-relaxed">
+                                                    Tip: Use &lt;break time="1s"/&gt; for pauses, ... for emphasis
+                                                </p>
+                                            )}
                                         </div>
 
                                         <div className="flex gap-2 pt-2 border-t border-gray-850/60 justify-end">

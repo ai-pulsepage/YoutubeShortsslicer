@@ -235,12 +235,25 @@ export async function GET(req: NextRequest) {
                 targetAge: metaConfig.targetAge || "Kids",
                 genre: metaConfig.genre || "Adventure",
                 visualAnalysis,
-                characters: p.assets.map(a => ({
-                    id: a.id,
-                    name: a.label,
-                    prompt: a.prompt || "",
-                    imagePath: a.imagePath || ""
-                })),
+                characters: p.assets.map(a => {
+                    let ttsProvider = null;
+                    let ttsVoiceId = null;
+                    if (a.description) {
+                        try {
+                            const desc = JSON.parse(a.description);
+                            ttsProvider = desc.ttsProvider || null;
+                            ttsVoiceId  = desc.ttsVoiceId  || null;
+                        } catch {}
+                    }
+                    return {
+                        id: a.id,
+                        name: a.label,
+                        prompt: a.prompt || "",
+                        imagePath: a.imagePath || "",
+                        ttsProvider,
+                        ttsVoiceId,
+                    };
+                }),
                 scenes: p.scenes.map(s => {
                     let character = "Leo";
                     let voice = "en-US-AnaNeural-Female";
@@ -250,6 +263,8 @@ export async function GET(req: NextRequest) {
                     let visualShots: any[] = [];
                     let sunoAudioKey = "";
                     let sunoDuration: number | null = null;
+                    let ttsProvider: string | null = null;
+                    let ttsVoiceId: string | null = null;
 
                     try {
                         if (s.searchQueries && s.searchQueries.startsWith("{")) {
@@ -262,6 +277,9 @@ export async function GET(req: NextRequest) {
                             if (meta.visualShots) visualShots = meta.visualShots;
                             if (meta.sunoAudioKey) sunoAudioKey = meta.sunoAudioKey;
                             if (meta.sunoDuration !== undefined) sunoDuration = meta.sunoDuration;
+                            // TTS provider fields
+                            if (meta.ttsProvider) ttsProvider = meta.ttsProvider;
+                            if (meta.ttsVoiceId)  ttsVoiceId  = meta.ttsVoiceId;
                         }
                     } catch (e) {
                         console.error("JSON parse searchQueries failed:", e);
@@ -272,6 +290,8 @@ export async function GET(req: NextRequest) {
                         type,
                         character,
                         voice,
+                        ttsProvider: ttsProvider || undefined,
+                        ttsVoiceId: ttsVoiceId || undefined,
                         text: s.narrationText || "",
                         visualPrompt,
                         sunoStylePrompt,
@@ -355,9 +375,12 @@ export async function POST(req: NextRequest) {
 
             for (const char of characters) {
                 const isTempId = char.id.startsWith("char-");
-                
+
                 let imagePath = char.imagePath || null;
-                if (!imagePath) {
+                let inheritedTtsProvider = char.ttsProvider || null;
+                let inheritedTtsVoiceId  = char.ttsVoiceId  || null;
+
+                if (!imagePath || !inheritedTtsProvider) {
                     const libraryChar = await prisma.docAsset.findFirst({
                         where: {
                             type: "CHARACTER",
@@ -368,24 +391,40 @@ export async function POST(req: NextRequest) {
                             }
                         }
                     });
-                    if (libraryChar?.imagePath) {
+                    if (libraryChar?.imagePath && !imagePath) {
                         imagePath = libraryChar.imagePath;
                     }
+                    // Pull TTS profile from library character if not already set locally
+                    if (libraryChar?.description && !inheritedTtsProvider) {
+                        try {
+                            const libDesc = JSON.parse(libraryChar.description);
+                            inheritedTtsProvider = libDesc.ttsProvider || null;
+                            inheritedTtsVoiceId  = libDesc.ttsVoiceId  || null;
+                        } catch {}
+                    }
                 }
-                
+
+                // Serialize TTS profile into description blob
+                const charDescription = JSON.stringify({
+                    ttsProvider: inheritedTtsProvider,
+                    ttsVoiceId: inheritedTtsVoiceId,
+                });
+
                 await prisma.docAsset.upsert({
                     where: { id: isTempId ? "dummy-non-matching-id" : char.id },
                     update: {
                         label: char.name,
                         prompt: char.prompt,
-                        imagePath: imagePath
+                        imagePath: imagePath,
+                        description: charDescription
                     },
                     create: {
                         documentaryId: activeId,
                         type: "CHARACTER",
                         label: char.name,
                         prompt: char.prompt,
-                        imagePath: imagePath
+                        imagePath: imagePath,
+                        description: charDescription
                     }
                 });
             }
@@ -421,6 +460,8 @@ export async function POST(req: NextRequest) {
                     visualPrompt: s.visualPrompt,
                     character: s.character,
                     voice: s.voice,
+                    ttsProvider: s.ttsProvider || null,
+                    ttsVoiceId: s.ttsVoiceId || null,
                     type: s.type,
                     sunoStylePrompt: s.sunoStylePrompt || "",
                     visualShots: s.visualShots || [],

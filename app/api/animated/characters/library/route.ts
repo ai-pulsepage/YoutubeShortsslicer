@@ -81,7 +81,7 @@ export async function GET(req: NextRequest) {
         }
 
         const characters = libraryDoc.assets.map(a => {
-            let wizardMetadata = null;
+            let wizardMetadata: any = null;
             if (a.description) {
                 try {
                     wizardMetadata = JSON.parse(a.description);
@@ -94,7 +94,10 @@ export async function GET(req: NextRequest) {
                 name: a.label,
                 prompt: a.prompt || "",
                 imagePath: a.imagePath || "",
-                wizardMetadata
+                wizardMetadata,
+                // TTS profile — stored inside wizardMetadata for backwards compat
+                ttsProvider: wizardMetadata?.ttsProvider || null,
+                ttsVoiceId: wizardMetadata?.ttsVoiceId || null,
             };
         });
 
@@ -113,8 +116,15 @@ export async function POST(req: NextRequest) {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { name, prompt, imagePath, wizardMetadata } = await req.json();
+    const { name, prompt, imagePath, wizardMetadata, ttsProvider, ttsVoiceId } = await req.json();
     if (!name) return NextResponse.json({ error: "Character name is required" }, { status: 400 });
+
+    // Merge TTS fields into wizardMetadata so they travel with the character
+    const mergedWizardMetadata = {
+        ...(wizardMetadata || {}),
+        ...(ttsProvider ? { ttsProvider } : {}),
+        ...(ttsVoiceId  ? { ttsVoiceId  } : {}),
+    };
 
     try {
         // 1. Locate or create the private global library project vault
@@ -144,7 +154,7 @@ export async function POST(req: NextRequest) {
             }
         });
 
-        const serializedDescription = wizardMetadata ? JSON.stringify(wizardMetadata) : null;
+        const serializedDescription = JSON.stringify(mergedWizardMetadata);
 
         if (existing) {
             await prisma.docAsset.update({
