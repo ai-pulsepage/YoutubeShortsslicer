@@ -86,6 +86,8 @@ export async function generateVideoClips(documentaryId: string): Promise<void> {
                         sceneIndex: scene.sceneIndex,
                         shotIndex: shot.shotIndex,
                         shotType: shot.shotType,
+                        sourceApp: "Documentary Factory",
+                        title: documentary.title || "AI Documentary"
                     },
                 },
             });
@@ -109,6 +111,8 @@ export async function generateVideoClips(documentaryId: string): Promise<void> {
                     duration: shot.duration || 5,
                     model: "wan2.1",
                     shotId: shot.id,
+                    sourceApp: "Documentary Factory",
+                    title: documentary.title || "AI Documentary"
                 },
             };
 

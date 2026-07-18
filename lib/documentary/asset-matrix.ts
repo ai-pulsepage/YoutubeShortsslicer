@@ -73,6 +73,8 @@ export async function generateAssetMatrix(documentaryId: string): Promise<void> 
                     assetType: asset.type,
                     assetLabel: asset.label,
                     visualMode,
+                    sourceApp: "Documentary Factory",
+                    title: documentary.title || "AI Documentary"
                 },
             },
         });
@@ -90,6 +92,8 @@ export async function generateAssetMatrix(documentaryId: string): Promise<void> 
                 model: imageModel,
                 assetId: asset.id,
                 assetLabel: asset.label,
+                sourceApp: "Documentary Factory",
+                title: documentary.title || "AI Documentary"
             },
         };
 

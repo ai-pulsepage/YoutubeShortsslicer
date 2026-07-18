@@ -31,7 +31,7 @@ export async function organizeCompletedJobAsset(jobId: string, rawOutputPath: st
         // 2. Animated Shorts (Kids Story Studio)
         else if (job.documentary && job.documentary.genre === "children") {
             if (job.jobType === "ref_image" && job.assetId) {
-                destKey = `animated/projects/${job.documentaryId}/characters/${job.assetId}.${extension}`;
+                destKey = `animated/avatars/${job.assetId}.${extension}`;
             } else if (job.jobType === "shot_video") {
                 const sceneId = meta?.sceneId || "unknown_scene";
                 const shotId = meta?.shotId || job.shotId || "unknown_shot";
