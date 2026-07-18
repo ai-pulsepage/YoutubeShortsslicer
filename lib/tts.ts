@@ -27,8 +27,15 @@ import {
     listVoices as diaListVoices,
     healthCheck as diaHealthCheck,
 } from "./tts/dia";
+import {
+    generateSpeech as geminiGenerate,
+    listVoices as geminiListVoices,
+    healthCheck as geminiHealthCheck,
+    GEMINI_VOICES,
+} from "./tts/gemini";
 
-export type TtsEngine = "elevenlabs" | "xtts" | "dia";
+export type TtsEngine = "elevenlabs" | "xtts" | "dia" | "gemini" | "edge_tts";
+export { GEMINI_VOICES };
 export type { NarratorStyle } from "./tts/narrator-style";
 
 export interface VoiceoverOptions {
@@ -115,13 +122,26 @@ export async function generateVoiceover(options: VoiceoverOptions): Promise<Buff
             // Dia — self-hosted on RunPod, supports predefined voices and cloning
             return diaGenerate({
                 text,
-                voiceRef: diaVoiceRef || voiceId, // Use diaVoiceRef if set, fall back to voiceId
+                voiceRef: diaVoiceRef || voiceId,
                 voiceMode: diaVoiceMode || (diaVoiceRef ? "predefined" : "single_s1"),
                 transcript: diaTranscript,
                 speed: effectiveSpeed,
                 seed: diaSeed,
             });
         }
+
+        case "gemini": {
+            return geminiGenerate({
+                text,
+                voiceId,
+                speed: effectiveSpeed,
+            });
+        }
+
+        case "edge_tts":
+            // edge_tts is handled by the MoneyPrinter service in the voice generate route
+            // and should not reach this router — fall through to error
+            throw new Error("edge_tts must be handled by the voice generate route directly (requires MoneyPrinter)");
 
         default:
             throw new Error(`Unknown TTS engine: ${engine}`);
@@ -165,6 +185,27 @@ export async function listAvailableVoices(engine: TtsEngine): Promise<VoiceInfo[
             }));
         }
 
+        case "gemini": {
+            return geminiListVoices().map((v) => ({
+                id: v.id,
+                name: v.name,
+                description: `${v.description} (${v.gender})`,
+                engine: "gemini" as TtsEngine,
+            }));
+        }
+
+        case "edge_tts": {
+            // Static list — not fetched from an API
+            return [
+                { id: "en-US-AnaNeural-Female",       name: "Ana",         description: "US Child Female",  engine: "edge_tts" as TtsEngine },
+                { id: "en-US-ChristopherNeural-Male", name: "Christopher", description: "US Child Male",    engine: "edge_tts" as TtsEngine },
+                { id: "en-US-AriaNeural-Female",      name: "Aria",        description: "US Female",        engine: "edge_tts" as TtsEngine },
+                { id: "en-US-GuyNeural-Male",         name: "Guy",         description: "US Male",          engine: "edge_tts" as TtsEngine },
+                { id: "en-GB-SoniaNeural-Female",     name: "Sonia",       description: "UK Female",        engine: "edge_tts" as TtsEngine },
+                { id: "en-GB-RyanNeural-Male",        name: "Ryan",        description: "UK Male",          engine: "edge_tts" as TtsEngine },
+            ];
+        }
+
         default:
             return [];
     }
@@ -183,4 +224,4 @@ export function estimateVoiceoverCost(text: string, engine: TtsEngine): number {
 /**
  * Check if Dia TTS is available.
  */
-export { diaHealthCheck };
+export { diaHealthCheck, geminiHealthCheck };

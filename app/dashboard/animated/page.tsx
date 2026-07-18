@@ -48,11 +48,15 @@ type Shot = {
     chainFromPrevious?: boolean; // Optional flag to chain keyframe context
 };
 
+type TtsProvider = "edge_tts" | "gemini" | "elevenlabs" | "dia";
+
 type Scene = {
     id: string;
     type: "dialogue" | "song";
     character: string;
-    voice: string;
+    voice: string;              // Legacy Edge TTS voice ID (kept for backwards compat)
+    ttsProvider?: TtsProvider;  // Which engine to use (default: edge_tts)
+    ttsVoiceId?: string;        // Engine-specific voice ID
     text: string;
     visualPrompt: string;
     visualPath?: string;       // Fallback for single clip or compiled path
@@ -74,6 +78,8 @@ type Character = {
     imagePath?: string;         // R2 avatar path
     jobId?: string;            // Avatar generation job id
     jobStatus?: "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED";
+    ttsProvider?: TtsProvider;  // Which TTS engine this character uses
+    ttsVoiceId?: string;        // Engine-specific voice ID for this character
 };
 
 type Project = {
@@ -97,17 +103,66 @@ type Video = {
 };
 
 const EDGE_TTS_VOICES = [
-    { id: "en-US-AnaNeural-Female", label: "Ana (US Child Female)" },
-    { id: "en-US-ChristopherNeural-Male", label: "Christopher (US Child Male)" },
-    { id: "en-GB-OliverNeural-Male", label: "Oliver (UK Child Male)" },
-    { id: "zh-CN-XiaoyiNeural-Female", label: "Xiaoyi (CN Child Female)" },
-    { id: "en-US-AriaNeural-Female", label: "Aria (US Female)" },
-    { id: "en-US-GuyNeural-Male", label: "Guy (US Male)" },
-    { id: "en-GB-SoniaNeural-Female", label: "Sonia (UK Female)" },
-    { id: "en-GB-RyanNeural-Male", label: "Ryan (UK Male)" },
-    { id: "zh-CN-XiaoxiaoNeural-Female", label: "Xiaoxiao (CN Female)" },
-    { id: "zh-CN-YunxiNeural-Male", label: "Yunxi (CN Male)" },
+    { id: "en-US-AnaNeural-Female",        label: "Ana (US Child Female)" },
+    { id: "en-US-ChristopherNeural-Male",  label: "Christopher (US Child Male)" },
+    { id: "en-US-AriaNeural-Female",       label: "Aria (US Female)" },
+    { id: "en-US-GuyNeural-Male",          label: "Guy (US Male)" },
+    { id: "en-US-JennyNeural-Female",      label: "Jenny (US Female)" },
+    { id: "en-US-EricNeural-Male",         label: "Eric (US Male)" },
+    { id: "en-GB-OliverNeural-Male",       label: "Oliver (UK Child Male)" },
+    { id: "en-GB-SoniaNeural-Female",      label: "Sonia (UK Female)" },
+    { id: "en-GB-RyanNeural-Male",         label: "Ryan (UK Male)" },
+    { id: "zh-CN-XiaoyiNeural-Female",     label: "Xiaoyi (CN Child Female)" },
+    { id: "zh-CN-XiaoxiaoNeural-Female",   label: "Xiaoxiao (CN Female)" },
+    { id: "zh-CN-YunxiNeural-Male",        label: "Yunxi (CN Male)" },
 ];
+
+const GEMINI_VOICES_UI = [
+    { id: "Aoede",      label: "Aoede — Warm female" },
+    { id: "Kore",       label: "Kore — Gentle female" },
+    { id: "Leda",       label: "Leda — Elegant female" },
+    { id: "Despina",    label: "Despina — Cheerful female" },
+    { id: "Gacrux",     label: "Gacrux — Rich female" },
+    { id: "Sulafat",    label: "Sulafat — Soothing female" },
+    { id: "Charon",     label: "Charon — Deep male" },
+    { id: "Fenrir",     label: "Fenrir — Bold male" },
+    { id: "Puck",       label: "Puck — Playful male" },
+    { id: "Orus",       label: "Orus — Calm male" },
+    { id: "Algieba",    label: "Algieba — Friendly male" },
+    { id: "Enceladus",  label: "Enceladus — Resonant male" },
+    { id: "Schedar",    label: "Schedar — Strong male" },
+    { id: "Zephyr",     label: "Zephyr — Light neutral" },
+];
+
+const DIA_VOICES_UI = [
+    { id: "Adrian.wav",   label: "Adrian (M)" },
+    { id: "Bella.wav",    label: "Bella (F)" },
+    { id: "Charlie.wav",  label: "Charlie (M)" },
+    { id: "Diana.wav",    label: "Diana (F)" },
+    { id: "Ethan.wav",    label: "Ethan (M)" },
+    { id: "Fiona.wav",    label: "Fiona (F)" },
+    { id: "George.wav",   label: "George (M)" },
+    { id: "Hannah.wav",   label: "Hannah (F)" },
+    { id: "Ivan.wav",     label: "Ivan (M)" },
+    { id: "Julia.wav",    label: "Julia (F)" },
+];
+
+const TTS_PROVIDERS: { id: TtsProvider; label: string; icon: string; desc: string }[] = [
+    { id: "edge_tts",   label: "Edge TTS",    icon: "⚡", desc: "Fast, free via MoneyPrinter" },
+    { id: "gemini",     label: "Gemini TTS",  icon: "✨", desc: "Google Gemini 2.5 Flash" },
+    { id: "elevenlabs", label: "ElevenLabs",  icon: "🎙", desc: "Premium natural voices" },
+    { id: "dia",        label: "Dia (RunPod)", icon: "🖥", desc: "Self-hosted, voice cloning" },
+];
+
+function getVoicesForProvider(provider: TtsProvider) {
+    switch (provider) {
+        case "gemini":     return GEMINI_VOICES_UI;
+        case "dia":        return DIA_VOICES_UI;
+        case "elevenlabs": return []; // populated dynamically from API
+        case "edge_tts":
+        default:           return EDGE_TTS_VOICES;
+    }
+}
 
 const CHARACTER_PRESETS = [
     { name: "Leo", prompt: "A young 3D Pixar style cartoon boy with bright green eyes, a wide joyful smile, and messy red hair. He wears a yellow t-shirt and blue denim shorts. His features are soft, round, and friendly. Styled in Pixar 3D digital animation look, shown against a neutral studio backdrop." },
@@ -769,8 +824,14 @@ export default function KidsStoryBuilderPage() {
         }
     };
 
-    // Card-Level EdgeTTS Voiceover Pre-Generator
-    const generateSceneVoiceover = async (sceneId: string, text: string, voice: string) => {
+    // Card-Level TTS Voiceover Pre-Generator (multi-provider)
+    const generateSceneVoiceover = async (
+        sceneId: string,
+        text: string,
+        voice: string,
+        ttsProvider?: TtsProvider,
+        ttsVoiceId?: string
+    ) => {
         setError("");
         updateScene(sceneId, { voiceStatus: "GENERATING" });
 
@@ -778,7 +839,14 @@ export default function KidsStoryBuilderPage() {
             const res = await fetch("/api/animated/voice/generate", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ docId, sceneId, text, voice })
+                body: JSON.stringify({
+                    docId,
+                    sceneId,
+                    text,
+                    voice,                        // legacy edge_tts field
+                    ttsProvider: ttsProvider || "edge_tts",
+                    ttsVoiceId: ttsVoiceId || voice,
+                })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Voiceover synthesis failed");
@@ -787,7 +855,7 @@ export default function KidsStoryBuilderPage() {
                 narrationPath: data.narrationPath,
                 voiceStatus: "READY"
             });
-            // Auto plan shots based on EdgeTTS narration duration
+            // Auto plan shots based on narration duration
             setTimeout(() => probeAndPlanShots(sceneId, data.narrationPath, text), 100);
         } catch (err: any) {
             setError(err.message || "Failed to generate voiceover track.");
@@ -795,7 +863,7 @@ export default function KidsStoryBuilderPage() {
         }
     };
 
-    // Batch Generate Dialogue Voiceovers
+    // Batch Generate Dialogue Voiceovers (multi-provider aware)
     const handleGenerateAllVoices = async () => {
         // Use narrationPath as ground truth (voiceStatus is UI-only and resets on page load)
         const dialogueScenes = scenes.filter(s => s.type === "dialogue" && !s.narrationPath);
@@ -806,6 +874,7 @@ export default function KidsStoryBuilderPage() {
 
         setGeneratingAllVoices(true);
         setError("");
+        let failedCount = 0;
 
         try {
             // First, trigger a save to ensure latest timeline matches database
@@ -813,30 +882,47 @@ export default function KidsStoryBuilderPage() {
 
             for (let i = 0; i < dialogueScenes.length; i++) {
                 const s = dialogueScenes[i];
-                console.log(`[Batch Audio] Generating voiceover for scene ${s.id} (${i + 1}/${dialogueScenes.length})`);
-                
+
+                // Resolve TTS provider: scene override → character default → edge_tts
+                const charMatch = characters.find(c => c.name === s.character);
+                const effectiveProvider: TtsProvider = s.ttsProvider || charMatch?.ttsProvider || "edge_tts";
+                const effectiveVoiceId: string = s.ttsVoiceId || charMatch?.ttsVoiceId || s.voice;
+
+                console.log(`[Batch Audio] Scene ${i + 1}/${dialogueScenes.length} | provider: ${effectiveProvider} | voice: ${effectiveVoiceId}`);
                 updateScene(s.id, { voiceStatus: "GENERATING" });
 
-                const res = await fetch("/api/animated/voice/generate", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ docId, sceneId: s.id, text: s.text, voice: s.voice })
-                });
-                const data = await res.json();
-                if (!res.ok) {
-                    updateScene(s.id, { voiceStatus: "FAILED" });
-                    throw new Error(data.error || `Voiceover synthesis failed for scene ${i + 1}`);
-                }
+                try {
+                    const res = await fetch("/api/animated/voice/generate", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            docId,
+                            sceneId: s.id,
+                            text: s.text,
+                            voice: s.voice,              // legacy
+                            ttsProvider: effectiveProvider,
+                            ttsVoiceId: effectiveVoiceId,
+                        })
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || `Synthesis failed for scene ${i + 1}`);
 
-                updateScene(s.id, {
-                    narrationPath: data.narrationPath,
-                    voiceStatus: "READY"
-                });
-                
-                // Auto plan shots based on EdgeTTS narration duration
-                await probeAndPlanShots(s.id, data.narrationPath, s.text);
+                    updateScene(s.id, { narrationPath: data.narrationPath, voiceStatus: "READY" });
+                    await probeAndPlanShots(s.id, data.narrationPath, s.text);
+                } catch (sceneErr: any) {
+                    // Mark failed but continue with remaining scenes
+                    console.error(`[Batch Audio] Scene ${s.id} failed:`, sceneErr.message);
+                    updateScene(s.id, { voiceStatus: "FAILED" });
+                    failedCount++;
+                }
             }
-            alert(`Successfully generated narration audio for all ${dialogueScenes.length} dialogue scenes!`);
+
+            const succeeded = dialogueScenes.length - failedCount;
+            if (failedCount > 0) {
+                setError(`${failedCount} scene(s) failed to generate. Check the red badges and retry individually.`);
+            } else {
+                alert(`Successfully generated narration audio for all ${succeeded} dialogue scenes!`);
+            }
         } catch (err: any) {
             setError(err.message || "Failed during batch voiceover generation.");
         } finally {
@@ -2023,11 +2109,66 @@ export default function KidsStoryBuilderPage() {
                                                         </div>
                                                         <div>
                                                             <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">Voice Tone</label>
-                                                            <div className="flex items-center gap-1">
-                                                                <select value={scene.voice} onChange={e => updateScene(scene.id, { voice: e.target.value })}
-                                                                    className="flex-1 bg-gray-850 border border-gray-750 rounded-lg px-1.5 py-1 text-[10px] text-white focus:outline-none focus:border-violet-500">
-                                                                    {EDGE_TTS_VOICES.map(v => <option key={v.id} value={v.id} className="bg-gray-900 text-white">{v.label}</option>)}
+                                                    {/* Voice Tone + TTS Engine selector */}
+                                                {scene.type === "dialogue" && (
+                                                    <div>
+                                                        <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">Voice Tone</label>
+                                                        <div className="flex items-center gap-1">
+                                                            {/* TTS Engine chip selector */}
+                                                            <div className="flex gap-0.5">
+                                                                {TTS_PROVIDERS.map(p => {
+                                                                    const charMatch = characters.find(c => c.name === scene.character);
+                                                                    const effectiveProvider = scene.ttsProvider || charMatch?.ttsProvider || "edge_tts";
+                                                                    const isActive = effectiveProvider === p.id;
+                                                                    return (
+                                                                        <button key={p.id}
+                                                                            title={p.desc}
+                                                                            onClick={() => updateScene(scene.id, { ttsProvider: p.id as TtsProvider, ttsVoiceId: undefined })}
+                                                                            className={`px-1.5 py-0.5 rounded text-[8px] font-bold border transition-all ${
+                                                                                isActive
+                                                                                    ? "bg-violet-600/30 border-violet-500/50 text-violet-300"
+                                                                                    : "bg-gray-850 border-gray-750 text-gray-500 hover:text-gray-400"
+                                                                            }`}>
+                                                                            {p.icon} {p.label}
+                                                                        </button>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                        {/* Voice dropdown — shows voices for effective provider */}
+                                                        {(() => {
+                                                            const charMatch = characters.find(c => c.name === scene.character);
+                                                            const effectiveProvider: TtsProvider = scene.ttsProvider || charMatch?.ttsProvider || "edge_tts";
+                                                            const voices = getVoicesForProvider(effectiveProvider);
+                                                            const effectiveVoiceId = scene.ttsVoiceId || charMatch?.ttsVoiceId || scene.voice;
+                                                            if (effectiveProvider === "elevenlabs") {
+                                                                return (
+                                                                    <div className="mt-1">
+                                                                        <input
+                                                                            value={scene.ttsVoiceId || ""}
+                                                                            onChange={e => updateScene(scene.id, { ttsVoiceId: e.target.value })}
+                                                                            placeholder="ElevenLabs Voice ID (e.g. 21m00Tcm4TlvDq8ikWAM)"
+                                                                            className="w-full bg-gray-850 border border-gray-750 rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-violet-500 font-mono"
+                                                                        />
+                                                                    </div>
+                                                                );
+                                                            }
+                                                            return voices.length > 0 ? (
+                                                                <select
+                                                                    value={effectiveVoiceId}
+                                                                    onChange={e => updateScene(scene.id, {
+                                                                        ttsVoiceId: e.target.value,
+                                                                        // Keep legacy voice in sync if edge_tts
+                                                                        voice: effectiveProvider === "edge_tts" ? e.target.value : scene.voice
+                                                                    })}
+                                                                    className="mt-1 w-full bg-gray-850 border border-gray-750 rounded-lg px-1.5 py-1 text-[10px] text-white focus:outline-none focus:border-violet-500"
+                                                                >
+                                                                    {voices.map(v => <option key={v.id} value={v.id} className="bg-gray-900 text-white">{v.label}</option>)}
                                                                 </select>
+                                                            ) : null;
+                                                        })()}
+                                                    </div>
+                                                )}
                                                                 <button onClick={() => playVoicePreview(scene)}
                                                                     className={cn("p-1.5 rounded-lg border transition-all",
                                                                         playingAudioId === scene.id ? "bg-violet-500/10 border-violet-500/30 text-violet-400" : "bg-gray-800 border-gray-750 text-gray-400 hover:text-white")}>
@@ -2097,7 +2238,12 @@ export default function KidsStoryBuilderPage() {
                                                 {/* Action controls */}
                                                 <div className="grid grid-cols-2 gap-2 pt-1.5">
                                                     {scene.type === "dialogue" ? (
-                                                        <button onClick={() => generateSceneVoiceover(scene.id, scene.text, scene.voice)}
+                                                        <button onClick={() => {
+                                                                const charMatch = characters.find(c => c.name === scene.character);
+                                                                const effectiveProvider: TtsProvider = scene.ttsProvider || charMatch?.ttsProvider || "edge_tts";
+                                                                const effectiveVoiceId = scene.ttsVoiceId || charMatch?.ttsVoiceId || scene.voice;
+                                                                generateSceneVoiceover(scene.id, scene.text, scene.voice, effectiveProvider, effectiveVoiceId);
+                                                            }}
                                                             disabled={scene.voiceStatus === "GENERATING"}
                                                             className="flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-bold transition-all border border-gray-750 bg-gray-850 hover:bg-gray-800 text-gray-300 disabled:opacity-50">
                                                             {scene.voiceStatus === "GENERATING" ? (
