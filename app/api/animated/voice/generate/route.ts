@@ -16,6 +16,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { uploadFileToR2 } from "@/lib/storage";
+import { applyStyleForElevenLabs } from "@/lib/tts/narrator-style";
+import { stripTtsMarkup, type TtsProvider } from "@/lib/tts/text-formatter";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -119,34 +121,53 @@ export async function POST(req: NextRequest) {
     try {
         console.log(`[Voice Gen] Scene ${sceneId} | provider: ${activeProvider} | voice: ${effectiveVoice}`);
 
+        // ── Text preprocessing per engine ────────────────────────────────────
+        // 1. Dia cues ((laughs), (sighs) etc.) are content authored for Dia only.
+        //    Strip them if any other engine is rendering so they don't get spoken literally.
+        // 2. ElevenLabs: apply SSML <break> structural markup (not stored in DB, applied here only).
+        // 3. Gemini / Edge TTS: clean plain text — no special prep needed.
+        let synthesisText = text;
+
+        if (activeProvider !== "dia") {
+            // Strip Dia cues so they aren't read aloud as "(laughs)" by Edge/Gemini/ElevenLabs
+            synthesisText = stripTtsMarkup(synthesisText, "dia");
+        }
+
+        if (activeProvider === "elevenlabs") {
+            // Auto-apply SSML break tags for natural pacing (documentary style default)
+            synthesisText = applyStyleForElevenLabs(synthesisText, "documentary");
+        }
+
+        console.log(`[Voice Gen] Text after preprocessing (${synthesisText.length} chars): "${synthesisText.slice(0, 120)}..."`);
+
         let audioBuffer: Buffer;
         let ext = "mp3";
 
         switch (activeProvider) {
             case "edge_tts": {
                 if (!voice && !ttsVoiceId) throw new Error("voice or ttsVoiceId required for edge_tts");
-                audioBuffer = await generateEdgeTTSBuffer(moneyPrinterUrl, text, effectiveVoice, tempDir);
+                audioBuffer = await generateEdgeTTSBuffer(moneyPrinterUrl, synthesisText, effectiveVoice, tempDir);
                 ext = "mp3";
                 break;
             }
 
             case "gemini": {
                 const { generateSpeech: geminiTTS } = await import("@/lib/tts/gemini");
-                audioBuffer = await geminiTTS({ text, voiceId: effectiveVoice });
+                audioBuffer = await geminiTTS({ text: synthesisText, voiceId: effectiveVoice });
                 ext = "wav"; // Gemini returns WAV
                 break;
             }
 
             case "elevenlabs": {
                 const { generateSpeech: elTTS } = await import("@/lib/tts/elevenlabs");
-                audioBuffer = await elTTS({ text, voiceId: effectiveVoice });
+                audioBuffer = await elTTS({ text: synthesisText, voiceId: effectiveVoice });
                 ext = "mp3";
                 break;
             }
 
             case "dia": {
                 const { generateSpeech: diaTTS } = await import("@/lib/tts/dia");
-                audioBuffer = await diaTTS({ text, voiceRef: effectiveVoice, voiceMode: "predefined" });
+                audioBuffer = await diaTTS({ text: synthesisText, voiceRef: effectiveVoice, voiceMode: "predefined" });
                 ext = "wav"; // Dia returns WAV
                 break;
             }

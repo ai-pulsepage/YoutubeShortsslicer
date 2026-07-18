@@ -164,6 +164,43 @@ function getVoicesForProvider(provider: TtsProvider) {
     }
 }
 
+// ── Client-side TTS text reformatter ──────────────────────────────────────────
+// Used by the 🔄 Reformat button on scene cards.
+// Strips stale engine-specific markup from scene text when the user
+// switches a character's TTS engine. Does NOT re-generate dialogue.
+// NOTE: we avoid module-level regex with angle brackets to prevent TSX parse errors.
+const DIA_CUE_PATTERN = /\([a-z][a-z\s]+\)/gi;
+
+function hasDiaCuesInText(text: string): boolean {
+    return /\([a-z][a-z\s]+\)/i.test(text);
+}
+function hasElBreaksInText(text: string): boolean {
+    return text.includes('<break ') || text.includes('<speak');
+}
+
+function clientStripTtsMarkup(text: string, fromEngine: TtsProvider): string {
+    let result = text;
+    if (fromEngine === "elevenlabs") {
+        // Remove ElevenLabs SSML tags using string replace
+        result = result.replace(/<break\s+time="[\d.]+s"\s*\/>/gi, "");
+        result = result.replace(/<\/?speak[^>]*>/gi, "");
+    }
+    if (fromEngine === "dia") {
+        result = result.replace(/\([a-z][a-z\s]+\)/gi, "");
+    }
+    return result.replace(/\s{2,}/g, " ").trim();
+}
+
+function clientReformatForEngine(
+    text: string,
+    fromEngine: TtsProvider,
+    toEngine: TtsProvider
+): { text: string; needsRegeneration: boolean } {
+    const stripped = clientStripTtsMarkup(text, fromEngine);
+    if (toEngine === "dia" && fromEngine !== "dia") return { text: stripped, needsRegeneration: true };
+    return { text: stripped, needsRegeneration: false };
+}
+
 const CHARACTER_PRESETS = [
     { name: "Leo", prompt: "A young 3D Pixar style cartoon boy with bright green eyes, a wide joyful smile, and messy red hair. He wears a yellow t-shirt and blue denim shorts. His features are soft, round, and friendly. Styled in Pixar 3D digital animation look, shown against a neutral studio backdrop." },
     { name: "Lily", prompt: "A cheerful 3D Pixar style cartoon princess girl with round brown eyes, black hair, and a sparkling gold crown. She wears a warm pink dress. Features are soft and rounded. Beautiful 3D cartoon style, shown on a plain studio backdrop." },
@@ -2272,71 +2309,64 @@ export default function KidsStoryBuilderPage() {
                                                         </div>
                                                         <div>
                                                             <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">Voice Tone</label>
-                                                    {/* Voice Tone + TTS Engine selector */}
-                                                {scene.type === "dialogue" && (
-                                                    <div>
-                                                        <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">Voice Tone</label>
-                                                        <div className="flex items-center gap-1">
                                                             {/* TTS Engine chip selector */}
-                                                            <div className="flex gap-0.5">
-                                                                {TTS_PROVIDERS.map(p => {
-                                                                    const charMatch = characters.find(c => c.name === scene.character);
-                                                                    const effectiveProvider = scene.ttsProvider || charMatch?.ttsProvider || "edge_tts";
-                                                                    const isActive = effectiveProvider === p.id;
-                                                                    return (
-                                                                        <button key={p.id}
-                                                                            title={p.desc}
-                                                                            onClick={() => updateScene(scene.id, { ttsProvider: p.id as TtsProvider, ttsVoiceId: undefined })}
-                                                                            className={`px-1.5 py-0.5 rounded text-[8px] font-bold border transition-all ${
-                                                                                isActive
-                                                                                    ? "bg-violet-600/30 border-violet-500/50 text-violet-300"
-                                                                                    : "bg-gray-850 border-gray-750 text-gray-500 hover:text-gray-400"
-                                                                            }`}>
-                                                                            {p.icon} {p.label}
-                                                                        </button>
-                                                                    );
-                                                                })}
-                                                            </div>
-                                                        </div>
-                                                        {/* Voice dropdown — shows voices for effective provider */}
-                                                        {(() => {
-                                                            const charMatch = characters.find(c => c.name === scene.character);
-                                                            const effectiveProvider: TtsProvider = scene.ttsProvider || charMatch?.ttsProvider || "edge_tts";
-                                                            const voices = getVoicesForProvider(effectiveProvider);
-                                                            const effectiveVoiceId = scene.ttsVoiceId || charMatch?.ttsVoiceId || scene.voice;
-                                                            if (effectiveProvider === "elevenlabs") {
-                                                                return (
-                                                                    <div className="mt-1">
-                                                                        <input
-                                                                            value={scene.ttsVoiceId || ""}
-                                                                            onChange={e => updateScene(scene.id, { ttsVoiceId: e.target.value })}
-                                                                            placeholder="ElevenLabs Voice ID (e.g. 21m00Tcm4TlvDq8ikWAM)"
-                                                                            className="w-full bg-gray-850 border border-gray-750 rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-violet-500 font-mono"
-                                                                        />
-                                                                    </div>
-                                                                );
-                                                            }
-                                                            return voices.length > 0 ? (
-                                                                <select
-                                                                    value={effectiveVoiceId}
-                                                                    onChange={e => updateScene(scene.id, {
-                                                                        ttsVoiceId: e.target.value,
-                                                                        // Keep legacy voice in sync if edge_tts
-                                                                        voice: effectiveProvider === "edge_tts" ? e.target.value : scene.voice
+                                                            <div className="flex flex-col gap-1">
+                                                                <div className="flex gap-0.5 flex-wrap">
+                                                                    {TTS_PROVIDERS.map(p => {
+                                                                        const charMatch = characters.find(c => c.name === scene.character);
+                                                                        const effectiveProvider = scene.ttsProvider || charMatch?.ttsProvider || "edge_tts";
+                                                                        const isActive = effectiveProvider === p.id;
+                                                                        return (
+                                                                            <button key={p.id}
+                                                                                title={p.desc}
+                                                                                onClick={() => updateScene(scene.id, { ttsProvider: p.id as TtsProvider, ttsVoiceId: undefined })}
+                                                                                className={`px-1.5 py-0.5 rounded text-[8px] font-bold border transition-all ${
+                                                                                    isActive
+                                                                                        ? "bg-violet-600/30 border-violet-500/50 text-violet-300"
+                                                                                        : "bg-gray-850 border-gray-750 text-gray-500 hover:text-gray-400"
+                                                                                }`}>
+                                                                                {p.icon} {p.label}
+                                                                            </button>
+                                                                        );
                                                                     })}
-                                                                    className="mt-1 w-full bg-gray-850 border border-gray-750 rounded-lg px-1.5 py-1 text-[10px] text-white focus:outline-none focus:border-violet-500"
-                                                                >
-                                                                    {voices.map(v => <option key={v.id} value={v.id} className="bg-gray-900 text-white">{v.label}</option>)}
-                                                                </select>
-                                                            ) : null;
-                                                        })()}
-                                                    </div>
-                                                )}
-                                                                <button onClick={() => playVoicePreview(scene)}
-                                                                    className={cn("p-1.5 rounded-lg border transition-all",
-                                                                        playingAudioId === scene.id ? "bg-violet-500/10 border-violet-500/30 text-violet-400" : "bg-gray-800 border-gray-750 text-gray-400 hover:text-white")}>
-                                                                    {playingAudioId === scene.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Volume2 className="w-3.5 h-3.5" />}
-                                                                </button>
+                                                                </div>
+                                                                {/* Voice dropdown — shows voices for effective provider */}
+                                                                {(() => {
+                                                                    const charMatch = characters.find(c => c.name === scene.character);
+                                                                    const effectiveProvider: TtsProvider = scene.ttsProvider || charMatch?.ttsProvider || "edge_tts";
+                                                                    const voices = getVoicesForProvider(effectiveProvider);
+                                                                    const effectiveVoiceId = scene.ttsVoiceId || charMatch?.ttsVoiceId || scene.voice;
+                                                                    if (effectiveProvider === "elevenlabs") {
+                                                                        return (
+                                                                            <input
+                                                                                value={scene.ttsVoiceId || ""}
+                                                                                onChange={e => updateScene(scene.id, { ttsVoiceId: e.target.value })}
+                                                                                placeholder="ElevenLabs Voice ID"
+                                                                                className="w-full bg-gray-850 border border-gray-750 rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-violet-500 font-mono"
+                                                                            />
+                                                                        );
+                                                                    }
+                                                                    return voices.length > 0 ? (
+                                                                        <select
+                                                                            value={effectiveVoiceId}
+                                                                            onChange={e => updateScene(scene.id, {
+                                                                                ttsVoiceId: e.target.value,
+                                                                                voice: effectiveProvider === "edge_tts" ? e.target.value : scene.voice
+                                                                            })}
+                                                                            className="w-full bg-gray-850 border border-gray-750 rounded-lg px-1.5 py-1 text-[10px] text-white focus:outline-none focus:border-violet-500"
+                                                                        >
+                                                                            {voices.map(v => <option key={v.id} value={v.id} className="bg-gray-900 text-white">{v.label}</option>)}
+                                                                        </select>
+                                                                    ) : null;
+                                                                })()}
+                                                                {/* Audio preview button */}
+                                                                {scene.narrationPath && (
+                                                                    <button onClick={() => playVoicePreview(scene)}
+                                                                        className={cn("p-1.5 rounded-lg border transition-all self-start",
+                                                                            playingAudioId === scene.id ? "bg-violet-500/10 border-violet-500/30 text-violet-400" : "bg-gray-800 border-gray-750 text-gray-400 hover:text-white")}>
+                                                                        {playingAudioId === scene.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Volume2 className="w-3.5 h-3.5" />}
+                                                                    </button>
+                                                                )}
                                                             </div>
                                                         </div>
                                                     </div>
@@ -2389,10 +2419,43 @@ export default function KidsStoryBuilderPage() {
                                                         <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block">
                                                             {scene.type === "song" ? "Song Lyrics" : "Dialogue Spoken Text"}
                                                         </label>
-                                                        <button onClick={() => handleImproveScript(scene.id, scene.text, scene.type)}
-                                                            className="flex items-center gap-0.5 text-violet-400 hover:text-violet-300 text-[9px] font-bold">
-                                                            <Sparkle className="w-2.5 h-2.5" /> AI Improve Text
-                                                        </button>
+                                                        <div className="flex items-center gap-1.5">
+                                                            {/* Reformat text for engine — shown when there's a known engine mismatch */}
+                                                            {(() => {
+                                                                const charMatch = characters.find(c => c.name === scene.character);
+                                                                const assignedEngine: TtsProvider = scene.ttsProvider || charMatch?.ttsProvider || "edge_tts";
+                                                                const hasDiaCues = hasDiaCuesInText(scene.text || "");
+                                                                const hasElBreaks = hasElBreaksInText(scene.text || "");
+                                                                const hasStaleMarkup =
+                                                                    (assignedEngine !== "dia" && hasDiaCues) ||
+                                                                    (assignedEngine !== "elevenlabs" && hasElBreaks);
+                                                                const isDia = assignedEngine === "dia";
+                                                                // Show if there's stale markup OR if engine is Dia (to add cues)
+                                                                if (!hasStaleMarkup && !isDia) return null;
+                                                                const engineLabel = TTS_PROVIDERS.find(p => p.id === assignedEngine)?.label || assignedEngine;
+                                                                return (
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            // Detect where the stale markup is FROM
+                                                                            const fromEngine: TtsProvider = hasDiaCues ? "dia" : hasElBreaks ? "elevenlabs" : "edge_tts";
+                                                                            const { text: reformatted, needsRegeneration } = clientReformatForEngine(scene.text || "", fromEngine, assignedEngine);
+                                                                            updateScene(scene.id, { text: reformatted });
+                                                                            if (needsRegeneration) {
+                                                                                alert(`Text cleaned for ${engineLabel}. For best results with Dia's vocal cues (laughs, sighs etc.), use ✨ AI Improve Text to regenerate this scene's dialogue.`);
+                                                                            }
+                                                                        }}
+                                                                        className="flex items-center gap-0.5 text-amber-400 hover:text-amber-300 text-[9px] font-bold"
+                                                                        title={`Strip stale engine markup from this text for ${engineLabel}`}
+                                                                    >
+                                                                        <span className="text-[9px]">🔄</span> Reformat
+                                                                    </button>
+                                                                );
+                                                            })()}
+                                                            <button onClick={() => handleImproveScript(scene.id, scene.text, scene.type)}
+                                                                className="flex items-center gap-0.5 text-violet-400 hover:text-violet-300 text-[9px] font-bold">
+                                                                <Sparkle className="w-2.5 h-2.5" /> AI Improve Text
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                     <textarea value={scene.text} onChange={e => updateScene(scene.id, { text: e.target.value })} rows={4}
                                                         className="w-full bg-gray-855 border border-gray-750 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-violet-500 font-mono leading-relaxed" />

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { analyzeVideoVisually } from "@/lib/documentary/video-analyzer";
+import { buildTtsWritingGuide, type TtsProvider } from "@/lib/tts/text-formatter";
 
 const LANGUAGE_VOICES: Record<string, { childFemale: string; male: string; default: string }> = {
     spanish: {
@@ -84,6 +85,18 @@ export async function POST(req: NextRequest) {
         const freeRoster = freeCharacters.length > 0
             ? freeCharacters.map((c: any) => `- ${c.name}: invent a specific, vivid physical description on first use and repeat it exactly in every scene — never vary it.`).join("\n")
             : "";
+
+        // Build TTS engine map: { characterName -> ttsProvider }
+        // Used to inject engine-specific authoring rules into the AI prompt
+        const characterTtsMap: Record<string, TtsProvider> = {};
+        if (characters && Array.isArray(characters)) {
+            for (const c of characters) {
+                if (c.name && c.ttsProvider) {
+                    characterTtsMap[c.name] = c.ttsProvider as TtsProvider;
+                }
+            }
+        }
+        const ttsWritingGuide = buildTtsWritingGuide(characterTtsMap);
 
         const durationMin = targetDuration ? parseFloat(targetDuration) : 2.0;
         const numScenes = Math.max(3, Math.min(25, Math.ceil(durationMin * 3)));
@@ -246,7 +259,8 @@ The JSON structure for each scene must follow this schema:
   }
 ]
 
-Note: For child boy character roles, you must assign "en-US-ChristopherNeural-Male" instead of the adult voice.`;
+Note: For child boy character roles, you must assign "en-US-ChristopherNeural-Male" instead of the adult voice.
+${ttsWritingGuide}`;
 
 
         let content = "";
