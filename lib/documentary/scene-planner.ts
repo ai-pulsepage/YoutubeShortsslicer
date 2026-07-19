@@ -203,92 +203,46 @@ function assignVerbatimNarration(plan: ScenePlan, script: StoryScript): void {
 
     if (totalScenes === 0 || totalSegments === 0) return;
 
-    // Check if AI provided valid segmentRange hints
-    const hasSegmentRanges = plan.scenes.every(
-        (s: any) => Array.isArray(s.segmentRange) && s.segmentRange.length === 2
-    );
+    console.log(`[ScenePlanner] Sequentially partitioning ${totalSegments} segments across ${totalScenes} scenes to prevent duplicates...`);
 
-    // Validate that ranges are not trivial, backward, or repeating
-    let useAIBacking = hasSegmentRanges;
-    if (hasSegmentRanges && totalScenes > 1) {
-        let prevEnd = -1;
-        let totalRangeLength = 0;
-        
-        for (const scene of plan.scenes) {
-            const [start, end] = (scene as any).segmentRange as [number, number];
-            const length = end - start + 1;
-            totalRangeLength += length;
-            
-            // If ranges cover more than 60% of the entire script or overlap backwards, discard
-            if (start < prevEnd - 1 || length > totalSegments * 0.6) {
-                useAIBacking = false;
-                break;
+    if (totalScenes >= totalSegments) {
+        // If there are more scenes than segments, assign one segment to each of the first N scenes.
+        // The remaining scenes get empty narration (pure visual/B-roll scenes).
+        for (let i = 0; i < totalScenes; i++) {
+            const scene = plan.scenes[i];
+            if (i < totalSegments) {
+                const seg = script.segments[i];
+                scene.narrationText = `[${seg.timestamp}] ${seg.narration}\n[VISUAL: ${seg.visualCue}]`;
+                scene.duration = Math.max(scene.duration || 10, 15);
+            } else {
+                scene.narrationText = "";
+                scene.duration = scene.duration || 10;
             }
-            prevEnd = end;
         }
+    } else {
+        // If there are more segments than scenes, partition them evenly and sequentially.
+        const baseSize = Math.floor(totalSegments / totalScenes);
+        const extra = totalSegments % totalScenes;
         
-        // If average range size covers too much of the script, it's repeating
-        if (totalRangeLength / totalScenes > totalSegments * 0.4) {
-            useAIBacking = false;
-        }
-    }
-
-    if (useAIBacking) {
-        // Use AI's segment assignments
-        for (const scene of plan.scenes) {
-            const [start, end] = (scene as any).segmentRange as [number, number];
-            const clampedStart = Math.max(0, Math.min(start, totalSegments - 1));
-            const clampedEnd = Math.max(clampedStart, Math.min(end, totalSegments - 1));
-
-            const assignedSegments = script.segments.slice(clampedStart, clampedEnd + 1);
+        let currentIdx = 0;
+        for (let i = 0; i < totalScenes; i++) {
+            const scene = plan.scenes[i];
+            const size = baseSize + (i < extra ? 1 : 0);
+            const start = currentIdx;
+            const end = currentIdx + size - 1;
+            
+            const assignedSegments = script.segments.slice(start, end + 1);
             scene.narrationText = assignedSegments
                 .map(seg => `[${seg.timestamp}] ${seg.narration}\n[VISUAL: ${seg.visualCue}]`)
                 .join("\n\n");
-            scene.duration = Math.max(scene.duration, assignedSegments.length * 15);
+            
+            scene.duration = Math.max(scene.duration || 10, assignedSegments.length * 15);
+            currentIdx += size;
         }
-
-        // Check if any segments were missed (AI error)
-        const coveredSet = new Set<number>();
-        for (const scene of plan.scenes) {
-            const [start, end] = (scene as any).segmentRange as [number, number];
-            for (let i = start; i <= end && i < totalSegments; i++) {
-                coveredSet.add(i);
-            }
-        }
-
-        // If segments were missed, append them to the last scene
-        if (coveredSet.size < totalSegments) {
-            const missed = script.segments.filter((_, i) => !coveredSet.has(i));
-            const lastScene = plan.scenes[plan.scenes.length - 1];
-            const missedText = missed
-                .map(seg => `[${seg.timestamp}] ${seg.narration}\n[VISUAL: ${seg.visualCue}]`)
-                .join("\n\n");
-            lastScene.narrationText += "\n\n" + missedText;
-            console.warn(`[ScenePlanner] ${missed.length} segments not covered by AI ranges, appended to last scene`);
-        }
-    } else {
-        // Fallback: split segments evenly across scenes
-        const segmentsPerScene = Math.ceil(totalSegments / totalScenes);
-
-        for (let sceneIdx = 0; sceneIdx < totalScenes; sceneIdx++) {
-            const startSeg = sceneIdx * segmentsPerScene;
-            const endSeg = Math.min(startSeg + segmentsPerScene, totalSegments);
-            const assignedSegments = script.segments.slice(startSeg, endSeg);
-
-            plan.scenes[sceneIdx].narrationText = assignedSegments
-                .map(seg => `[${seg.timestamp}] ${seg.narration}\n[VISUAL: ${seg.visualCue}]`)
-                .join("\n\n");
-            plan.scenes[sceneIdx].duration = Math.max(
-                plan.scenes[sceneIdx].duration,
-                assignedSegments.length * 15
-            );
-        }
-
-        console.log(`[ScenePlanner] Assigned ${totalSegments} segments evenly across ${totalScenes} scenes (~${segmentsPerScene} each)`);
     }
 
     // Log total chars to verify no loss
-    const totalChars = plan.scenes.reduce((sum, s) => sum + s.narrationText.length, 0);
+    const totalChars = plan.scenes.reduce((sum, s) => sum + (s.narrationText?.length || 0), 0);
     console.log(`[ScenePlanner] Total narration assigned: ${totalChars} chars across ${totalScenes} scenes`);
 }
 
