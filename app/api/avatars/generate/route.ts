@@ -81,7 +81,7 @@ Ensure the prompt describes the character details, outfit, backdrop, and photore
         }
 
         // 2. Select appropriate voice ID based on engine and gender
-        const engine = voiceEngine || "xtts";
+        const engine = voiceEngine || "elevenlabs";
         let voiceId = "";
         if (engine === "elevenlabs") {
             voiceId = gender === "male" ? "pNInz6obpgq5mWGP36TZ" : "EXAVITQu4vr4xnSDxMaL";

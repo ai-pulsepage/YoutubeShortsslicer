@@ -84,7 +84,7 @@ export default function UGCStudioPage() {
     const [avatars, setAvatars] = useState<Avatar[]>([]);
     const [loadingAvatars, setLoadingAvatars] = useState(true);
     const [spawnerSuggestion, setSpawnerSuggestion] = useState("");
-    const [spawnerVoiceEngine, setSpawnerVoiceEngine] = useState("xtts");
+    const [spawnerVoiceEngine, setSpawnerVoiceEngine] = useState("elevenlabs");
     const [spawnerLoading, setSpawnerLoading] = useState(false);
     
     // Manual character form
@@ -105,10 +105,24 @@ export default function UGCStudioPage() {
     const [selectedAvatarId, setSelectedAvatarId] = useState("");
     const [selectedHookStyle, setSelectedHookStyle] = useState("TESTIMONIAL");
     const [selectedLayoutType, setSelectedLayoutType] = useState("SPLIT");
+    const [selectedPresetPack, setSelectedPresetPack] = useState<'SINGLE' | 'TIKTOK_3X' | 'OMNICHANNEL_5X'>('SINGLE');
     const [useCustomScript, setUseCustomScript] = useState(false);
     const [customScript, setCustomScript] = useState("");
     const [generatingVideo, setGeneratingVideo] = useState(false);
     const [activeJobId, setActiveJobId] = useState<string | null>(null);
+
+    const handleDeleteCampaign = async (id: string, name: string, e?: React.MouseEvent) => {
+        if (e) e.stopPropagation();
+        if (!confirm(`Are you sure you want to delete campaign "${name}"?`)) return;
+        try {
+            const res = await fetch(`/api/products/${id}`, { method: "DELETE" });
+            if (!res.ok) throw new Error("Failed to delete campaign");
+            if (selectedCampaignId === id) setSelectedCampaignId(null);
+            fetchProducts();
+        } catch (err: any) {
+            alert(err.message || "Error deleting campaign.");
+        }
+    };
     
     // Upload references
     const [uploadingAvatarId, setUploadingAvatarId] = useState<string | null>(null);
@@ -402,6 +416,14 @@ export default function UGCStudioPage() {
 
     const handleGenerateUGCVideo = async () => {
         if (!selectedAvatarId || !selectedCampaignId) return;
+
+        if (selectedPresetPack === 'TIKTOK_3X') {
+            return handleGenerateUGCBatch(['TESTIMONIAL', 'PROBLEM_SOLUTION', 'COMPARISON']);
+        }
+        if (selectedPresetPack === 'OMNICHANNEL_5X') {
+            return handleGenerateUGCBatch(['TESTIMONIAL', 'PROBLEM_SOLUTION', 'UNBOXING', 'COMPARISON', 'TUTORIAL']);
+        }
+
         setGeneratingVideo(true);
         setError("");
         try {
@@ -784,7 +806,7 @@ export default function UGCStudioPage() {
                                 ) : (
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         {products.map(product => (
-                                            <button key={product.id} onClick={() => setSelectedCampaignId(product.id)}
+                                            <div key={product.id} onClick={() => setSelectedCampaignId(product.id)}
                                                 className="bg-gray-900/60 border border-gray-850 hover:border-violet-500/25 p-4 rounded-2xl flex gap-4 text-left transition-all group cursor-pointer">
                                                 
                                                 {/* Product Image */}
@@ -799,7 +821,14 @@ export default function UGCStudioPage() {
                                                 {/* Details */}
                                                 <div className="flex-1 min-w-0 flex flex-col justify-between">
                                                     <div>
-                                                        <h4 className="text-xs font-bold text-white group-hover:text-violet-400 transition-all truncate">{product.name}</h4>
+                                                        <div className="flex items-start justify-between gap-2">
+                                                            <h4 className="text-xs font-bold text-white group-hover:text-violet-400 transition-all truncate">{product.name}</h4>
+                                                            <button onClick={(e) => handleDeleteCampaign(product.id, product.name, e)}
+                                                                title="Delete Campaign"
+                                                                className="p-1 hover:bg-red-500/20 text-gray-500 hover:text-red-400 rounded transition-all">
+                                                                <Trash2 className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        </div>
                                                         <div className="flex items-center gap-2 mt-1">
                                                             {product.brand && <span className="text-[9px] text-gray-500 truncate font-sans">{product.brand}</span>}
                                                             {product.price && <span className="text-[9px] text-emerald-400 font-mono font-bold">{product.price}</span>}
@@ -814,7 +843,7 @@ export default function UGCStudioPage() {
                                                     </div>
                                                 </div>
 
-                                            </button>
+                                            </div>
                                         ))}
                                     </div>
                                 )}
@@ -831,7 +860,15 @@ export default function UGCStudioPage() {
                                     className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-900 border border-gray-800 hover:bg-gray-850 text-gray-300 text-xs font-bold rounded-xl transition-all cursor-pointer">
                                     <ArrowLeft className="w-3.5 h-3.5" /> Back to Directory
                                 </button>
-                                <span className="text-xs text-gray-500 font-mono font-bold">Active Workspace: {activeCampaign?.name.slice(0, 30)}...</span>
+                                <div className="flex items-center gap-3">
+                                    <span className="text-xs text-gray-500 font-mono font-bold">Active Workspace: {activeCampaign?.name.slice(0, 30)}...</span>
+                                    {activeCampaign && (
+                                        <button onClick={(e) => handleDeleteCampaign(activeCampaign.id, activeCampaign.name, e)}
+                                            className="flex items-center gap-1 px-2.5 py-1 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 text-red-400 text-xs font-bold rounded-xl transition-all cursor-pointer">
+                                            <Trash2 className="w-3 h-3" /> Delete Campaign
+                                        </button>
+                                    )}
+                                </div>
                             </div>
 
                             {/* Product details Banner */}
@@ -867,139 +904,110 @@ export default function UGCStudioPage() {
                                 </div>
                             )}
 
-                            {/* Video Generation controls nested inside Campaign */}
-                            <div className="bg-gray-950 border border-gray-850 p-6 rounded-3xl space-y-5">
-                                <h3 className="text-xs font-bold text-white uppercase tracking-wider border-b border-gray-850 pb-2">Generate Video Segment</h3>
-                                
-                                {avatars.length === 0 ? (
-                                    <div className="bg-amber-600/10 border border-amber-500/20 p-4 rounded-xl text-amber-300 text-xs font-sans">
-                                        Please spawn an AI Cast character in the Left Panel before scripting a video campaign.
+                            {/* Campaign Video Generator Form */}
+                            <div className="bg-gray-950 border border-gray-850 p-6 rounded-3xl space-y-6">
+                                <h3 className="text-sm font-bold text-white uppercase tracking-wider">Configure UGC Video Batch</h3>
+
+                                <div className="space-y-5">
+                                    
+                                    {/* Hook selectors */}
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Hook Style Formula</label>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                            {HOOK_STYLES.map(h => (
+                                                <button key={h.value} onClick={() => { setSelectedHookStyle(h.value); setSelectedPresetPack('SINGLE'); }}
+                                                    className={cn("p-2.5 rounded-xl border text-left transition-all cursor-pointer font-sans",
+                                                        selectedHookStyle === h.value && selectedPresetPack === 'SINGLE'
+                                                            ? "border-violet-500 bg-violet-500/[0.04]" 
+                                                            : "border-gray-850 hover:border-gray-800 bg-gray-900/20"
+                                                    )}>
+                                                    <div className="text-xs font-bold text-white">{h.label}</div>
+                                                    <div className="text-[9px] text-gray-550 font-mono mt-0.5">{h.desc}</div>
+                                                </button>
+                                            ))}
+                                        </div>
                                     </div>
-                                ) : (
-                                    <div className="space-y-4">
+
+                                    {/* Visual Template Layout */}
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Visual Template Layout</label>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {[
+                                                { value: "SPLIT", label: "Split Stacked", desc: "Top/Bottom Stack" },
+                                                { value: "GREEN_SCREEN", label: "Green Screen", desc: "Chroma Key Background" },
+                                                { value: "PIP", label: "PiP Bubble", desc: "Circular Video Bubble" },
+                                            ].map(l => (
+                                                <button key={l.value} onClick={() => setSelectedLayoutType(l.value)}
+                                                    className={cn("p-2.5 rounded-xl border text-left transition-all cursor-pointer font-sans",
+                                                        selectedLayoutType === l.value 
+                                                            ? "border-violet-500 bg-violet-500/[0.04] ring-1 ring-violet-500/35" 
+                                                            : "border-gray-850 hover:border-gray-800 bg-gray-900/20"
+                                                    )}>
+                                                    <div className="text-xs font-bold text-white">{l.label}</div>
+                                                    <div className="text-[9px] text-gray-550 font-mono mt-0.5">{l.desc}</div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Batch Ad Pack Templates */}
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Batch Ads Presets (Week of Ads)</label>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            <button onClick={() => setSelectedPresetPack(selectedPresetPack === 'TIKTOK_3X' ? 'SINGLE' : 'TIKTOK_3X')}
+                                                className={cn("p-3 border rounded-2xl text-left transition-all cursor-pointer font-sans",
+                                                    selectedPresetPack === 'TIKTOK_3X'
+                                                        ? "bg-violet-500/10 border-violet-500 ring-1 ring-violet-500/40"
+                                                        : "bg-gray-900 border-gray-850 hover:border-gray-700"
+                                                )}>
+                                                <div className="text-xs font-bold text-violet-400 flex items-center gap-1.5"><Sparkles className="w-3 h-3 text-violet-400" /> TikTok Ads Pack (3x)</div>
+                                                <div className="text-[9px] text-gray-500 mt-1 leading-normal">Selects Testimonial, Problem/Solution, and Comparison hooks for split-test ads.</div>
+                                            </button>
+                                            <button onClick={() => setSelectedPresetPack(selectedPresetPack === 'OMNICHANNEL_5X' ? 'SINGLE' : 'OMNICHANNEL_5X')}
+                                                className={cn("p-3 border rounded-2xl text-left transition-all cursor-pointer font-sans",
+                                                    selectedPresetPack === 'OMNICHANNEL_5X'
+                                                        ? "bg-emerald-500/10 border-emerald-500 ring-1 ring-emerald-500/40"
+                                                        : "bg-gray-900 border-gray-850 hover:border-gray-700"
+                                                )}>
+                                                <div className="text-xs font-bold text-emerald-400 flex items-center gap-1.5"><Sparkles className="w-3 h-3 text-emerald-400" /> Omnichannel Campaign (5x)</div>
+                                                <div className="text-[9px] text-gray-500 mt-1 leading-normal">Selects a whole week of unique hooks (Unboxing, Testimonial, Tutorial, Comparison, Problem/Solution).</div>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Custom Script text drawer */}
+                                    <div className="space-y-2">
+                                        <label className="flex items-center gap-2 cursor-pointer font-sans">
+                                            <input type="checkbox" checked={useCustomScript} onChange={e => setUseCustomScript(e.target.checked)}
+                                                className="rounded bg-gray-900 border-gray-800 text-violet-600 focus:ring-0 focus:ring-offset-0" />
+                                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider select-none">Write custom UGC script (Optional)</span>
+                                        </label>
                                         
-                                        {/* Character selection status */}
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Selected Character Voice</label>
-                                            <div className="p-3 bg-gray-900 border border-gray-850 rounded-2xl flex items-center justify-between">
-                                                {selectedAvatarId ? (
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-8 h-8 rounded-lg overflow-hidden bg-black border border-gray-800 flex items-center justify-center">
-                                                            {avatars.find(a => a.id === selectedAvatarId)?.referenceImageUrl ? (
-                                                                <img src={`/api/storage/signed?key=${avatars.find(a => a.id === selectedAvatarId)?.referenceImageUrl}`} alt="" className="w-full h-full object-cover" />
-                                                            ) : (
-                                                                <User className="w-4 h-4 text-gray-700" />
-                                                            )}
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-xs font-bold text-white">{avatars.find(a => a.id === selectedAvatarId)?.name}</p>
-                                                            <p className="text-[9px] text-gray-550 font-sans truncate max-w-xs">{avatars.find(a => a.id === selectedAvatarId)?.persona}</p>
-                                                        </div>
-                                                    </div>
-                                                ) : (
-                                                    <span className="text-xs text-gray-650 font-sans">Click "Select" on a cast member in the Left panel</span>
-                                                )}
-                                                {selectedAvatarId && (
-                                                    <span className="text-[9px] px-1.5 py-0.5 bg-violet-600/10 text-violet-400 font-bold border border-violet-500/15 rounded">
-                                                        {avatars.find(a => a.id === selectedAvatarId)?.voiceEngine}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {/* Hook selectors */}
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Hook Style Formula</label>
-                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                                {HOOK_STYLES.map(h => (
-                                                    <button key={h.value} onClick={() => setSelectedHookStyle(h.value)}
-                                                        className={cn("p-2.5 rounded-xl border text-left transition-all cursor-pointer font-sans",
-                                                            selectedHookStyle === h.value 
-                                                                ? "border-violet-500 bg-violet-500/[0.04]" 
-                                                                : "border-gray-850 hover:border-gray-800 bg-gray-900/20"
-                                                        )}>
-                                                        <div className="text-xs font-bold text-white">{h.label}</div>
-                                                        <div className="text-[9px] text-gray-550 font-mono mt-0.5">{h.desc}</div>
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        {/* Visual Template Layout */}
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Visual Template Layout</label>
-                                            <div className="grid grid-cols-3 gap-2">
-                                                {[
-                                                    { value: "SPLIT", label: "Split Stacked", desc: "Top/Bottom Stack" },
-                                                    { value: "GREEN_SCREEN", label: "Green Screen", desc: "Chroma Key Background" },
-                                                    { value: "PIP", label: "PiP Bubble", desc: "Circular Video Bubble" },
-                                                ].map(l => (
-                                                    <button key={l.value} onClick={() => setSelectedLayoutType(l.value)}
-                                                        className={cn("p-2.5 rounded-xl border text-left transition-all cursor-pointer font-sans",
-                                                            selectedLayoutType === l.value 
-                                                                ? "border-violet-500 bg-violet-500/[0.04] ring-1 ring-violet-500/35" 
-                                                                : "border-gray-850 hover:border-gray-800 bg-gray-900/20"
-                                                        )}>
-                                                        <div className="text-xs font-bold text-white">{l.label}</div>
-                                                        <div className="text-[9px] text-gray-550 font-mono mt-0.5">{l.desc}</div>
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        {/* Batch Ad Pack Templates */}
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Batch Ads Templates (Week of Ads)</label>
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                                <button onClick={() => handleGenerateUGCBatch(['TESTIMONIAL', 'PROBLEM_SOLUTION', 'COMPARISON'])}
-                                                    disabled={!selectedAvatarId || generatingVideo}
-                                                    className="p-3 bg-gray-900 border border-gray-850 hover:border-gray-700 rounded-2xl text-left transition-all cursor-pointer font-sans disabled:opacity-40">
-                                                    <div className="text-xs font-bold text-violet-400 flex items-center gap-1.5"><Sparkles className="w-3 h-3 text-violet-400" /> TikTok Ads Pack (3x)</div>
-                                                    <div className="text-[9px] text-gray-500 mt-1 leading-normal">Testimonial, Problem/Solution, and Comparison hooks for split-test ads.</div>
-                                                </button>
-                                                <button onClick={() => handleGenerateUGCBatch(['TESTIMONIAL', 'PROBLEM_SOLUTION', 'UNBOXING', 'COMPARISON', 'TUTORIAL'])}
-                                                    disabled={!selectedAvatarId || generatingVideo}
-                                                    className="p-3 bg-gray-900 border border-gray-850 hover:border-gray-700 rounded-2xl text-left transition-all cursor-pointer font-sans disabled:opacity-40">
-                                                    <div className="text-xs font-bold text-violet-400 flex items-center gap-1.5"><Sparkles className="w-3 h-3 text-violet-400" /> Omnichannel Campaign (5x)</div>
-                                                    <div className="text-[9px] text-gray-500 mt-1 leading-normal">Generates a whole week of unique hooks to find your winning visual angles.</div>
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        {/* Custom Script text drawer */}
-                                        <div className="space-y-2">
-                                            <label className="flex items-center gap-2 cursor-pointer font-sans">
-                                                <input type="checkbox" checked={useCustomScript} onChange={e => setUseCustomScript(e.target.checked)}
-                                                    className="rounded bg-gray-900 border-gray-800 text-violet-600 focus:ring-0 focus:ring-offset-0" />
-                                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider select-none">Write custom UGC script (Optional)</span>
-                                            </label>
-                                            
-                                            {useCustomScript ? (
-                                                <textarea placeholder="Write the exact script dialog (e.g. Hey guys, Sarah here...)" value={customScript} onChange={e => setCustomScript(e.target.value)} rows={4}
-                                                    className="w-full bg-gray-900 border border-gray-800 focus:border-violet-500 rounded-2xl p-3.5 text-xs text-white focus:outline-none leading-relaxed font-sans resize-none" />
-                                            ) : (
-                                                <p className="text-[10px] text-gray-550 leading-relaxed font-sans italic bg-gray-900/30 border border-gray-850/50 p-3 rounded-xl">
-                                                    If custom script is unchecked, the AI assistance drafts a viral script dynamically matching the product scraped details and selected avatar persona.
-                                                </p>
-                                            )}
-                                        </div>
-
-                                        {/* Dispatch batch button */}
-                                        <button onClick={handleGenerateUGCVideo} disabled={!selectedAvatarId || generatingVideo}
-                                            className="w-full flex items-center justify-center gap-1.5 py-3 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white font-bold text-xs rounded-2xl transition-all shadow-md font-sans cursor-pointer uppercase tracking-wider">
-                                            {generatingVideo ? (
-                                                <>
-                                                    <Loader2 className="w-4 h-4 animate-spin" /> Queuing Generation...
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <Wand2 className="w-4 h-4" /> Queue UGC Generation
-                                                </>
-                                            )}
-                                        </button>
-
+                                        {useCustomScript ? (
+                                            <textarea placeholder="Write the exact script dialog (e.g. Hey guys, Sarah here...)" value={customScript} onChange={e => setCustomScript(e.target.value)} rows={4}
+                                                className="w-full bg-gray-900 border border-gray-800 focus:border-violet-500 rounded-2xl p-3.5 text-xs text-white focus:outline-none leading-relaxed font-sans resize-none" />
+                                        ) : (
+                                            <p className="text-[10px] text-gray-550 leading-relaxed font-sans italic bg-gray-900/30 border border-gray-850/50 p-3 rounded-xl">
+                                                If custom script is unchecked, the AI assistance drafts a viral script dynamically matching the product scraped details and selected avatar persona.
+                                            </p>
+                                        )}
                                     </div>
-                                )}
+
+                                    {/* Dispatch batch button */}
+                                    <button onClick={handleGenerateUGCVideo} disabled={!selectedAvatarId || generatingVideo}
+                                        className="w-full flex items-center justify-center gap-1.5 py-3 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white font-bold text-xs rounded-2xl transition-all shadow-md font-sans cursor-pointer uppercase tracking-wider">
+                                        {generatingVideo ? (
+                                            <>
+                                                <Loader2 className="w-4 h-4 animate-spin" /> Queuing Generation...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Wand2 className="w-4 h-4" /> Queue UGC Generation
+                                            </>
+                                        )}
+                                    </button>
+
+                                </div>
                             </div>
 
                             {/* Campaign Nested Video Explorer */}

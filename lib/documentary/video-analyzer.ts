@@ -49,27 +49,22 @@ export async function extractVideoKeyframes(
         );
 
         const base64Frames: string[] = [];
-        const duration = durationSeconds > 0 ? durationSeconds : 30;
+        const fpsRate = Math.max(0.05, numFrames / (durationSeconds || 30));
         
-        // Distribute frames evenly, skipping start/end buffers
-        for (let i = 0; i < numFrames; i++) {
-            const timePoint = Math.round(duration * (0.1 + (i / numFrames) * 0.8));
-            const outPath = path.join(tempDir, `frame-${i}.png`);
+        try {
+            // Extract keyframes in ONE fast FFmpeg pass to prevent 502 gateway timeouts
+            execSync(
+                `ffmpeg -i "${signedUrl}" -vf "fps=${fpsRate.toFixed(3)},scale=640:-1" -frames:v ${numFrames} "${path.join(tempDir, "frame-%02d.png")}" -y`,
+                { timeout: 25000, stdio: "ignore" }
+            );
 
-            try {
-                // ffmpeg seeking over HTTPS URL directly
-                execSync(
-                    `ffmpeg -ss ${timePoint} -i "${signedUrl}" -frames:v 1 -q:v 2 "${outPath}" -y`,
-                    { timeout: 45000, stdio: "ignore" }
-                );
-
-                if (fs.existsSync(outPath)) {
-                    const imgBuffer = fs.readFileSync(outPath);
-                    base64Frames.push(imgBuffer.toString("base64"));
-                }
-            } catch (ffmpegErr: any) {
-                console.warn(`[Video Analyzer] FFmpeg frame extraction failed at ${timePoint}s:`, ffmpegErr.message);
+            const files = fs.readdirSync(tempDir).filter(f => f.endsWith(".png")).sort();
+            for (const file of files) {
+                const imgBuffer = fs.readFileSync(path.join(tempDir, file));
+                base64Frames.push(imgBuffer.toString("base64"));
             }
+        } catch (ffmpegErr: any) {
+            console.warn(`[Video Analyzer] FFmpeg frame extraction failed:`, ffmpegErr.message);
         }
 
         return base64Frames;

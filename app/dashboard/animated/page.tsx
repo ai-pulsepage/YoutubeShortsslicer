@@ -104,6 +104,21 @@ type Video = {
     createdAt: string;
 };
 
+function stripDocMarkers(text: string): string {
+    if (!text) return "";
+    return text
+        .replace(/\[\d{1,2}:\d{2}(?::\d{2})?\]/g, "")
+        .replace(/\[VISUAL:[^\]]*\]/gi, "")
+        .replace(/\[SCENE:[^\]]*\]/gi, "")
+        .replace(/\[MUSIC:[^\]]*\]/gi, "")
+        .replace(/\[SFX:[^\]]*\]/gi, "")
+        .replace(/\[NOTE:[^\]]*\]/gi, "")
+        .replace(/\[CUT TO:[^\]]*\]/gi, "")
+        .replace(/\[FADE:[^\]]*\]/gi, "")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+}
+
 const EDGE_TTS_VOICES = [
     { id: "en-US-AnaNeural-Female",        label: "Ana (US Child Female)" },
     { id: "en-US-ChristopherNeural-Male",  label: "Christopher (US Child Male)" },
@@ -531,7 +546,7 @@ export default function KidsStoryBuilderPage() {
             setSelectedProjectId(proj.id);
             setDocId(proj.id);
             setProjectTitle(proj.title);
-            setProjectScript(proj.script);
+            setProjectScript(stripDocMarkers(proj.script));
             // Match characters with library characters by name to auto-populate images if missing
             const mappedCharacters = proj.characters.map(c => {
                 if (!c.imagePath) {

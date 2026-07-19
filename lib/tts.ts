@@ -151,45 +151,50 @@ export async function generateVoiceover(options: VoiceoverOptions): Promise<Buff
             const synthesisText = applyStructuralMarkup(text, "edge_tts", voiceId);
 
             console.log(`[Edge TTS] Sending synthesis request to MoneyPrinter: ${moneyPrinterUrl} for voice ${voiceId}`);
-            const audioRes = await fetch(`${moneyPrinterUrl}/api/v1/audio`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    video_script: synthesisText,
-                    voice_name: voiceId,
-                    bgm_type: "none",
-                    bgm_file: "",
-                    bgm_volume: 0,
-                    voice_volume: 1.0,
-                    voice_rate: effectiveSpeed
-                })
-            });
-            if (!audioRes.ok) throw new Error(`EdgeTTS synthesis failed: ${await audioRes.text()}`);
+            try {
+                const audioRes = await fetch(`${moneyPrinterUrl}/api/v1/audio`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        video_script: synthesisText,
+                        voice_name: voiceId,
+                        bgm_type: "none",
+                        bgm_file: "",
+                        bgm_volume: 0,
+                        voice_volume: 1.0,
+                        voice_rate: effectiveSpeed
+                    })
+                });
+                if (!audioRes.ok) throw new Error(`EdgeTTS synthesis failed: ${await audioRes.text()}`);
 
-            const createData = await audioRes.json();
-            const taskId = (createData.data || createData).task_id;
+                const createData = await audioRes.json();
+                const taskId = (createData.data || createData).task_id;
 
-            let audioBuffer: Buffer | null = null;
-            // Poll MoneyPrinter task status
-            for (let i = 0; i < 120; i++) {
-                await new Promise(r => setTimeout(r, 1000));
-                const statusRes = await fetch(`${moneyPrinterUrl}/api/v1/tasks/${taskId}`);
-                if (statusRes.ok) {
-                    const st = (await statusRes.json());
-                    const task = st.data || st;
-                    if (task.state === 1) {
-                        const audioFetch = await fetch(`${moneyPrinterUrl}/tasks/${taskId}/audio.mp3`);
-                        if (!audioFetch.ok) throw new Error("Failed to download EdgeTTS audio file");
-                        audioBuffer = Buffer.from(await audioFetch.arrayBuffer());
-                        break;
+                let audioBuffer: Buffer | null = null;
+                // Poll MoneyPrinter task status
+                for (let i = 0; i < 120; i++) {
+                    await new Promise(r => setTimeout(r, 1000));
+                    const statusRes = await fetch(`${moneyPrinterUrl}/api/v1/tasks/${taskId}`);
+                    if (statusRes.ok) {
+                        const st = (await statusRes.json());
+                        const task = st.data || st;
+                        if (task.state === 1) {
+                            const audioFetch = await fetch(`${moneyPrinterUrl}/tasks/${taskId}/audio.mp3`);
+                            if (!audioFetch.ok) throw new Error("Failed to download EdgeTTS audio file");
+                            audioBuffer = Buffer.from(await audioFetch.arrayBuffer());
+                            break;
+                        }
+                        if (task.state === -1) throw new Error(`Edge TTS failed for voice "${voiceId}"`);
                     }
-                    if (task.state === -1) throw new Error(`TTS_TIMEOUT: EdgeTTS failed for voice "${voiceId}"`);
                 }
+                if (!audioBuffer) {
+                    throw new Error(`Edge TTS timed out for voice "${voiceId}"`);
+                }
+                return audioBuffer;
+            } catch (err: any) {
+                console.error("[Edge TTS] Service unreachable or failed:", err.message);
+                throw new Error(`Edge TTS was not available (${err.message})`);
             }
-            if (!audioBuffer) {
-                throw new Error(`TTS_TIMEOUT: EdgeTTS timed out for voice "${voiceId}"`);
-            }
-            return audioBuffer;
         }
 
         default:

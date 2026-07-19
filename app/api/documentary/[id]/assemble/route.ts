@@ -43,8 +43,14 @@ export async function POST(
     }
 
     // Run assembly in background
-    assembleDocumentary(id).catch((err) => {
+    assembleDocumentary(id).catch(async (err) => {
         console.error(`[Assemble API] Pipeline failed for ${id}:`, err);
+        try {
+            await prisma.documentary.update({
+                where: { id },
+                data: { status: "DRAFT", errorMsg: `Assembly error: ${err.message}` }
+            });
+        } catch {}
     });
 
     return NextResponse.json({

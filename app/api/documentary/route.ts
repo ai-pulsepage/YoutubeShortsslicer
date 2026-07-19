@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
 
     const where: any = {
         userId: session.user.id,
-        genre: { notIn: ["children", "children_library"] }
+        genre: { notIn: ["children", "children_library", "ugc_vault"] }
     };
     if (status) {
         where.status = status;

@@ -37,6 +37,21 @@ const LANGUAGE_VOICES: Record<string, { childFemale: string; male: string; defau
     }
 };
 
+function cleanDocumentaryMarkers(text: string): string {
+    if (!text) return "";
+    return text
+        .replace(/\[\d{1,2}:\d{2}(?::\d{2})?\]/g, "")
+        .replace(/\[VISUAL:[^\]]*\]/gi, "")
+        .replace(/\[SCENE:[^\]]*\]/gi, "")
+        .replace(/\[MUSIC:[^\]]*\]/gi, "")
+        .replace(/\[SFX:[^\]]*\]/gi, "")
+        .replace(/\[NOTE:[^\]]*\]/gi, "")
+        .replace(/\[CUT TO:[^\]]*\]/gi, "")
+        .replace(/\[FADE:[^\]]*\]/gi, "")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+}
+
 export async function POST(req: NextRequest) {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -55,9 +70,9 @@ export async function POST(req: NextRequest) {
             if (!transcript || !transcript.content) {
                 return NextResponse.json({ error: "No transcript content found for this video" }, { status: 404 });
             }
-            contentToProcess = transcript.content;
+            contentToProcess = cleanDocumentaryMarkers(transcript.content);
         } else {
-            contentToProcess = premise || scriptText || "";
+            contentToProcess = cleanDocumentaryMarkers(premise || scriptText || "");
         }
 
         let apiKey = process.env.DEEPSEEK_API_KEY;
