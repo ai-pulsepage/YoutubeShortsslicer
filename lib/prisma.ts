@@ -9,6 +9,9 @@ const globalForPrisma = globalThis as unknown as {
 function createPrismaClient() {
     const pool = new pg.Pool({
         connectionString: process.env.DATABASE_URL,
+        max: 5, // Limit connections to prevent Railway database exhaustion
+        idleTimeoutMillis: 10000, // Close idle connections after 10s
+        connectionTimeoutMillis: 5000, // Fail fast on connection refusal
     });
     const adapter = new PrismaPg(pool);
     return new PrismaClient({ adapter });
