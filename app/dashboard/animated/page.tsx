@@ -935,8 +935,13 @@ export default function KidsStoryBuilderPage() {
                 narrationPath: data.narrationPath,
                 voiceStatus: "READY"
             });
-            // Auto plan shots based on narration duration
-            setTimeout(() => probeAndPlanShots(sceneId, data.narrationPath, text), 100);
+            // Auto plan shots based on narration duration ONLY if no custom shots exist
+            const sceneObj = scenes.find(s => s.id === sceneId);
+            const hasExistingShots = sceneObj && sceneObj.visualShots && sceneObj.visualShots.length > 0 && 
+                !(sceneObj.visualShots.length === 1 && sceneObj.visualShots[0].id.endsWith("-default"));
+            if (!hasExistingShots) {
+                setTimeout(() => probeAndPlanShots(sceneId, data.narrationPath, text), 100);
+            }
         } catch (err: any) {
             setError(err.message || "Failed to generate voiceover track.");
             updateScene(sceneId, { voiceStatus: "FAILED" });
@@ -988,7 +993,13 @@ export default function KidsStoryBuilderPage() {
                     if (!res.ok) throw new Error(data.error || `Synthesis failed for scene ${i + 1}`);
 
                     updateScene(s.id, { narrationPath: data.narrationPath, voiceStatus: "READY" });
-                    await probeAndPlanShots(s.id, data.narrationPath, s.text);
+                    // Auto plan shots based on narration duration ONLY if no custom shots exist
+                    const sceneObj = scenes.find(sc => sc.id === s.id);
+                    const hasExistingShots = sceneObj && sceneObj.visualShots && sceneObj.visualShots.length > 0 && 
+                        !(sceneObj.visualShots.length === 1 && sceneObj.visualShots[0].id.endsWith("-default"));
+                    if (!hasExistingShots) {
+                        await probeAndPlanShots(s.id, data.narrationPath, s.text);
+                    }
                 } catch (sceneErr: any) {
                     // Mark failed but continue with remaining scenes
                     console.error(`[Batch Audio] Scene ${s.id} failed:`, sceneErr.message);

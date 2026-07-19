@@ -52,13 +52,15 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { sourceUrls, voiceId, title, genre, subStyle, audience, perspective,
         pacing, ending, endingNote, contentMode, musicMood,
-        useBRoll, useKenBurns, visualMode, imageModel, narratorStyle, ttsEngine } = body;
+        useBRoll, useKenBurns, visualMode, imageModel, narratorStyle, ttsEngine, textStory } = body;
 
-    // In topic mode, sourceUrls can be empty if title is provided
-    const isTopicMode = (!sourceUrls || sourceUrls.length === 0) && title;
-    if (!isTopicMode && (!sourceUrls || !Array.isArray(sourceUrls) || sourceUrls.length === 0)) {
+    // In topic mode, sourceUrls can be empty if title is provided.
+    // In textStory mode, sourceUrls can also be empty.
+    const isTopicMode = (!sourceUrls || sourceUrls.length === 0) && title && !textStory;
+    const isTextMode = !!textStory;
+    if (!isTopicMode && !isTextMode && (!sourceUrls || !Array.isArray(sourceUrls) || sourceUrls.length === 0)) {
         return NextResponse.json(
-            { error: "Provide a topic title OR at least one source URL" },
+            { error: "Provide a topic title, a story text, OR at least one source URL" },
             { status: 400 }
         );
     }
@@ -66,8 +68,20 @@ export async function POST(req: NextRequest) {
     const documentary = await prisma.documentary.create({
         data: {
             userId: session.user.id,
-            title: title || null,
+            title: title || (textStory ? "Custom Story Script" : null),
             sourceUrls: sourceUrls || [],
+            rawArticles: textStory ? [
+                {
+                    url: "user-text",
+                    title: title || "User Story Script",
+                    summary: textStory,
+                    keyFacts: [],
+                    scientificConcepts: [],
+                    quotes: [],
+                    emotionalHooks: [],
+                    noveltyScore: 10
+                }
+            ] : undefined,
             genre: genre || "science",
             subStyle: subStyle || "bbc_earth",
             audience: audience || "adults",

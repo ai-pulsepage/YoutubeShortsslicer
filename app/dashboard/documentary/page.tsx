@@ -16,6 +16,7 @@ import {
     CheckCircle2,
     XCircle,
     Sparkles,
+    FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getSmartDefaults } from "@/lib/documentary/genre-presets";
@@ -316,9 +317,10 @@ function CreateDocumentaryModal({
     onClose: () => void;
     onCreated: (id: string) => void;
 }) {
-    const [mode, setMode] = useState<"topic" | "urls">("topic");
+    const [mode, setMode] = useState<"topic" | "urls" | "text">("topic");
     const [title, setTitle] = useState("");
     const [urlsText, setUrlsText] = useState("");
+    const [textStory, setTextStory] = useState("");
     const [creating, setCreating] = useState(false);
 
     // Genre settings
@@ -368,6 +370,7 @@ function CreateDocumentaryModal({
             body: JSON.stringify({
                 title: title.trim() || undefined,
                 sourceUrls,
+                textStory: mode === "text" ? textStory.trim() : undefined,
                 genre, subStyle, audience, perspective, pacing,
                 ending, endingNote: endingNote || undefined,
                 contentMode, musicMood,
@@ -379,7 +382,7 @@ function CreateDocumentaryModal({
         if (data.id) onCreated(data.id);
     };
 
-    const canProceedStep1 = mode === "topic" ? !!title.trim() : !!urlsText.trim();
+    const canProceedStep1 = mode === "topic" ? !!title.trim() : (mode === "text" ? !!textStory.trim() : !!urlsText.trim());
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
@@ -399,6 +402,11 @@ function CreateDocumentaryModal({
                                 mode === "topic" ? "bg-violet-600 text-white" : "text-gray-400 hover:text-white")}>
                             <Sparkles className="w-3.5 h-3.5" /> AI Research
                         </button>
+                        <button onClick={() => setMode("text")}
+                            className={cn("flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                                mode === "text" ? "bg-violet-600 text-white" : "text-gray-400 hover:text-white")}>
+                            <FileText className="w-3.5 h-3.5" /> From Script/Text
+                        </button>
                         <button onClick={() => setMode("urls")}
                             className={cn("flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
                                 mode === "urls" ? "bg-violet-600 text-white" : "text-gray-400 hover:text-white")}>
@@ -412,7 +420,7 @@ function CreateDocumentaryModal({
                             {mode === "topic" ? (<>Movie Topic <span className="text-red-400">*</span></>) : "Title (optional)"}
                         </label>
                         <input type="text" value={title} onChange={(e) => setTitle(e.target.value)}
-                            placeholder={mode === "topic" ? "e.g. The newest frontiers on quantum physics" : "e.g. Dark Matter Mysteries"}
+                            placeholder={mode === "topic" ? "e.g. The newest frontiers on quantum physics" : mode === "text" ? "e.g. The Lost Expedition" : "e.g. Dark Matter Mysteries"}
                             className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 transition-colors" />
                     </div>
 
@@ -424,6 +432,18 @@ function CreateDocumentaryModal({
                             </label>
                             <textarea value={urlsText} onChange={(e) => setUrlsText(e.target.value)} rows={3}
                                 placeholder={"https://example.com/article-1\nhttps://example.com/article-2"}
+                                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 transition-colors resize-none font-mono" />
+                        </div>
+                    )}
+
+                    {/* Plain Text Story */}
+                    {mode === "text" && (
+                        <div>
+                            <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                                Story Text / Script <span className="text-red-400">*</span>
+                            </label>
+                            <textarea value={textStory} onChange={(e) => setTextStory(e.target.value)} rows={4}
+                                placeholder="Paste your story text, documentary research, or custom script here..."
                                 className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 transition-colors resize-none font-mono" />
                         </div>
                     )}

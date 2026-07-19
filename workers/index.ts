@@ -48,8 +48,11 @@ if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 // Write YouTube cookies to temp file for authentication
 const COOKIES_PATH = path.join(TEMP_DIR, "cookies.txt");
 if (process.env.YOUTUBE_COOKIES) {
-    fs.writeFileSync(COOKIES_PATH, process.env.YOUTUBE_COOKIES);
-    console.log("  Ã°Å¸ÂÂª YouTube cookies loaded");
+    let cleanCookies = process.env.YOUTUBE_COOKIES;
+    cleanCookies = cleanCookies.replace(/^['"]|['"]$/g, "");
+    cleanCookies = cleanCookies.replace(/\\n/g, "\n").replace(/\\r/g, "\r");
+    fs.writeFileSync(COOKIES_PATH, cleanCookies);
+    console.log("  🍪 YouTube cookies loaded");
 }
 
 function ytdlpCookieFlag(): string {

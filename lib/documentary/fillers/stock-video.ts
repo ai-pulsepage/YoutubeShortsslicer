@@ -149,15 +149,19 @@ async function searchPexelsVideos(query: string, count = 5): Promise<PexelsVideo
     }
 }
 
-/**
- * Download a video file from URL to local path.
- */
 async function downloadVideo(url: string, outputPath: string): Promise<void> {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`Download failed: ${response.status}`);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
-    const buffer = Buffer.from(await response.arrayBuffer());
-    fs.writeFileSync(outputPath, buffer);
+    try {
+        const response = await fetch(url, { signal: controller.signal });
+        if (!response.ok) throw new Error(`Download failed: ${response.status}`);
+
+        const buffer = Buffer.from(await response.arrayBuffer());
+        fs.writeFileSync(outputPath, buffer);
+    } finally {
+        clearTimeout(timeoutId);
+    }
 }
 
 /**

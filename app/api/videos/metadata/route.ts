@@ -29,7 +29,10 @@ export async function POST(req: Request) {
         let cookieFlag = "";
         if (process.env.YOUTUBE_COOKIES) {
             const cookiePath = path.join(os.tmpdir(), "yt-cookies.txt");
-            fs.writeFileSync(cookiePath, process.env.YOUTUBE_COOKIES);
+            let cleanCookies = process.env.YOUTUBE_COOKIES;
+            cleanCookies = cleanCookies.replace(/^['"]|['"]$/g, "");
+            cleanCookies = cleanCookies.replace(/\\n/g, "\n").replace(/\\r/g, "\r");
+            fs.writeFileSync(cookiePath, cleanCookies);
             cookieFlag = `--cookies "${cookiePath}"`;
         }
 
