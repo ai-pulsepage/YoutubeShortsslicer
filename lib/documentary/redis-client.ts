@@ -9,7 +9,7 @@ export function getRedis(): Redis {
             throw new Error("REDIS_URL environment variable is not set");
         }
         redis = new Redis(url, {
-            maxRetriesPerRequest: 3,
+            maxRetriesPerRequest: null,
             retryStrategy(times) {
                 const delay = Math.min(times * 200, 5000);
                 return delay;
