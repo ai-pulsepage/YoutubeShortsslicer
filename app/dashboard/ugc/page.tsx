@@ -595,13 +595,32 @@ export default function UGCStudioPage() {
                                                         className="w-16 bg-gray-950 border border-gray-800 rounded-lg px-1.5 py-0.5 text-[9px] font-mono text-gray-300 placeholder-gray-700 focus:outline-none focus:border-violet-500" />
                                                 </div>
 
-                                                <div className="flex items-center justify-between">
+                                                <div className="flex items-center justify-between gap-1">
                                                     <button onClick={() => openR2Picker(avatar.id)}
-                                                        className="px-2 py-0.5 bg-gray-850 hover:bg-gray-800 text-gray-400 hover:text-white rounded border border-gray-800 text-[8px] font-bold font-sans cursor-pointer transition-all">
-                                                        Browse R2
+                                                        className="px-1.5 py-0.5 bg-gray-850 hover:bg-gray-800 text-gray-400 hover:text-white rounded border border-gray-800 text-[8px] font-bold font-sans cursor-pointer transition-all">
+                                                        R2
+                                                    </button>
+                                                    <button onClick={async () => {
+                                                        const userPrompt = window.prompt("Enter detailed design prompt to generate an AI face for this character spokesperson:", `Highly realistic headshot of a professional presenter named ${avatar.name}, friendly expression, natural human skin texture, studio background, photorealistic, 8k`);
+                                                        if (!userPrompt || !userPrompt.trim()) return;
+                                                        try {
+                                                            const genRes = await fetch(`/api/avatars/${avatar.id}/generate`, {
+                                                                method: "POST",
+                                                                headers: { "Content-Type": "application/json" },
+                                                                body: JSON.stringify({ prompt: userPrompt })
+                                                            });
+                                                            const genData = await genRes.json();
+                                                            if (!genRes.ok) throw new Error(genData.error || "Failed to start generation");
+                                                            fetchAvatars();
+                                                        } catch (err: any) {
+                                                            alert(err.message || "Failed to queue image generation.");
+                                                        }
+                                                    }}
+                                                        className="px-1.5 py-0.5 bg-violet-650 hover:bg-violet-600 text-white rounded border border-violet-500/30 text-[8px] font-bold font-sans cursor-pointer transition-all flex items-center gap-0.5">
+                                                        <Sparkles className="w-2 h-2" /> AI Face
                                                     </button>
                                                     <button onClick={() => setSelectedAvatarId(avatar.id)}
-                                                        className={cn("px-2.5 py-0.5 rounded text-[8px] font-bold font-sans transition-all cursor-pointer",
+                                                        className={cn("px-2 py-0.5 rounded text-[8px] font-bold font-sans transition-all cursor-pointer",
                                                             selectedAvatarId === avatar.id 
                                                                 ? "bg-violet-600 text-white" 
                                                                 : "bg-gray-900 border border-gray-800 text-gray-400 hover:text-white hover:bg-gray-850"

@@ -208,7 +208,32 @@ function assignVerbatimNarration(plan: ScenePlan, script: StoryScript): void {
         (s: any) => Array.isArray(s.segmentRange) && s.segmentRange.length === 2
     );
 
-    if (hasSegmentRanges) {
+    // Validate that ranges are not trivial, backward, or repeating
+    let useAIBacking = hasSegmentRanges;
+    if (hasSegmentRanges && totalScenes > 1) {
+        let prevEnd = -1;
+        let totalRangeLength = 0;
+        
+        for (const scene of plan.scenes) {
+            const [start, end] = (scene as any).segmentRange as [number, number];
+            const length = end - start + 1;
+            totalRangeLength += length;
+            
+            // If ranges cover more than 60% of the entire script or overlap backwards, discard
+            if (start < prevEnd - 1 || length > totalSegments * 0.6) {
+                useAIBacking = false;
+                break;
+            }
+            prevEnd = end;
+        }
+        
+        // If average range size covers too much of the script, it's repeating
+        if (totalRangeLength / totalScenes > totalSegments * 0.4) {
+            useAIBacking = false;
+        }
+    }
+
+    if (useAIBacking) {
         // Use AI's segment assignments
         for (const scene of plan.scenes) {
             const [start, end] = (scene as any).segmentRange as [number, number];

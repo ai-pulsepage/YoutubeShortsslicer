@@ -1686,10 +1686,26 @@ function AssemblyTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
     // Show assemble trigger
     if (doc.status === "ASSEMBLING") {
         return (
-            <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-8 text-center">
+            <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-8 text-center space-y-4">
                 <Loader2 className="w-10 h-10 text-amber-400 mx-auto mb-3 animate-spin" />
                 <h3 className="text-sm font-semibold text-white mb-1">Assembling Documentary...</h3>
-                <p className="text-xs text-gray-500">Generating narration, creating filler visuals, and mixing audio. This may take several minutes.</p>
+                <p className="text-xs text-gray-500 mb-4">Generating narration, creating filler visuals, and mixing audio. This may take several minutes.</p>
+                <div className="pt-2">
+                    <button
+                        onClick={async () => {
+                            if (!confirm("Are you sure you want to force reset this stuck assembly? This will let you re-configure and re-assemble.")) return;
+                            await fetch(`/api/documentary/debug`, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ documentaryId: doc.id, action: "reset-status", newStatus: "DRAFT" }),
+                            });
+                            onRefresh();
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-950/40 hover:bg-red-950/60 border border-red-900/30 text-red-400 transition-all cursor-pointer"
+                    >
+                        <RefreshCw className="w-3.5 h-3.5" /> Force Reset Stuck Assembly
+                    </button>
+                </div>
             </div>
         );
     }
