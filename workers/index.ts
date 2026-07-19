@@ -63,6 +63,19 @@ function ytdlpProxyFlag(): string {
     return process.env.YTDLP_PROXY ? `--proxy "${process.env.YTDLP_PROXY}"` : "";
 }
 
+function execYtdlp(cmd: string, options: any = {}): string {
+    try {
+        return execSync(cmd, options) as unknown as string;
+    } catch (err: any) {
+        if (cmd.includes("--proxy") && (err.message.includes("proxy") || err.message.includes("Tunnel") || err.message.includes("402") || err.message.includes("407") || err.message.includes("502") || err.message.includes("403"))) {
+            console.warn("[yt-dlp] Proxy failed. Retrying without proxy...", err.message);
+            const cleanCmd = cmd.replace(/--proxy\s+"[^"]*"\s*/g, "").replace(/--proxy\s+\S+\s*/g, "");
+            return execSync(cleanCmd, options) as unknown as string;
+        }
+        throw err;
+    }
+}
+
 /**
  * Parse WebVTT subtitle file into transcript segments
  * YouTube auto-captions use VTT format with timestamps like:
@@ -128,7 +141,7 @@ const downloadWorker = new Worker(
             await job.updateProgress(10);
 
             // Get metadata
-            const metadataJson = execSync(
+            const metadataJson = execYtdlp(
                 `yt-dlp ${ytdlpCookieFlag()} ${ytdlpProxyFlag()} --no-playlist --js-runtimes node --remote-components ejs:github --dump-json --no-download "${sourceUrl}"`,
                 { encoding: "utf8", timeout: 90000 }
             );
@@ -137,7 +150,7 @@ const downloadWorker = new Worker(
 
             // Download video
             const outputTemplate = path.join(videoDir, "%(id)s.%(ext)s");
-            execSync(
+            execYtdlp(
                 `yt-dlp ${ytdlpCookieFlag()} ${ytdlpProxyFlag()} --no-playlist --js-runtimes node --remote-components ejs:github -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4 -o "${outputTemplate}" "${sourceUrl}"`,
                 { encoding: "utf8", timeout: 600000, maxBuffer: 50 * 1024 * 1024 }
             );
@@ -280,7 +293,7 @@ const downloadWorker = new Worker(
                     // Fallback: YouTube VTT captions
                     if (!transcriptId) {
                         console.log(`[Download] Whisper unavailable, fetching YouTube auto-captions...`);
-                        execSync(
+                        execYtdlp(
                             `yt-dlp ${ytdlpCookieFlag()} ${ytdlpProxyFlag()} --no-playlist --js-runtimes node --write-auto-sub --sub-lang "en.*" --sub-format vtt --skip-download -o "${path.join(videoDir, "%(id)s")}" "${sourceUrl}"`,
                             { encoding: "utf8", timeout: 60000 }
                         );

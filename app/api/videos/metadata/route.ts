@@ -25,6 +25,19 @@ export async function POST(req: Request) {
         const os = require("os");
         const path = require("path");
 
+        function execYtdlp(cmd: string, options: any = {}): string {
+            try {
+                return execSync(cmd, options) as unknown as string;
+            } catch (err: any) {
+                if (cmd.includes("--proxy") && (err.message.includes("proxy") || err.message.includes("Tunnel") || err.message.includes("402") || err.message.includes("407") || err.message.includes("502") || err.message.includes("403"))) {
+                    console.warn("[yt-dlp] Proxy failed. Retrying without proxy...", err.message);
+                    const cleanCmd = cmd.replace(/--proxy\s+"[^"]*"\s*/g, "").replace(/--proxy\s+\S+\s*/g, "");
+                    return execSync(cleanCmd, options) as unknown as string;
+                }
+                throw err;
+            }
+        }
+
         // Write cookies file if available
         let cookieFlag = "";
         if (process.env.YOUTUBE_COOKIES) {
@@ -41,7 +54,7 @@ export async function POST(req: Request) {
             proxyFlag = `--proxy "${process.env.YTDLP_PROXY}"`;
         }
 
-        const result = execSync(
+        const result = execYtdlp(
             `yt-dlp ${cookieFlag} ${proxyFlag} --no-playlist --dump-json --no-download "${url.trim()}"`,
             {
                 encoding: "utf8",

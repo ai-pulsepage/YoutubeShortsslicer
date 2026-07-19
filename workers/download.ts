@@ -57,6 +57,19 @@ function ytdlpProxyFlag(): string {
     return process.env.YTDLP_PROXY ? `--proxy "${process.env.YTDLP_PROXY}"` : "";
 }
 
+function execYtdlp(cmd: string, options: any = {}): string {
+    try {
+        return execSync(cmd, options) as unknown as string;
+    } catch (err: any) {
+        if (cmd.includes("--proxy") && (err.message.includes("proxy") || err.message.includes("Tunnel") || err.message.includes("402") || err.message.includes("407") || err.message.includes("502") || err.message.includes("403"))) {
+            console.warn("[yt-dlp] Proxy failed. Retrying without proxy...", err.message);
+            const cleanCmd = cmd.replace(/--proxy\s+"[^"]*"\s*/g, "").replace(/--proxy\s+\S+\s*/g, "");
+            return execSync(cleanCmd, options) as unknown as string;
+        }
+        throw err;
+    }
+}
+
 async function processDownload(job: Job<VideoDownloadJobData>) {
     const { videoId, userId, sourceUrl, platform } = job.data;
     const videoDir = path.join(TEMP_DIR, videoId);
@@ -71,7 +84,7 @@ async function processDownload(job: Job<VideoDownloadJobData>) {
         await job.updateProgress(10);
 
         // Step 1: Get metadata
-        const metadataJson = execSync(
+        const metadataJson = execYtdlp(
             `yt-dlp ${ytdlpCookieFlag()} ${ytdlpProxyFlag()} --no-playlist --js-runtimes node --dump-json --no-download "${sourceUrl}"`,
             { encoding: "utf8", timeout: 90000 }
         );
@@ -80,7 +93,7 @@ async function processDownload(job: Job<VideoDownloadJobData>) {
 
         // Step 2: Download video (best quality, mp4 preferred)
         const outputTemplate = path.join(videoDir, "%(id)s.%(ext)s");
-        execSync(
+        execYtdlp(
             `yt-dlp ${ytdlpCookieFlag()} ${ytdlpProxyFlag()} --no-playlist --js-runtimes node -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4 -o "${outputTemplate}" "${sourceUrl}"`,
             {
                 encoding: "utf8",
