@@ -141,8 +141,21 @@ JSON Schema:
         }
 
         try {
-            const shots = JSON.parse(jsonContent);
-            return NextResponse.json({ shots: Array.isArray(shots) ? shots : [shots] });
+            const parsedShots = JSON.parse(jsonContent);
+            const shotsArray = Array.isArray(parsedShots) ? parsedShots : [parsedShots];
+            const normalizedShots = shotsArray.map((s: any) => {
+                const imagePrompt = s.imagePrompt || s.visualPrompt || "";
+                const motionPrompt = s.motionPrompt || s.motion || s.action || "";
+                return {
+                    index: s.index || 0,
+                    primaryCharacter: s.primaryCharacter || "Narrator",
+                    imagePrompt,
+                    motionPrompt,
+                    visualPrompt: imagePrompt,
+                    chainFromPrevious: s.chainFromPrevious ?? false
+                };
+            });
+            return NextResponse.json({ shots: normalizedShots });
         } catch (parseErr: any) {
             console.error("[Storyboard Plan] Failed to parse AI shot plan JSON:", parseErr.message);
             return NextResponse.json(
