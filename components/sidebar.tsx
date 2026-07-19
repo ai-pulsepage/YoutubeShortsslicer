@@ -52,7 +52,6 @@ const aiStudioItems = [
     { label: "Video Slicer", href: "/dashboard/clipper", icon: Scissors },
     { label: "ClipMaker", href: "/dashboard/clipmaker", icon: Wand2 },
     { label: "Podcasts", href: "/dashboard/podcasts", icon: Headphones },
-    { label: "Characters", href: "/dashboard/podcasts/characters", icon: Users },
     { label: "UGC Studio", href: "/dashboard/ugc", icon: Sparkles },
     { label: "Animated Shorts", href: "/dashboard/animated", icon: Film },
 ];

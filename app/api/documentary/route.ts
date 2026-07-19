@@ -18,7 +18,10 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status");
 
-    const where: Record<string, unknown> = { userId: session.user.id };
+    const where: any = {
+        userId: session.user.id,
+        genre: { notIn: ["children", "children_library"] }
+    };
     if (status) {
         where.status = status;
     }

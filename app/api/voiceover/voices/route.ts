@@ -17,9 +17,9 @@ export async function GET(req: NextRequest) {
 
     const engine = req.nextUrl.searchParams.get("engine") as TtsEngine || "elevenlabs";
 
-    if (!["elevenlabs", "xtts"].includes(engine)) {
+    if (!["elevenlabs", "xtts", "edge_tts", "gemini", "dia"].includes(engine)) {
         return NextResponse.json(
-            { error: "Invalid engine. Use 'elevenlabs' or 'xtts'" },
+            { error: "Invalid engine. Use 'elevenlabs', 'xtts', 'edge_tts', 'gemini', or 'dia'" },
             { status: 400 }
         );
     }

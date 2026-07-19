@@ -138,10 +138,52 @@ export async function generateVoiceover(options: VoiceoverOptions): Promise<Buff
             });
         }
 
-        case "edge_tts":
-            // edge_tts is handled by the MoneyPrinter service in the voice generate route
-            // and should not reach this router — fall through to error
-            throw new Error("edge_tts must be handled by the voice generate route directly (requires MoneyPrinter)");
+        case "edge_tts": {
+            const moneyPrinterUrl = process.env.MONEY_PRINTER_URL || "http://localhost:8085";
+            const { applyStructuralMarkup } = await import("./tts/text-formatter");
+            const synthesisText = applyStructuralMarkup(text, "edge_tts", voiceId);
+
+            console.log(`[Edge TTS] Sending synthesis request to MoneyPrinter: ${moneyPrinterUrl} for voice ${voiceId}`);
+            const audioRes = await fetch(`${moneyPrinterUrl}/api/v1/audio`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    video_script: synthesisText,
+                    voice_name: voiceId,
+                    bgm_type: "none",
+                    bgm_file: "",
+                    bgm_volume: 0,
+                    voice_volume: 1.0,
+                    voice_rate: effectiveSpeed
+                })
+            });
+            if (!audioRes.ok) throw new Error(`EdgeTTS synthesis failed: ${await audioRes.text()}`);
+
+            const createData = await audioRes.json();
+            const taskId = (createData.data || createData).task_id;
+
+            let audioBuffer: Buffer | null = null;
+            // Poll MoneyPrinter task status
+            for (let i = 0; i < 120; i++) {
+                await new Promise(r => setTimeout(r, 1000));
+                const statusRes = await fetch(`${moneyPrinterUrl}/api/v1/tasks/${taskId}`);
+                if (statusRes.ok) {
+                    const st = (await statusRes.json());
+                    const task = st.data || st;
+                    if (task.state === 1) {
+                        const audioFetch = await fetch(`${moneyPrinterUrl}/tasks/${taskId}/audio.mp3`);
+                        if (!audioFetch.ok) throw new Error("Failed to download EdgeTTS audio file");
+                        audioBuffer = Buffer.from(await audioFetch.arrayBuffer());
+                        break;
+                    }
+                    if (task.state === -1) throw new Error(`TTS_TIMEOUT: EdgeTTS failed for voice "${voiceId}"`);
+                }
+            }
+            if (!audioBuffer) {
+                throw new Error(`TTS_TIMEOUT: EdgeTTS timed out for voice "${voiceId}"`);
+            }
+            return audioBuffer;
+        }
 
         default:
             throw new Error(`Unknown TTS engine: ${engine}`);
@@ -195,15 +237,13 @@ export async function listAvailableVoices(engine: TtsEngine): Promise<VoiceInfo[
         }
 
         case "edge_tts": {
-            // Static list — not fetched from an API
-            return [
-                { id: "en-US-AnaNeural-Female",       name: "Ana",         description: "US Child Female",  engine: "edge_tts" as TtsEngine },
-                { id: "en-US-ChristopherNeural-Male", name: "Christopher", description: "US Child Male",    engine: "edge_tts" as TtsEngine },
-                { id: "en-US-AriaNeural-Female",      name: "Aria",        description: "US Female",        engine: "edge_tts" as TtsEngine },
-                { id: "en-US-GuyNeural-Male",         name: "Guy",         description: "US Male",          engine: "edge_tts" as TtsEngine },
-                { id: "en-GB-SoniaNeural-Female",     name: "Sonia",       description: "UK Female",        engine: "edge_tts" as TtsEngine },
-                { id: "en-GB-RyanNeural-Male",        name: "Ryan",        description: "UK Male",          engine: "edge_tts" as TtsEngine },
-            ];
+            const { EDGE_TTS_VOICES_FULL } = await import("./tts/edge-voices");
+            return EDGE_TTS_VOICES_FULL.map((v) => ({
+                id: v.id,
+                name: v.label.split(" (")[0],
+                description: v.label,
+                engine: "edge_tts" as TtsEngine,
+            }));
         }
 
         default:

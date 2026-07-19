@@ -1453,6 +1453,9 @@ function AssemblyTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
     const engineOptions = [
         { value: "elevenlabs", label: "ElevenLabs", desc: "Premium cloud voices", icon: "✨" },
         { value: "xtts", label: "XTTS v2", desc: "Self-hosted, voice cloning", icon: "🎙️" },
+        { value: "edge_tts", label: "Edge TTS", desc: "Microsoft Edge (with emotions)", icon: "🌐" },
+        { value: "gemini", label: "Gemini", desc: "Google cloud voiceover", icon: "🧠" },
+        { value: "dia", label: "Dia v2", desc: "Cloned expressiveness", icon: "🗣️" },
     ];
 
     const styleOptions = [
@@ -1497,7 +1500,7 @@ function AssemblyTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
                 <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
                     Narration Engine {savingMode && <Loader2 className="w-3 h-3 inline animate-spin ml-1" />}
                 </h4>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
                     {engineOptions.map((opt) => (
                         <button
                             key={opt.value}
