@@ -246,6 +246,13 @@ function DocumentaryCard({
                 </span>
             </div>
 
+            <div className="mt-2.5 px-3 py-1.5 bg-gray-950/45 border border-gray-855 rounded-xl flex items-center justify-between text-xs text-gray-300 font-mono font-bold select-all">
+                <span className="flex items-center gap-1.5 overflow-hidden text-ellipsis whitespace-nowrap">
+                    <span className="text-[9px] uppercase text-emerald-400 tracking-wider font-sans font-extrabold flex-shrink-0">ID:</span>
+                    <span className="overflow-hidden text-ellipsis whitespace-nowrap">{doc.id}</span>
+                </span>
+            </div>
+
             {isProcessing && (
                 <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-800 rounded-b-2xl overflow-hidden">
                     <div className="h-full bg-gradient-to-r from-violet-500 to-blue-500 animate-pulse" style={{ width: "60%" }} />

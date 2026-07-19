@@ -70,7 +70,7 @@ export async function generateKenBurnsFiller(
             execSync(
                 `ffmpeg -loop 1 -i "${imgPath}" -vf "${zoomEffect}" ` +
                 `-t ${segmentDuration} -c:v libx264 -preset fast -pix_fmt yuv420p -r 30 "${segPath}" -y`,
-                { timeout: 120000, stdio: "pipe" }
+                { timeout: 120000, stdio: "pipe", maxBuffer: 50 * 1024 * 1024 }
             );
             segments.push(segPath);
         } catch (err: any) {
@@ -94,7 +94,7 @@ export async function generateKenBurnsFiller(
             `ffmpeg -f concat -safe 0 -i "${concatListPath}" ` +
             `-c:v libx264 -preset fast -crf 22 -pix_fmt yuv420p ` +
             `-t ${duration} "${outputPath}" -y`,
-            { timeout: 600000, stdio: "pipe" }
+            { timeout: 600000, stdio: "pipe", maxBuffer: 50 * 1024 * 1024 }
         );
     }
 

@@ -61,7 +61,7 @@ export async function generateProceduralFiller(
         execSync(
             `ffmpeg -f lavfi -i "${filterInput}" ` +
             `-t ${duration} -c:v libx264 -preset fast -pix_fmt yuv420p "${outputPath}" -y`,
-            { timeout: Math.max(duration * 5000, 300000), stdio: "pipe" }
+            { timeout: Math.max(duration * 5000, 300000), stdio: "pipe", maxBuffer: 50 * 1024 * 1024 }
         );
     } catch (err: any) {
         // Fallback to simple mandelbrot if complex filter fails
@@ -69,7 +69,7 @@ export async function generateProceduralFiller(
         execSync(
             `ffmpeg -f lavfi -i "mandelbrot=s=${width}x${height}:rate=24:maxiter=200" ` +
             `-t ${duration} -c:v libx264 -preset fast -pix_fmt yuv420p "${outputPath}" -y`,
-            { timeout: Math.max(duration * 5000, 300000), stdio: "pipe" }
+            { timeout: Math.max(duration * 5000, 300000), stdio: "pipe", maxBuffer: 50 * 1024 * 1024 }
         );
     }
 

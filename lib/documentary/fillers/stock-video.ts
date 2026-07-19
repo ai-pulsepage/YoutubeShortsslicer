@@ -247,7 +247,7 @@ export async function generateStockVideoFiller(
                 `ffmpeg -i "${rawPath}" -t ${segDuration} ` +
                 `-vf "scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:black" ` +
                 `-c:v libx264 -preset fast -pix_fmt yuv420p -an "${segPath}" -y`,
-                { timeout: 120000, stdio: "pipe" }
+                { timeout: 120000, stdio: "pipe", maxBuffer: 50 * 1024 * 1024 }
             );
 
             segments.push(segPath);
@@ -289,7 +289,7 @@ export async function generateStockVideoFiller(
             `ffmpeg -f concat -safe 0 -i "${concatListPath}" ` +
             `-c:v libx264 -preset fast -crf 22 -pix_fmt yuv420p ` +
             `-t ${duration} "${outputPath}" -y`,
-            { timeout: 600000, stdio: "pipe" }
+            { timeout: 600000, stdio: "pipe", maxBuffer: 50 * 1024 * 1024 }
         );
     }
 

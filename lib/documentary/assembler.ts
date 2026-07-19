@@ -32,6 +32,13 @@ import { generateBackgroundMusic } from "@/lib/audio/musicgen";
 
 const TEMP_DIR = path.join(os.tmpdir(), "documentary-assembly");
 
+function safeExecSync(command: string, options: any = {}) {
+    return execSync(command, {
+        maxBuffer: 50 * 1024 * 1024, // 50MB buffer to prevent ENOBUFS
+        ...options,
+    });
+}
+
 /**
  * Clean narration text for TTS — strip timestamps, visual markers, and production notes.
  * Pacing pauses are handled downstream by narrator-style.ts (SSML breaks at paragraphs/sentences).
@@ -70,7 +77,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
  */
 function getAudioDuration(audioPath: string): number {
     try {
-        const result = execSync(
+        const result = safeExecSync(
             `ffprobe -v error -show_entries format=duration -of csv=p=0 "${audioPath}"`,
             { timeout: 15000, stdio: "pipe" }
         ).toString().trim();
@@ -85,7 +92,7 @@ function getAudioDuration(audioPath: string): number {
  */
 function getVideoDuration(videoPath: string): number {
     try {
-        const result = execSync(
+        const result = safeExecSync(
             `ffprobe -v error -show_entries format=duration -of csv=p=0 "${videoPath}"`,
             { timeout: 15000, stdio: "pipe" }
         ).toString().trim();
@@ -162,7 +169,7 @@ async function generateFiller(
                     `file '${kbPath.replace(/\\/g, "/")}'`,
                 ].join("\n"));
 
-                execSync(
+                safeExecSync(
                     `ffmpeg -f concat -safe 0 -i "${concatList}" ` +
                     `-c:v libx264 -preset fast -crf 22 -pix_fmt yuv420p ` +
                     `-t ${duration} "${outputPath}" -y`,
@@ -477,7 +484,7 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
             if (videoParts.length === 1) {
                 // Single part still needs 30fps normalization for consistent final concat
                 const normPath = path.join(sceneDir, `norm-single.mp4`);
-                execSync(
+                safeExecSync(
                     `ffmpeg -i "${videoParts[0]}" -c:v libx264 -preset fast -crf 22 ` +
                     `-vf "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:black,fps=30" ` +
                     `-pix_fmt yuv420p -an "${normPath}" -y`,
@@ -489,7 +496,7 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
                 const normalizedParts: string[] = [];
                 for (let i = 0; i < videoParts.length; i++) {
                     const normPath = path.join(sceneDir, `norm-${i}.mp4`);
-                    execSync(
+                    safeExecSync(
                         `ffmpeg -i "${videoParts[i]}" -c:v libx264 -preset fast -crf 22 ` +
                         `-vf "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:black,fps=30" ` +
                         `-pix_fmt yuv420p -an "${normPath}" -y`,
@@ -502,7 +509,7 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
                 const concatContent = normalizedParts.map((p) => `file '${p.replace(/\\/g, "/")}'`).join("\n");
                 fs.writeFileSync(concatListPath, concatContent);
 
-                execSync(
+                safeExecSync(
                     `ffmpeg -f concat -safe 0 -i "${concatListPath}" -c copy "${sceneVideoPath}" -y`,
                     { timeout: 600000, stdio: "pipe" }
                 );
@@ -513,7 +520,7 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
             if (narrationDuration > 0) {
                 try {
                     // Get video duration
-                    const videoDurStr = execSync(
+                    const videoDurStr = safeExecSync(
                         `ffprobe -v error -show_entries format=duration -of csv=p=0 "${sceneVideoPath}"`,
                         { timeout: 10000, encoding: "utf-8" }
                     ).trim();
@@ -525,7 +532,7 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
 
                         // Create black padding video
                         const blackPath = path.join(sceneDir, "black-pad.mp4");
-                        execSync(
+                        safeExecSync(
                             `ffmpeg -f lavfi -i color=c=black:s=1280x720:r=30:d=${paddingNeeded} ` +
                             `-c:v libx264 -preset fast -pix_fmt yuv420p -an "${blackPath}" -y`,
                             { timeout: 60000, stdio: "pipe" }
@@ -539,7 +546,7 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
                         ].join("\n"));
 
                         const paddedPath = path.join(sceneDir, "scene-video-padded.mp4");
-                        execSync(
+                        safeExecSync(
                             `ffmpeg -f concat -safe 0 -i "${padConcatPath}" -c copy "${paddedPath}" -y`,
                             { timeout: 120000, stdio: "pipe" }
                         );
@@ -601,7 +608,7 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
 
                     const filterComplex = filters.join(";");
 
-                    execSync(
+                    safeExecSync(
                         `ffmpeg ${inputs.join(" ")} ` +
                         `-filter_complex "${filterComplex}" ` +
                         `-map 0:v -map "[aout]" -c:v copy -c:a aac -b:a 192k ` +
@@ -613,7 +620,7 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
                     // Fallback: just narration if multi-track fails
                     if (hasNarration) {
                         try {
-                            execSync(
+                            safeExecSync(
                                 `ffmpeg -i "${sceneVideoPath}" -i "${narrationPath}" ` +
                                 `-map 0:v -map 1:a -c:v copy -c:a aac -b:a 192k ` +
                                 `"${sceneOutputPath}" -y`,
@@ -654,7 +661,7 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
         const blackGapPath = path.join(workDir, "black-gap.mp4");
         if (assembledScenePaths.length > 1) {
             try {
-                execSync(
+                safeExecSync(
                     `ffmpeg -f lavfi -i color=c=black:s=1280x720:r=30:d=3 ` +
                     `-f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 ` +
                     `-t 3 -c:v libx264 -preset fast -pix_fmt yuv420p -c:a aac -b:a 192k ` +
@@ -681,7 +688,7 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
             }
             fs.writeFileSync(finalConcatPath, lines.join("\n"));
 
-            execSync(
+            safeExecSync(
                 `ffmpeg -f concat -safe 0 -i "${finalConcatPath}" ` +
                 `-c:v libx264 -preset fast -crf 22 -r 30 -c:a aac -b:a 192k ` +
                 `-movflags +faststart "${finalOutputPath}" -y`,
@@ -698,7 +705,7 @@ export async function assembleDocumentary(documentaryId: string): Promise<string
 
         let totalDuration = 0;
         try {
-            const probeResult = execSync(
+            const probeResult = safeExecSync(
                 `ffprobe -v error -show_entries format=duration -of csv=p=0 "${finalOutputPath}"`,
                 { timeout: 30000 }
             ).toString().trim();

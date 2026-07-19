@@ -115,9 +115,15 @@ export default function DocumentaryDetailPage({ params }: { params: Promise<{ id
                     <h1 className="text-xl font-bold text-white truncate">
                         {doc.title || "Untitled Documentary"}
                     </h1>
-                    <p className="text-sm text-gray-500">
-                        {doc.sourceUrls.length} sources • {doc.scenes?.length || 0} scenes • {doc.assets?.length || 0} assets
-                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                        <span className="text-sm text-gray-500">
+                            {doc.sourceUrls.length} sources • {doc.scenes?.length || 0} scenes • {doc.assets?.length || 0} assets
+                        </span>
+                        <span className="text-gray-700 text-xs font-sans">•</span>
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-800 text-[10px] text-gray-400 font-mono font-bold select-all">
+                            ID: {doc.id}
+                        </span>
+                    </div>
                 </div>
                 <StatusBadge status={doc.status} />
                 <PipelineActions doc={doc} onRefresh={fetchDoc} />
@@ -1351,9 +1357,17 @@ function PreviewTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
 
     return (
         <div className="space-y-4">
+            {doc.visualMode === "broll_only" && (
+                <div className="p-4 bg-violet-500/10 border border-violet-500/20 rounded-2xl">
+                    <p className="text-xs text-violet-300 leading-relaxed">
+                        ℹ️ <strong>B-Roll Stock Video Mode Active</strong>: In this mode, individual shot visual clips are matched dynamically from Pexels stock video during final compilation based on visual prompts, rather than pre-generated via AI models. You do not need to pre-generate clips here.
+                    </p>
+                </div>
+            )}
+
             <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-white">
-                    Scene Clips ({shotsWithClips.length}/{allShots.length} ready)
+                    {doc.visualMode === "broll_only" ? "Scene Shots" : `Scene Clips (${shotsWithClips.length}/${allShots.length} ready)`}
                 </h3>
             </div>
 
@@ -1378,7 +1392,12 @@ function PreviewTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
                                         <Film className="w-8 h-8 text-gray-700" />
                                     )}
                                     <p className="text-xs text-gray-600">
-                                        {regeneratingIds.has(shot.id) ? "Regenerating..." : "Clip not yet generated"}
+                                        {regeneratingIds.has(shot.id)
+                                            ? "Regenerating..."
+                                            : doc.visualMode === "broll_only"
+                                                ? "Stock video matched during final assembly"
+                                                : "Clip not yet generated"
+                                        }
                                     </p>
                                 </div>
                             )}
@@ -1393,14 +1412,20 @@ function PreviewTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
                                         {shot.shotType} — {shot.cameraAngle || "eye level"} ({shot.cameraMovement || "static"})
                                     </p>
                                 </div>
-                                <button
-                                    onClick={() => handleRegenerate(shot)}
-                                    disabled={regeneratingIds.has(shot.id)}
-                                    className="flex items-center gap-1 px-2 py-1 rounded-lg bg-violet-600/20 hover:bg-violet-600/30 text-violet-400 text-[10px] font-medium disabled:opacity-50 transition-colors"
-                                >
-                                    <RotateCcw className={cn("w-3 h-3", regeneratingIds.has(shot.id) && "animate-spin")} />
-                                    Regen
-                                </button>
+                                {doc.visualMode === "broll_only" ? (
+                                    <span className="px-2.5 py-1 rounded-lg bg-gray-800 text-gray-400 text-[10px] font-semibold border border-gray-700/50 uppercase tracking-wider font-mono">
+                                        Stock B-Roll
+                                    </span>
+                                ) : (
+                                    <button
+                                        onClick={() => handleRegenerate(shot)}
+                                        disabled={regeneratingIds.has(shot.id)}
+                                        className="flex items-center gap-1 px-2 py-1 rounded-lg bg-violet-600/20 hover:bg-violet-600/30 text-violet-400 text-[10px] font-medium disabled:opacity-50 transition-colors"
+                                    >
+                                        <RotateCcw className={cn("w-3 h-3", regeneratingIds.has(shot.id) && "animate-spin")} />
+                                        Regen
+                                    </button>
+                                )}
                             </div>
                             {shot.action && (
                                 <p className="text-xs text-gray-400">{shot.action}</p>
