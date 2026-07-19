@@ -48,9 +48,9 @@ const topNavItems = [
 ];
 
 const aiStudioItems = [
-    { label: "Documentary", href: "/dashboard/documentary", icon: Video },
+    { label: "Movie Factory", href: "/dashboard/documentary", icon: Video },
     { label: "Video Slicer", href: "/dashboard/clipper", icon: Scissors },
-    { label: "Video Editor", href: "/dashboard/editor", icon: Wand2 },
+    { label: "ClipMaker", href: "/dashboard/clipmaker", icon: Wand2 },
     { label: "Podcasts", href: "/dashboard/podcasts", icon: Headphones },
     { label: "Characters", href: "/dashboard/podcasts/characters", icon: Users },
     { label: "UGC Studio", href: "/dashboard/ugc", icon: Sparkles },
@@ -76,9 +76,11 @@ export default function Sidebar() {
     // Auto-expand AI Studio if we're on a route inside it
     const isInStudio = 
         pathname.startsWith("/dashboard/documentary") || 
+        pathname.startsWith("/dashboard/clipmaker") ||
         pathname.startsWith("/dashboard/podcasts") ||
         pathname.startsWith("/dashboard/ugc") ||
         pathname.startsWith("/dashboard/animated");
+
     const [studioOpen, setStudioOpen] = useState(isInStudio);
 
     const renderNavLink = (item: { label: string; href: string; icon: any; adminOnly?: boolean }, indent = false) => {

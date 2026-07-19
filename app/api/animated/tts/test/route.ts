@@ -25,11 +25,11 @@ export async function GET(req: NextRequest) {
             }
             case "edge_tts": {
                 const moneyPrinterUrl = process.env.MONEY_PRINTER_URL || "http://localhost:8085";
-                const res = await fetch(`${moneyPrinterUrl}/health`, { signal: AbortSignal.timeout(5000) });
+                const res = await fetch(`${moneyPrinterUrl}/api/v1/bgm`, { signal: AbortSignal.timeout(5000) });
                 if (res.ok) {
                     return NextResponse.json({ ok: true, message: "Edge TTS (MoneyPrinter) connected" });
                 }
-                return NextResponse.json({ ok: false, message: `MoneyPrinter returned ${res.status}` });
+                return NextResponse.json({ ok: false, message: `MoneyPrinter returned status ${res.status}` });
             }
             default:
                 return NextResponse.json({ error: "Unknown engine" }, { status: 400 });

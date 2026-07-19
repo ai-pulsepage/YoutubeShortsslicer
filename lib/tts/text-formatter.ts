@@ -26,6 +26,74 @@
 export type TtsProvider = "edge_tts" | "gemini" | "elevenlabs" | "dia";
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Edge TTS SSML emotion map
+// Azure Cognitive Speech supports <prosody> and <mstts:express-as> SSML tags.
+// We convert inline [emotion] hints into SSML at synthesis time.
+// These hints are NEVER stored — they are extracted from the text and wrapped.
+// ─────────────────────────────────────────────────────────────────────────────
+const EDGE_TTS_EMOTION_MAP: Record<string, { rate: string; pitch: string; style?: string }> = {
+    excited:    { rate: "+15%", pitch: "+8%" },
+    happy:      { rate: "+8%",  pitch: "+5%" },
+    sad:        { rate: "-15%", pitch: "-8%" },
+    angry:      { rate: "+10%", pitch: "+5%" },
+    fearful:    { rate: "-5%",  pitch: "+6%" },
+    whispering: { rate: "-10%", pitch: "-10%" },
+    cheerful:   { rate: "+12%", pitch: "+6%" },
+    calm:       { rate: "-8%",  pitch: "-3%" },
+    surprised:  { rate: "+5%",  pitch: "+10%" },
+    crying:     { rate: "-12%", pitch: "-5%" },
+};
+
+// Regex to detect [emotion] bracket markers in dialogue
+const EDGE_EMOTION_REGEX = /\[([a-z]+)\]/gi;
+
+/**
+ * Wraps Edge TTS text in SSML with prosody tags for any [emotion] markers found.
+ * If no markers exist, wraps with a baseline <speak> element for consistent handling.
+ * Converts "..." (ellipsis) to SSML <break> pauses.
+ */
+export function wrapEdgeTtsSsml(text: string, voice: string): string {
+    // Convert "..." trailing pauses to SSML breaks
+    let ssmlBody = text.replace(/\.{3}/g, '<break time="600ms"/>');
+
+    const segments: string[] = [];
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    const regex = new RegExp(EDGE_EMOTION_REGEX.source, "gi");
+
+    while ((match = regex.exec(ssmlBody)) !== null) {
+        const beforeTag = ssmlBody.slice(lastIndex, match.index).trim();
+        if (beforeTag) segments.push(beforeTag);
+
+        const emotionKey = match[1].toLowerCase();
+        const prosody = EDGE_TTS_EMOTION_MAP[emotionKey];
+        if (prosody) {
+            const remainingText = ssmlBody.slice(match.index + match[0].length);
+            const nextTagIdx = remainingText.search(EDGE_EMOTION_REGEX);
+            const chunk = (nextTagIdx === -1 ? remainingText : remainingText.slice(0, nextTagIdx)).trim();
+            if (chunk) {
+                // Wrap in both express-as (emotion style) and prosody (speed/pitch adjust) for maximum expressiveness
+                segments.push(
+                    `<mstts:express-as style="${emotionKey}" styledegree="1.5"><prosody rate="${prosody.rate}" pitch="${prosody.pitch}">${chunk}</prosody></mstts:express-as>`
+                );
+                lastIndex = match.index + match[0].length + (nextTagIdx === -1 ? remainingText.length : nextTagIdx);
+            } else {
+                lastIndex = match.index + match[0].length;
+            }
+        } else {
+            lastIndex = match.index + match[0].length;
+        }
+    }
+
+    const tail = ssmlBody.slice(lastIndex).trim();
+    if (tail) segments.push(tail);
+
+    const inner = segments.join(" ");
+    return `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="en-US"><voice name="${voice}">${inner}</voice></speak>`;
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Dia vocal effect cues — these are literal parentheticals Dia renders as audio
 // ─────────────────────────────────────────────────────────────────────────────
 export const DIA_CUES = [
@@ -101,11 +169,16 @@ export function reformatForEngine(
 // Called in voice/generate/route.ts JUST BEFORE the TTS API call.
 // The result is NOT stored — only the source text is persisted.
 // ─────────────────────────────────────────────────────────────────────────────
-export function applyStructuralMarkup(text: string, engine: TtsProvider): string {
+export function applyStructuralMarkup(text: string, engine: TtsProvider, voice?: string): string {
     // ElevenLabs gets SSML break tags applied by narrator-style.ts (applyStyleForElevenLabs)
     // — we don't duplicate that here, it's handled in the generate route.
 
-    // Gemini, Edge TTS, Dia: clean text is preferred.
+    // Edge TTS: wrap in SSML <speak> with prosody for any [emotion] markers
+    if (engine === "edge_tts" && voice) {
+        return wrapEdgeTtsSsml(text, voice);
+    }
+
+    // Gemini, Dia: clean text is preferred.
     // For Dia: the stored (laughs) cues ARE the markup — no additional wrapping needed.
     return text;
 }
@@ -129,7 +202,7 @@ export function buildTtsWritingGuide(characterTtsMap: Record<string, TtsProvider
 
     if (hasEdge || hasGemini) {
         guidelines.push(
-            `• Edge TTS / Gemini characters: Write clean, natural dialogue. Use punctuation (commas, ellipses, exclamation marks) to convey pacing and emotion. Do NOT add any special markup tags or parenthetical cues — the TTS engine handles pacing automatically.`
+            `• Edge TTS / Gemini characters: Write clean, natural dialogue. Use punctuation (commas, ellipses, exclamation marks) to convey pacing and emotion. Optionally use [emotion] bracket tags at the start of a line to apply SSML prosody for Edge TTS (e.g. [excited], [sad], [whispering], [calm], [cheerful], [surprised], [angry], [fearful]). These are stripped before Gemini. Do NOT add any other special markup tags.`
         );
     }
 

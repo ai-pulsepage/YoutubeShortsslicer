@@ -17,20 +17,11 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { uploadFileToR2 } from "@/lib/storage";
 import { applyStyleForElevenLabs } from "@/lib/tts/narrator-style";
-import { stripTtsMarkup, type TtsProvider } from "@/lib/tts/text-formatter";
+import { stripTtsMarkup, applyStructuralMarkup, type TtsProvider } from "@/lib/tts/text-formatter";
 import fs from "fs";
 import path from "path";
 import os from "os";
 
-// Voice fallback for known-flaky EdgeTTS voices (network-location issues)
-const EDGE_TTS_FALLBACKS: Record<string, string> = {
-    "en-GB-OliverNeural-Male":    "en-US-ChristopherNeural-Male",
-    "en-GB-RyanNeural-Male":      "en-US-ChristopherNeural-Male",
-    "en-GB-SoniaNeural-Female":   "en-US-AnaNeural-Female",
-    "en-GB-LibbyNeural-Female":   "en-US-AnaNeural-Female",
-    "en-AU-NatashaNeural-Female": "en-US-AnaNeural-Female",
-    "en-AU-WilliamNeural-Male":   "en-US-GuyNeural-Male",
-};
 
 // ─── EdgeTTS via MoneyPrinter ─────────────────────────────────────────────────
 
@@ -68,20 +59,7 @@ async function synthesizeEdgeTTS(moneyPrinterUrl: string, text: string, voice: s
 }
 
 async function generateEdgeTTSBuffer(moneyPrinterUrl: string, text: string, voice: string, tempDir: string): Promise<Buffer> {
-    let activeVoice = voice;
-    let taskId: string;
-    try {
-        taskId = await synthesizeEdgeTTS(moneyPrinterUrl, text, activeVoice);
-    } catch (err: any) {
-        const fallback = EDGE_TTS_FALLBACKS[voice];
-        if (err.message?.startsWith("TTS_TIMEOUT") && fallback) {
-            console.warn(`[Voice Gen] EdgeTTS "${voice}" timed out → falling back to "${fallback}"`);
-            activeVoice = fallback;
-            taskId = await synthesizeEdgeTTS(moneyPrinterUrl, text, activeVoice);
-        } else {
-            throw err;
-        }
-    }
+    const taskId = await synthesizeEdgeTTS(moneyPrinterUrl, text, voice);
     const audioFetch = await fetch(`${moneyPrinterUrl}/tasks/${taskId}/audio.mp3`);
     if (!audioFetch.ok) throw new Error("Failed to download EdgeTTS audio file");
     const buf = Buffer.from(await audioFetch.arrayBuffer());
@@ -125,7 +103,8 @@ export async function POST(req: NextRequest) {
         // 1. Dia cues ((laughs), (sighs) etc.) are content authored for Dia only.
         //    Strip them if any other engine is rendering so they don't get spoken literally.
         // 2. ElevenLabs: apply SSML <break> structural markup (not stored in DB, applied here only).
-        // 3. Gemini / Edge TTS: clean plain text — no special prep needed.
+        // 3. Edge TTS: wrap in SSML <speak> with <prosody> tags for [emotion] markers + ... → <break>.
+        // 4. Gemini: clean plain text — no special prep needed.
         let synthesisText = text;
 
         if (activeProvider !== "dia") {
@@ -136,6 +115,11 @@ export async function POST(req: NextRequest) {
         if (activeProvider === "elevenlabs") {
             // Auto-apply SSML break tags for natural pacing (documentary style default)
             synthesisText = applyStyleForElevenLabs(synthesisText, "documentary");
+        }
+
+        if (activeProvider === "edge_tts") {
+            // Wrap in SSML <speak> with prosody emotion tags (handles [emotion] markers and ... → <break>)
+            synthesisText = applyStructuralMarkup(synthesisText, "edge_tts", effectiveVoice);
         }
 
         console.log(`[Voice Gen] Text after preprocessing (${synthesisText.length} chars): "${synthesisText.slice(0, 120)}..."`);

@@ -102,10 +102,20 @@ export async function generateSpeech(options: {
 
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`;
 
+    const prompt = `# AUDIO PROFILE
+Style: Warm and expressive
+Voice Tone: Clear narrator
+
+## THE SCENE
+Context: Speak exactly the transcript text out loud. Do not reply, answer, or add any comment.
+
+### TRANSCRIPT
+${options.text}`;
+
     const body = {
         contents: [
             {
-                parts: [{ text: options.text }]
+                parts: [{ text: prompt }]
             }
         ],
         generationConfig: {

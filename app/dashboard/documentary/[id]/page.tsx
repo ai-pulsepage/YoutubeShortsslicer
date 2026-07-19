@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, use } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
     ArrowLeft,
     FileText,
@@ -89,6 +90,19 @@ export default function DocumentaryDetailPage({ params }: { params: Promise<{ id
 
     return (
         <div className="space-y-6">
+            {/* ⚠️ Wrong-Page Warning Banner */}
+            <div className="flex items-start gap-3 px-4 py-3 bg-amber-950/40 border border-amber-700/40 rounded-2xl text-xs">
+                <span className="text-amber-400 text-base flex-shrink-0 mt-0.5">⚠️</span>
+                <div className="flex-1">
+                    <span className="font-bold text-amber-300">You are in the Documentary Factory</span>
+                    <span className="text-amber-200/70"> — a separate pipeline for narrated stock-footage/AI-clip documentaries. The controls here (ElevenLabs, XTTS, Ken Burns, Re-assemble) do <strong>NOT</strong> affect your Animated Kids Movie.</span>
+                </div>
+                <Link href="/dashboard/animated"
+                    className="flex-shrink-0 px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-white font-bold rounded-xl transition-all text-[10px] uppercase tracking-wider">
+                    → Film Studio
+                </Link>
+            </div>
+
             {/* Header */}
             <div className="flex items-center gap-4">
                 <button
@@ -314,27 +328,36 @@ function PipelineOverview({ doc }: { doc: any }) {
             {jobs.length > 0 && (
                 <div className="mt-4 pt-4 border-t border-gray-800">
                     <p className="text-xs font-medium text-gray-400 mb-2">Job Activity</p>
-                    <div className="space-y-1 max-h-32 overflow-y-auto">
+                    <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
                         {jobs.slice(0, 12).map((job: any) => (
-                            <div key={job.id} className="flex items-center gap-2 text-xs py-1">
-                                {job.status === "COMPLETED" && <CheckCircle2 className="w-3 h-3 text-emerald-400 flex-shrink-0" />}
-                                {job.status === "PROCESSING" && <Loader2 className="w-3 h-3 text-violet-400 animate-spin flex-shrink-0" />}
-                                {job.status === "QUEUED" && <Clock className="w-3 h-3 text-gray-500 flex-shrink-0" />}
-                                {job.status === "FAILED" && <XCircle className="w-3 h-3 text-red-400 flex-shrink-0" />}
-                                <span className={cn("truncate flex-1",
-                                    job.status === "COMPLETED" ? "text-gray-400" :
-                                        job.status === "FAILED" ? "text-red-400" :
-                                            job.status === "PROCESSING" ? "text-violet-300" : "text-gray-500"
-                                )}>
-                                    {job.jobType === "ref_image" ? "🖼️" : "🎬"} {job.prompt?.slice(0, 60) || "Job"}...
-                                </span>
-                                <span className={cn("text-[10px] flex-shrink-0",
-                                    job.status === "COMPLETED" ? "text-emerald-500" :
-                                        job.status === "FAILED" ? "text-red-500" :
-                                            job.status === "PROCESSING" ? "text-violet-500" : "text-gray-600"
-                                )}>
-                                    {job.status}
-                                </span>
+                            <div key={job.id} className="py-1.5 border-b border-gray-800/40 last:border-0">
+                                <div className="flex items-start gap-2 text-xs">
+                                    {job.status === "COMPLETED" && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 mt-0.5 flex-shrink-0" />}
+                                    {job.status === "PROCESSING" && <Loader2 className="w-3.5 h-3.5 text-violet-400 animate-spin mt-0.5 flex-shrink-0" />}
+                                    {job.status === "QUEUED" && <Clock className="w-3.5 h-3.5 text-gray-500 mt-0.5 flex-shrink-0" />}
+                                    {job.status === "FAILED" && <XCircle className="w-3.5 h-3.5 text-red-400 mt-0.5 flex-shrink-0" />}
+                                    
+                                    <span className={cn("flex-1 text-left break-words pr-2",
+                                        job.status === "COMPLETED" ? "text-gray-400" :
+                                            job.status === "FAILED" ? "text-red-400 font-medium" :
+                                                job.status === "PROCESSING" ? "text-violet-300" : "text-gray-500"
+                                    )} title={job.prompt || ""}>
+                                        {job.jobType === "ref_image" ? "🖼️" : "🎬"} {job.prompt || "Job"}
+                                    </span>
+                                    
+                                    <span className={cn("text-[10px] font-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded flex-shrink-0",
+                                        job.status === "COMPLETED" ? "text-emerald-500 bg-emerald-950/20" :
+                                            job.status === "FAILED" ? "text-red-500 bg-red-955/20" :
+                                                job.status === "PROCESSING" ? "text-violet-500 bg-violet-955/20 animate-pulse" : "text-gray-650 bg-gray-950/20"
+                                    )}>
+                                        {job.status}
+                                    </span>
+                                </div>
+                                {job.status === "FAILED" && job.errorMsg && (
+                                    <div className="pl-5 pr-2 mt-1 text-[10px] text-red-400/90 font-mono whitespace-pre-wrap bg-red-950/30 p-2 rounded-lg border border-red-900/30 shadow-inner">
+                                        {job.errorMsg}
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>
@@ -437,7 +460,10 @@ function PipelineActions({ doc, onRefresh }: { doc: any; onRefresh: () => void }
     return (
         <div className="flex items-center gap-2">
             {doc.status === "DRAFT" && (
-                <button onClick={() => runAction("generate-story")} disabled={running}
+                <button onClick={() => {
+                    if (!confirm("This will generate a new script and scene plan for this Documentary project. This does NOT affect your Animated Film Studio projects. Proceed?")) return;
+                    runAction("generate-story");
+                }} disabled={running}
                     className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-50 transition-colors">
                     {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
                     Generate Story

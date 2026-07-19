@@ -241,6 +241,8 @@ export default function KidsStoryBuilderPage() {
     const [characters, setCharacters] = useState<Character[]>([]);
     const [libraryCharacters, setLibraryCharacters] = useState<Character[]>([]);
     const [pickingAvatarCharId, setPickingAvatarCharId] = useState<string | null>(null);
+    const [mappingTarget, setMappingTarget] = useState<Record<string, string>>({});
+
     const [r2Avatars, setR2Avatars] = useState<{ key: string; size: number }[]>([]);
     const [loadingR2Avatars, setLoadingR2Avatars] = useState(false);
 
@@ -1046,6 +1048,7 @@ export default function KidsStoryBuilderPage() {
                 id: `shot-${idx}-${Date.now()}`,
                 primaryCharacter: s.primaryCharacter || "Narrator",
                 visualPrompt: s.visualPrompt || "Cartoon scene background",
+                motionPrompt: s.motionPrompt || "",
                 duration: Math.max(3, Math.round(shotDur)),
                 chainFromPrevious: idx === 0 ? false : (s.chainFromPrevious ?? false),
                 jobStatus: "IDLE"
@@ -1079,6 +1082,35 @@ export default function KidsStoryBuilderPage() {
         }
     };
 
+    const handleApplyCharacterMapping = (unmappedName: string) => {
+        const replacementName = mappingTarget[unmappedName];
+        if (!replacementName) return;
+
+        const charMatch = characters.find(c => c.name === replacementName);
+        const voiceId = charMatch?.ttsVoiceId || "en-US-AnaNeural-Female";
+        const provider = charMatch?.ttsProvider || "edge_tts";
+
+        setScenes(prev => prev.map(s => {
+            if (s.character === unmappedName) {
+                return {
+                    ...s,
+                    character: replacementName,
+                    voice: voiceId,
+                    ttsVoiceId: voiceId,
+                    ttsProvider: provider
+                };
+            }
+            return s;
+        }));
+
+        setMappingTarget(prev => {
+            const next = { ...prev };
+            delete next[unmappedName];
+            return next;
+        });
+    };
+
+
     // Play Voice Preview
     const playVoicePreview = async (scene: Scene) => {
         if (playingAudioId === scene.id && previewAudio) {
@@ -1093,9 +1125,7 @@ export default function KidsStoryBuilderPage() {
         try {
             let audioUrl = "";
             if (scene.narrationPath) {
-                const signedRes = await fetch(`/api/storage/signed?key=${scene.narrationPath}`);
-                const signedData = await signedRes.json();
-                audioUrl = signedData.url;
+                audioUrl = `/api/storage/signed?key=${scene.narrationPath}`;
             } else {
                 const res = await fetch("/api/animated/voice/preview", {
                     method: "POST",
@@ -1642,9 +1672,7 @@ export default function KidsStoryBuilderPage() {
             if (!res.ok) throw new Error(data.details || data.error || "Compilation failed");
 
             if (data.videoUrl) {
-                const signedRes = await fetch(`/api/storage/signed?key=${data.videoUrl}`);
-                const signedData = await signedRes.json();
-                setCompiledVideoUrl(signedData.url || data.videoUrl);
+                setCompiledVideoUrl(`/api/storage/signed?key=${data.videoUrl}`);
             }
         } catch (err: any) {
             setError(err.message || "Failed to compile merged video.");
@@ -2063,7 +2091,15 @@ export default function KidsStoryBuilderPage() {
                                         <div className="flex gap-3">
                                             <div className="w-16 h-16 bg-black/40 border border-gray-850 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center relative group/avatar cursor-pointer">
                                                 {char.imagePath ? (
-                                                    <img src={`/api/storage/signed?key=${char.imagePath}`} alt="" className="w-full h-full object-cover" />
+                                                    <>
+                                                        <img src={`/api/storage/signed?key=${char.imagePath}`} alt="" className="w-full h-full object-cover" />
+                                                        <a href={`/api/storage/signed?key=${char.imagePath}`} download={`${char.name}_avatar.webp`} target="_blank" rel="noreferrer"
+                                                            title="Download avatar image"
+                                                            onClick={e => e.stopPropagation()}
+                                                            className="absolute top-1 right-1 p-0.5 bg-black/70 hover:bg-black/90 border border-gray-800 hover:border-gray-700 text-gray-400 hover:text-white rounded transition-all z-10">
+                                                            <Download className="w-2.5 h-2.5" />
+                                                        </a>
+                                                    </>
                                                 ) : char.jobStatus === "QUEUED" || char.jobStatus === "PROCESSING" ? (
                                                     <Loader2 className="w-5 h-5 animate-spin text-violet-500" />
                                                 ) : (
@@ -2280,6 +2316,48 @@ export default function KidsStoryBuilderPage() {
                     {/* STEP 4: Storyboard Timeline & Editor */}
                     {currentStep === 4 && (
                         <div className="space-y-4">
+                            {/* AI Character Mapping Alert */}
+                            {(() => {
+                                const unmapped = Array.from(
+                                    new Set(
+                                        scenes
+                                            .filter(s => s.type === "dialogue" && s.character !== "Narrator" && !characters.some(c => c.name === s.character))
+                                            .map(s => s.character)
+                                    )
+                                );
+                                if (unmapped.length === 0) return null;
+                                return (
+                                    <div className="space-y-2 p-4 bg-amber-950/20 border border-amber-900/30 rounded-2xl text-xs">
+                                        <h4 className="font-bold text-amber-400 flex items-center gap-1.5">
+                                            <span>⚠️ AI-Suggested Speakers Missing from Cast</span>
+                                        </h4>
+                                        <p className="text-gray-400 mt-1">The following speakers suggested by the AI story generator are not in your project cast roster. Map them to your cast members so they speak with the correct voice:</p>
+                                        <div className="space-y-2 mt-3">
+                                            {unmapped.map(name => (
+                                                <div key={name} className="flex items-center gap-3 p-2 bg-black/25 rounded-xl max-w-lg">
+                                                    <span className="font-bold font-mono text-amber-200 min-w-[80px] truncate">{name}</span>
+                                                    <span className="text-gray-500">→</span>
+                                                    <select 
+                                                        value={mappingTarget[name] || ""} 
+                                                        onChange={e => setMappingTarget(prev => ({ ...prev, [name]: e.target.value }))}
+                                                        className="bg-gray-850 border border-gray-750 rounded-lg px-2 py-1 text-xs text-white focus:outline-none">
+                                                        <option value="">Select replacement...</option>
+                                                        <option value="Narrator">Narrator</option>
+                                                        {characters.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                                    </select>
+                                                    <button 
+                                                        onClick={() => handleApplyCharacterMapping(name)}
+                                                        disabled={!mappingTarget[name]}
+                                                        className="px-2.5 py-1 bg-violet-600 hover:bg-violet-500 text-white rounded-lg font-bold text-[10px] uppercase tracking-wider disabled:opacity-50 transition-all cursor-pointer">
+                                                        Map
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
                             <div className="flex items-center justify-between border-b border-gray-800 pb-2">
                                 <h3 className="text-sm font-bold text-white uppercase tracking-wider">Timeline Scenes List</h3>
                                 <div className="flex items-center gap-2">
@@ -2440,6 +2518,11 @@ export default function KidsStoryBuilderPage() {
                                                                 className="w-full bg-gray-850 border border-gray-750 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-violet-500">
                                                                 <option value="Narrator" className="bg-gray-900 text-white">Narrator</option>
                                                                 {characters.map(c => <option key={c.id} value={c.name} className="bg-gray-900 text-white">{c.name}</option>)}
+                                                                {scene.character !== "Narrator" && !characters.some(c => c.name === scene.character) && (
+                                                                    <option value={scene.character} className="bg-red-950 text-red-300 font-bold">
+                                                                        ⚠️ {scene.character} (Not in Cast)
+                                                                    </option>
+                                                                )}
                                                             </select>
                                                         </div>
                                                         <div>
@@ -2496,11 +2579,21 @@ export default function KidsStoryBuilderPage() {
                                                                 })()}
                                                                 {/* Audio preview button */}
                                                                 {scene.narrationPath && (
-                                                                    <button onClick={() => playVoicePreview(scene)}
-                                                                        className={cn("p-1.5 rounded-lg border transition-all self-start",
-                                                                            playingAudioId === scene.id ? "bg-violet-500/10 border-violet-500/30 text-violet-400" : "bg-gray-800 border-gray-750 text-gray-400 hover:text-white")}>
-                                                                        {playingAudioId === scene.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Volume2 className="w-3.5 h-3.5" />}
-                                                                    </button>
+                                                                    <div className="flex gap-1.5 items-center mt-1">
+                                                                        <button onClick={() => playVoicePreview(scene)}
+                                                                            className={cn("p-1.5 rounded-lg border transition-all",
+                                                                                playingAudioId === scene.id ? "bg-violet-500/10 border-violet-500/30 text-violet-400" : "bg-gray-800 border-gray-750 text-gray-400 hover:text-white")}>
+                                                                            {playingAudioId === scene.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Volume2 className="w-3.5 h-3.5" />}
+                                                                        </button>
+                                                                        <button onClick={() => {
+                                                                            if (confirm("Are you sure you want to delete this scene's generated audio? This will let you generate it again.")) {
+                                                                                updateScene(scene.id, { narrationPath: undefined, voiceStatus: "IDLE" });
+                                                                            }
+                                                                        }} title="Delete generated audio"
+                                                                            className="p-1.5 rounded-lg border border-red-900/30 text-red-400 hover:text-red-300 bg-red-950/20 hover:bg-red-950/40 transition-all cursor-pointer">
+                                                                            <Trash className="w-3.5 h-3.5" />
+                                                                        </button>
+                                                                    </div>
                                                                 )}
                                                             </div>
                                                         </div>

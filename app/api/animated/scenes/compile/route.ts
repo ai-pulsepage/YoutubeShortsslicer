@@ -166,9 +166,9 @@ export async function POST(req: NextRequest) {
         fs.writeFileSync(concatTxtPath, concatContent);
 
         const mergedVideoPath = path.join(tempDir, "merged.mp4");
-        console.log(`[Compile] Merging ${sceneFinalVideos.length} scene videos...`);
+        console.log(`[Compile] Merging ${sceneFinalVideos.length} scene videos into final output (re-encoding for compatibility)...`);
         execSync(
-            `ffmpeg -f concat -safe 0 -i "${concatTxtPath}" -c copy "${mergedVideoPath}" -y`,
+            `ffmpeg -f concat -safe 0 -i "${concatTxtPath}" -c:v libx264 -preset fast -crf 22 -c:a aac -b:a 128k "${mergedVideoPath}" -y`,
             { encoding: "utf8" }
         );
 

@@ -184,7 +184,7 @@ export async function POST(req: NextRequest) {
                 if (gitToken) {
                     defaultUrl = `https://${gitToken}@github.com/ai-pulsepage/YoutubeShortsslicer.git`;
                 }
-                activeDockerArgs = `bash -c "(which git && which ffmpeg) || (apt-get update && apt-get install -y git ffmpeg) && if [ ! -f /workspace/YoutubeShortsslicer/worker.py ]; then git clone ${defaultUrl} /workspace/slicer_temp && mkdir -p /workspace/YoutubeShortsslicer && cp -r /workspace/slicer_temp/runpod-worker/* /workspace/YoutubeShortsslicer/ && rm -rf /workspace/slicer_temp; fi && cd /workspace/YoutubeShortsslicer && pip install -r requirements.txt && python3 worker.py"`;
+                activeDockerArgs = `bash -c "(which git && which ffmpeg) || (apt-get update && apt-get install -y git ffmpeg) && if [ ! -f /workspace/YoutubeShortsslicer/worker.py ]; then git clone ${defaultUrl} /workspace/slicer_temp && mkdir -p /workspace/YoutubeShortsslicer && cp -r /workspace/slicer_temp/runpod-worker/* /workspace/YoutubeShortsslicer/ && rm -rf /workspace/slicer_temp; fi && cd /workspace/YoutubeShortsslicer && pip install -r requirements.txt && export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True && python3 worker.py"`;
             }
 
             // Build environment variables array to inject database and credentials
@@ -202,7 +202,8 @@ export async function POST(req: NextRequest) {
                 { key: "R2_ENDPOINT", value: process.env.R2_ENDPOINT || "" },
                 { key: "DEEPSEEK_API_KEY", value: process.env.DEEPSEEK_API_KEY || "" },
                 { key: "NEXTAUTH_SECRET", value: process.env.NEXTAUTH_SECRET || "" },
-                { key: "YOUTUBEVIDEOS", value: "{{ RUNPOD_SECRET_YOUTUBEVIDEOS }}" }
+                { key: "YOUTUBEVIDEOS", value: "{{ RUNPOD_SECRET_YOUTUBEVIDEOS }}" },
+                { key: "PYTORCH_CUDA_ALLOC_CONF", value: "expandable_segments:True" }
             ].filter(env => {
                 if (!env.value) return false;
                 // Avoid passing internal URLs that cannot resolve on RunPod

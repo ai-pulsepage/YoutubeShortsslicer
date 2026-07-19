@@ -10,6 +10,8 @@ import {
     Plus,
     ExternalLink,
     Sparkles,
+    Video,
+    Wand2,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -120,16 +122,22 @@ export default async function DashboardPage() {
                 />
             </div>
 
-            {/* Quick Actions */}
             <div>
                 <h2 className="text-lg font-semibold text-white mb-4">Quick Actions</h2>
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-4">
                     <QuickAction
                         href="/dashboard/library"
                         icon={<Upload className="w-6 h-6" />}
                         label="Add Video"
                         description="Import a new video to process"
                         gradient="from-violet-500 to-purple-600"
+                    />
+                    <QuickAction
+                        href="/dashboard/documentary"
+                        icon={<Video className="w-6 h-6" />}
+                        label="Movie Factory"
+                        description="AI article research to movie shorts"
+                        gradient="from-amber-500 to-orange-600"
                     />
                     <QuickAction
                         href="/dashboard/ugc"
@@ -139,10 +147,17 @@ export default async function DashboardPage() {
                         gradient="from-pink-500 to-rose-600"
                     />
                     <QuickAction
+                        href="/dashboard/clipmaker"
+                        icon={<Wand2 className="w-6 h-6" />}
+                        label="ClipMaker"
+                        description="Generate game trailers from text"
+                        gradient="from-yellow-500 to-amber-600"
+                    />
+                    <QuickAction
                         href="/dashboard/animated"
                         icon={<Film className="w-6 h-6" />}
                         label="Animated Shorts"
-                        description="Script to video automated synthesis"
+                        description="CGI Pixar-style script to video"
                         gradient="from-blue-500 to-indigo-600"
                     />
                     <QuickAction
