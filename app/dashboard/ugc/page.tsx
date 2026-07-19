@@ -104,6 +104,7 @@ export default function UGCStudioPage() {
     const [loadingJobs, setLoadingJobs] = useState(true);
     const [selectedAvatarId, setSelectedAvatarId] = useState("");
     const [selectedHookStyle, setSelectedHookStyle] = useState("TESTIMONIAL");
+    const [selectedLayoutType, setSelectedLayoutType] = useState("SPLIT");
     const [useCustomScript, setUseCustomScript] = useState(false);
     const [customScript, setCustomScript] = useState("");
     const [generatingVideo, setGeneratingVideo] = useState(false);
@@ -411,6 +412,7 @@ export default function UGCStudioPage() {
                     avatarId: selectedAvatarId,
                     productId: selectedCampaignId,
                     hookStyle: selectedHookStyle,
+                    layoutType: selectedLayoutType,
                     customScript: useCustomScript ? customScript : undefined
                 })
             });
@@ -423,6 +425,42 @@ export default function UGCStudioPage() {
             fetchJobs();
         } catch (err: any) {
             setError(err.message || "UGC Generation failed.");
+        } finally {
+            setGeneratingVideo(false);
+        }
+    };
+
+    const handleGenerateUGCBatch = async (hookStyles: string[]) => {
+        if (!selectedAvatarId || !selectedCampaignId) return;
+        setGeneratingVideo(true);
+        setError("");
+        
+        try {
+            const results = await Promise.all(
+                hookStyles.map(async (style) => {
+                    const res = await fetch("/api/ugc/generate", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            avatarId: selectedAvatarId,
+                            productId: selectedCampaignId,
+                            hookStyle: style,
+                            layoutType: selectedLayoutType,
+                        })
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || `Failed to queue ${style}`);
+                    return data;
+                })
+            );
+            
+            if (results.length > 0) {
+                setActiveJobId(results[0].jobId);
+            }
+            fetchJobs();
+            alert(`Successfully queued batch of ${results.length} UGC videos for this week's ads!`);
+        } catch (err: any) {
+            setError(err.message || "Failed to generate batch of videos.");
         } finally {
             setGeneratingVideo(false);
         }
@@ -815,6 +853,47 @@ export default function UGCStudioPage() {
                                                         <div className="text-[9px] text-gray-550 font-mono mt-0.5">{h.desc}</div>
                                                     </button>
                                                 ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Visual Template Layout */}
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Visual Template Layout</label>
+                                            <div className="grid grid-cols-3 gap-2">
+                                                {[
+                                                    { value: "SPLIT", label: "Split Stacked", desc: "Top/Bottom Stack" },
+                                                    { value: "GREEN_SCREEN", label: "Green Screen", desc: "Chroma Key Background" },
+                                                    { value: "PIP", label: "PiP Bubble", desc: "Circular Video Bubble" },
+                                                ].map(l => (
+                                                    <button key={l.value} onClick={() => setSelectedLayoutType(l.value)}
+                                                        className={cn("p-2.5 rounded-xl border text-left transition-all cursor-pointer font-sans",
+                                                            selectedLayoutType === l.value 
+                                                                ? "border-violet-500 bg-violet-500/[0.04] ring-1 ring-violet-500/35" 
+                                                                : "border-gray-850 hover:border-gray-800 bg-gray-900/20"
+                                                        )}>
+                                                        <div className="text-xs font-bold text-white">{l.label}</div>
+                                                        <div className="text-[9px] text-gray-550 font-mono mt-0.5">{l.desc}</div>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Batch Ad Pack Templates */}
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Batch Ads Templates (Week of Ads)</label>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                <button onClick={() => handleGenerateUGCBatch(['TESTIMONIAL', 'PROBLEM_SOLUTION', 'COMPARISON'])}
+                                                    disabled={!selectedAvatarId || generatingVideo}
+                                                    className="p-3 bg-gray-900 border border-gray-850 hover:border-gray-700 rounded-2xl text-left transition-all cursor-pointer font-sans disabled:opacity-40">
+                                                    <div className="text-xs font-bold text-violet-400 flex items-center gap-1.5"><Sparkles className="w-3 h-3 text-violet-400" /> TikTok Ads Pack (3x)</div>
+                                                    <div className="text-[9px] text-gray-500 mt-1 leading-normal">Testimonial, Problem/Solution, and Comparison hooks for split-test ads.</div>
+                                                </button>
+                                                <button onClick={() => handleGenerateUGCBatch(['TESTIMONIAL', 'PROBLEM_SOLUTION', 'UNBOXING', 'COMPARISON', 'TUTORIAL'])}
+                                                    disabled={!selectedAvatarId || generatingVideo}
+                                                    className="p-3 bg-gray-900 border border-gray-850 hover:border-gray-700 rounded-2xl text-left transition-all cursor-pointer font-sans disabled:opacity-40">
+                                                    <div className="text-xs font-bold text-violet-400 flex items-center gap-1.5"><Sparkles className="w-3 h-3 text-violet-400" /> Omnichannel Campaign (5x)</div>
+                                                    <div className="text-[9px] text-gray-500 mt-1 leading-normal">Generates a whole week of unique hooks to find your winning visual angles.</div>
+                                                </button>
                                             </div>
                                         </div>
 
