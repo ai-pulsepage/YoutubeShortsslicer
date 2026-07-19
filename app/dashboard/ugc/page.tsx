@@ -700,6 +700,75 @@ export default function UGCStudioPage() {
                                 </div>
                             </div>
 
+                            {/* Ad Templates & Presets Gallery */}
+                            <div className="bg-gray-950 border border-gray-850 p-6 rounded-3xl space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                                            <Sparkles className="w-4 h-4 text-violet-400" /> Ad Templates & Weekly Preset Packs
+                                        </h3>
+                                        <p className="text-xs text-gray-500 font-sans mt-0.5">Select a pre-built video template formula to batch generate ads for your avatars.</p>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    <div className="bg-gray-900/60 border border-gray-850 p-4 rounded-2xl space-y-2 font-sans">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[9px] font-bold px-2 py-0.5 bg-violet-600/10 border border-violet-500/20 text-violet-400 rounded">3x Video Batch</span>
+                                            <span className="text-[9px] text-gray-500 font-mono">Split Stacked</span>
+                                        </div>
+                                        <h4 className="text-xs font-bold text-white">TikTok Ads Pack</h4>
+                                        <p className="text-[10px] text-gray-500 leading-normal">Generates Testimonial, Problem/Solution, and Comparison hooks for split-testing vertical ads.</p>
+                                        <button onClick={() => {
+                                            if (products.length === 0) {
+                                                alert("Please paste a product URL above to create your first campaign!");
+                                                return;
+                                            }
+                                            setSelectedCampaignId(products[0].id);
+                                        }} className="w-full py-1.5 bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 font-bold text-[10px] rounded-xl border border-violet-500/20 transition-all cursor-pointer">
+                                            Use Template
+                                        </button>
+                                    </div>
+
+                                    <div className="bg-gray-900/60 border border-gray-850 p-4 rounded-2xl space-y-2 font-sans">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[9px] font-bold px-2 py-0.5 bg-emerald-600/10 border border-emerald-500/20 text-emerald-400 rounded">5x Video Batch</span>
+                                            <span className="text-[9px] text-gray-500 font-mono">Multi-Layout</span>
+                                        </div>
+                                        <h4 className="text-xs font-bold text-white">Omnichannel Launch Pack</h4>
+                                        <p className="text-[10px] text-gray-500 leading-normal">Generates a whole week of unique hooks (Unboxing, Testimonial, Tutorial, Comparison, Problem/Solution).</p>
+                                        <button onClick={() => {
+                                            if (products.length === 0) {
+                                                alert("Please paste a product URL above to create your first campaign!");
+                                                return;
+                                            }
+                                            setSelectedCampaignId(products[0].id);
+                                        }} className="w-full py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 font-bold text-[10px] rounded-xl border border-emerald-500/20 transition-all cursor-pointer">
+                                            Use Template
+                                        </button>
+                                    </div>
+
+                                    <div className="bg-gray-900/60 border border-gray-850 p-4 rounded-2xl space-y-2 font-sans">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[9px] font-bold px-2 py-0.5 bg-cyan-600/10 border border-cyan-500/20 text-cyan-400 rounded">Single Video</span>
+                                            <span className="text-[9px] text-gray-500 font-mono">Green Screen</span>
+                                        </div>
+                                        <h4 className="text-xs font-bold text-white">Chroma Key Review</h4>
+                                        <p className="text-[10px] text-gray-500 leading-normal">Removes the avatar's background and overlays them over live product photos or videos.</p>
+                                        <button onClick={() => {
+                                            if (products.length === 0) {
+                                                alert("Please paste a product URL above to create your first campaign!");
+                                                return;
+                                            }
+                                            setSelectedLayoutType("GREEN_SCREEN");
+                                            setSelectedCampaignId(products[0].id);
+                                        }} className="w-full py-1.5 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 font-bold text-[10px] rounded-xl border border-cyan-500/20 transition-all cursor-pointer">
+                                            Use Template
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
                             {/* Campaigns Directory Grid */}
                             <div className="bg-gray-950 border border-gray-850 p-6 rounded-3xl space-y-4">
                                 <h3 className="text-sm font-bold text-white uppercase tracking-wider">Active Campaigns</h3>

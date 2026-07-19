@@ -255,6 +255,7 @@ The JSON structure for each scene must follow this schema:
     "voice": "en-US-AnaNeural-Female" | "en-US-ChristopherNeural-Male" | "zh-CN-XiaoyiNeural-Female" | "en-US-GuyNeural-Male" | "en-US-AriaNeural-Female",
     "text": "The original polished dialogue spoken${useMusicals ? " or song lyrics sung" : ""} in this scene.",
     "visualPrompt": "Full director's shot brief starting with style prefix. Example: \\"${stylePrefix} [characterName], [brief physical description], [specific dynamic action filling the shot duration], [camera angle], [setting/background detail]\\".",
+    "motionPrompt": "Dynamic action and motion description for video generation (e.g. \\"[characterName] smiles warmly, waving and taking a step forward while looking at the camera\\"). Keep under 25 words.",
     "sunoStylePrompt": "Suno style suggestion (only for song types, empty string otherwise)"
   }
 ]
@@ -328,6 +329,7 @@ ${ttsWritingGuide}`;
                 voice: s.voice || "en-US-GuyNeural-Male",
                 text: s.text || "",
                 visualPrompt: s.visualPrompt || "Cartoon style visual background",
+                motionPrompt: s.motionPrompt || s.motion || `${s.character || 'Character'} smiles and looks at the camera while moving naturally in the scene`,
                 sunoStylePrompt: s.sunoStylePrompt || ""
             }));
             return NextResponse.json({ scenes: mappedScenes });

@@ -747,7 +747,7 @@ export default function KidsStoryBuilderPage() {
                             id: `shot-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 9)}-default`,
                             primaryCharacter: s.character || "Leo",
                             visualPrompt: s.visualPrompt || "Cartoon style scenery background",
-                            motionPrompt: "",
+                            motionPrompt: s.motionPrompt || `${s.character || "Character"} smiles and looks at the camera while moving naturally in the scene`,
                             duration: defaultShotDuration,
                             jobStatus: "IDLE"
                         }
