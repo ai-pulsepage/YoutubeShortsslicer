@@ -903,7 +903,11 @@ def azure_tts_v2(text: str, voice_name: str, voice_file: str) -> Union[SubMaker,
                 speech_synthesizer_word_boundary_cb
             )
 
-            result = speech_synthesizer.speak_text_async(text).get()
+            if text.strip().startswith("<speak"):
+                result = speech_synthesizer.speak_ssml_async(text).get()
+            else:
+                result = speech_synthesizer.speak_text_async(text).get()
+
             if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
                 logger.success(f"azure v2 speech synthesis succeeded: {voice_file}")
                 return sub_maker

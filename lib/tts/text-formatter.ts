@@ -174,8 +174,14 @@ export function applyStructuralMarkup(text: string, engine: TtsProvider, voice?:
     // — we don't duplicate that here, it's handled in the generate route.
 
     // Edge TTS: wrap in SSML <speak> with prosody for any [emotion] markers
+    // ONLY if the voice is a premium Azure V2 voice (ends with -V2) that uses the SDK speak_ssml_async.
     if (engine === "edge_tts" && voice) {
-        return wrapEdgeTtsSsml(text, voice);
+        if (voice.endsWith("-V2")) {
+            return wrapEdgeTtsSsml(text, voice);
+        } else {
+            // Strip inline [emotion] tags for normal edge_tts voices
+            return text.replace(EDGE_EMOTION_REGEX, "").replace(/\s{2,}/g, " ").trim();
+        }
     }
 
     // Gemini, Dia: clean text is preferred.
