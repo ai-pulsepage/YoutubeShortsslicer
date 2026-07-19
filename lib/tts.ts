@@ -96,6 +96,13 @@ export async function generateVoiceover(options: VoiceoverOptions): Promise<Buff
         }
 
         case "xtts": {
+            if (!speakerWav || !speakerWav.trim()) {
+                console.warn("[TTS] XTTS requested but no speakerWav sample provided. Falling back to edge_tts/elevenlabs...");
+                if (process.env.ELEVENLABS_API_KEY) {
+                    return generateVoiceover({ ...options, engine: "elevenlabs", voiceId: voiceId || "21m00Tcm4TlvDq8ikWAM" });
+                }
+                return generateVoiceover({ ...options, engine: "edge_tts", voiceId: voiceId || "en-US-AnaNeural" });
+            }
             // XTTS doesn't support SSML — generate per-sentence and stitch
             const segments = splitForXtts(text, narratorStyle);
 

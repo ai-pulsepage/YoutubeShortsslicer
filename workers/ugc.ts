@@ -41,16 +41,18 @@ async function generateScriptWithDeepSeek(job: any): Promise<string> {
         styleInstruction = `Focus on hook style: ${hookStyle}. Keep it highly engaging and natural.`;
     }
 
-    const systemPrompt = `You are a viral short-form content creator. Write a short, highly engaging 30-45 second video script for the following product:
-Name: ${job.product.name}
-Description: ${job.product.description || "N/A"}
-Price: ${job.product.price || "N/A"}
-Avatar persona: ${job.avatar.persona || "A generic presenter"}
+    const systemPrompt = `You are an elite viral short-form content creator and UGC copywriter. Write a 30-45 second video script specifically selling the following item:
+Product Name: "${job.product.name}"
+Product Brand: "${job.product.brand || "Brand"}"
+Product Details & Features: "${job.product.description || job.product.name}"
+Price: ${job.product.price || "great deal"}
+Presenter Persona: ${job.avatar.persona || "Friendly enthusiast"}
 
-Style Guidelines:
-${styleInstruction}
-
-The script must be optimized for a TikTok UGC video. Output ONLY the words spoken by the presenter. Do NOT include scene directions, sound effects, timestamps, or speaker labels.`;
+CRITICAL SCRIPTING RULES:
+1. Ground every sentence around "${job.product.name}". Highlight its unique features, user problem, and real-world value.
+2. NEVER write a generic story about Amazon or generic shopping unless it directly explains why THIS SPECIFIC PRODUCT (${job.product.name}) is awesome.
+3. ${styleInstruction}
+4. Output ONLY the words spoken by the presenter. Do NOT include scene directions, sound effects, timestamps, or speaker labels.`;
 
     if (!apiKey) {
         console.warn("[UGC Worker] DeepSeek API Key not configured. Using fallback script.");
@@ -68,7 +70,7 @@ The script must be optimized for a TikTok UGC video. Output ONLY the words spoke
                 model: "deepseek-chat",
                 messages: [
                     { role: "system", content: systemPrompt },
-                    { role: "user", content: `Product: ${job.product.name}. Describe it using style: ${job.hookStyle}.` }
+                    { role: "user", content: `Write an authentic UGC script about "${job.product.name}". Focus on its benefits and why the viewer needs it now. Hook style: ${job.hookStyle}.` }
                 ],
                 temperature: 0.8,
                 max_tokens: 500,

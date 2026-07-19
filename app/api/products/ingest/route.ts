@@ -25,15 +25,31 @@ export async function POST(req: Request) {
         // Extract title
         let name = $('meta[property="og:title"]').attr("content") || 
                    $('meta[name="twitter:title"]').attr("content") || 
+                   $("#productTitle").text().trim() ||
+                   $("h1").first().text().trim() ||
                    $("title").text() || 
                    "Scraped Product";
-        name = name.trim();
+        name = name.trim().replace(/^Amazon\.com\s*:\s*/i, "").replace(/\s*:\s*Amazon\.com.*$/i, "").replace(/\s*\|\s*Amazon.*$/i, "");
+
+        // If title is still generic, parse the URL path slug
+        if (name === "Scraped Product" || name.toLowerCase().includes("amazon") || name.length < 5) {
+            try {
+                const urlObj = new URL(url);
+                const pathParts = urlObj.pathname.split("/").filter(p => p.length > 0 && p !== "dp" && p !== "gp" && p !== "product" && !p.startsWith("B0"));
+                if (pathParts.length > 0) {
+                    const slug = decodeURIComponent(pathParts[0]).replace(/[-_]/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+                    if (slug.length > 3) name = slug;
+                }
+            } catch {}
+        }
 
         // Extract description
         let description = $('meta[property="og:description"]').attr("content") || 
                           $('meta[name="description"]').attr("content") || 
+                          $("#feature-bullets").text().trim() ||
+                          $(".product-description").text().trim() ||
                           "";
-        description = description.trim();
+        description = description.replace(/\s+/g, " ").trim();
 
         // Extract image
         const imageUrls: string[] = [];

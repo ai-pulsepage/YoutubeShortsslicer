@@ -49,7 +49,7 @@ const topNavItems = [
 
 const aiStudioItems = [
     { label: "Movie Factory", href: "/dashboard/documentary", icon: Video },
-    { label: "Video Slicer", href: "/dashboard/clipper", icon: Scissors },
+    { label: "Video Slicer", href: "/dashboard/clipmaker", icon: Scissors },
     { label: "ClipMaker", href: "/dashboard/clipmaker", icon: Wand2 },
     { label: "Podcasts", href: "/dashboard/podcasts", icon: Headphones },
     { label: "UGC Studio", href: "/dashboard/ugc", icon: Sparkles },
