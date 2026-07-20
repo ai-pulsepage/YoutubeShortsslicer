@@ -413,7 +413,7 @@ def get_ltx_pipeline():
     if _ltx_pipe is None:
         try:
             from diffusers import LTXImageToVideoPipeline
-            model_id = "Lightricks/LTX-Video-0.9.1-Diffusers"
+            model_id = "Lightricks/LTX-Video"
             print(f"🔄 Loading {model_id}...")
             _ltx_pipe = LTXImageToVideoPipeline.from_pretrained(
                 model_id,
