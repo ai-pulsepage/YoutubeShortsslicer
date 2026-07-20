@@ -435,8 +435,8 @@ export const ugcWorker = new Worker(
                         metadata: {
                             model: "ltx",
                             duration: Math.min(Math.ceil(duration), 15),
-                            width: 1280,
-                            height: 720,
+                            width: 768,
+                            height: 1280,
                             r2Key: ltxOutputR2Key,
                             sourceApp: "UGC Studio",
                             title: avatarName

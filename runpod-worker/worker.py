@@ -24,6 +24,7 @@ Environment Variables Required:
 import os
 # Force Hugging Face cache to live on the persistent storage drive
 os.environ["HF_HOME"] = "/workspace/hf_cache"
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 # Monkey patch torch.distributed.tensor for PyTorch 2.4.0 compatibility
 import sys
@@ -400,9 +401,15 @@ def unload_video_pipelines():
 
 def get_ltx_pipeline():
     """Lazy-load LTX-Video image-to-video pipeline."""
-    global _ltx_pipe
+    global _ltx_pipe, _wan_pipe
     unload_image_pipelines()
     unload_musicgen()
+    if _wan_pipe is not None:
+        print("🔄 Unloading Wan pipeline to free VRAM for LTX...")
+        del _wan_pipe
+        _wan_pipe = None
+        torch.cuda.empty_cache()
+
     if _ltx_pipe is None:
         try:
             from diffusers import LTXImageToVideoPipeline
@@ -415,19 +422,30 @@ def get_ltx_pipeline():
             )
             if torch.cuda.is_available():
                 _ltx_pipe.enable_model_cpu_offload()
+                if hasattr(_ltx_pipe, "vae"):
+                    try:
+                        _ltx_pipe.vae.enable_slicing()
+                        _ltx_pipe.vae.enable_tiling()
+                    except Exception:
+                        pass
             print(f"✅ {model_id} loaded")
         except Exception as err:
-            print(f"⚠️ LTX-Video pipeline fallback error: {err}")
+            print(f"⚠️ LTX-Video pipeline loading error: {err}")
             return get_wan_pipeline()
     return _ltx_pipe
 
 def get_wan_pipeline():
     """Lazy-load Wan2.2 image-to-video pipeline."""
-    global _wan_pipe
+    global _wan_pipe, _ltx_pipe
     
     # Free other loaded models to prevent VRAM overflow
     unload_image_pipelines()
     unload_musicgen()
+    if _ltx_pipe is not None:
+        print("🔄 Unloading LTX pipeline to free VRAM for Wan...")
+        del _ltx_pipe
+        _ltx_pipe = None
+        torch.cuda.empty_cache()
     
     if _wan_pipe is None:
         from diffusers import WanImageToVideoPipeline
@@ -454,18 +472,19 @@ def generate_video(
     prompt: str,
     reference_image_path: str,
     output_path: str,
-    num_frames: int = 81,  # ~3.4 seconds at 24fps
-    width: int = 1280,
-    height: int = 704,
+    num_frames: int = 49,  # Safe default ~2s at 24fps
+    width: int = 768,
+    height: int = 1280,
     model_name: str = "ltx",
 ):
     """Generate a video clip with LTX-Video or Wan2.2 image-to-video."""
     import gc
     from PIL import Image
 
-    # Dimensions divisible by 16
-    width = (width // 16) * 16
-    height = (height // 16) * 16
+    # Dimensions divisible by 16 and bounded safely for 24GB GPUs
+    width = min((width // 16) * 16, 768)
+    height = min((height // 16) * 16, 1280)
+    num_frames = min(num_frames, 49)
 
     if model_name.lower() == "ltx":
         pipe = get_ltx_pipeline()
