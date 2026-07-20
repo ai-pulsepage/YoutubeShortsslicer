@@ -471,14 +471,8 @@ export const ugcWorker = new Worker(
                 }
             }
 
-            // Fallback Animation Loop if neither Hedra nor RunPod LTX completed in time
             if (!fs.existsSync(talkingHeadLocalPath)) {
-                console.log("[UGC Worker] Running fallback zoompan motion animation...");
-                execSync(
-                    `ffmpeg -loop 1 -i "${avatarImagePath}" -i "${audioPath}" ` +
-                    `-vf "zoompan=z='min(zoom+0.0008,1.08)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=125:s=1080x1080" ` +
-                    `-c:v libx264 -preset fast -t ${duration} -pix_fmt yuv420p -c:a aac -shortest "${talkingHeadLocalPath}" -y`
-                );
+                throw new Error("LTX Video generation did not complete on GPU worker");
             }
 
             // Set state to compositing
