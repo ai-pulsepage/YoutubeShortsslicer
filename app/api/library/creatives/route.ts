@@ -113,3 +113,35 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: "Failed to aggregate creatives", details: err.message }, { status: 500 });
     }
 }
+
+export async function PATCH(req: Request) {
+    const session = await auth();
+    if (!session?.user?.id) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    try {
+        const { id, tab, status } = await req.json();
+        if (!id || !status) {
+            return NextResponse.json({ error: "id and status are required" }, { status: 400 });
+        }
+
+        const dbStatus = status === "COMPLETED" ? "APPROVED" : "DRAFT";
+
+        if (tab === "kids" || tab === "documentaries") {
+            await prisma.documentary.update({
+                where: { id, userId: session.user.id },
+                data: { status: dbStatus }
+            });
+        } else if (tab === "ugc") {
+            await prisma.uGCJob.update({
+                where: { id, userId: session.user.id },
+                data: { status: status === "COMPLETED" ? "DONE" : "FAILED" }
+            });
+        }
+
+        return NextResponse.json({ success: true });
+    } catch (err: any) {
+        return NextResponse.json({ error: "Failed to update status", details: err.message }, { status: 500 });
+    }
+}

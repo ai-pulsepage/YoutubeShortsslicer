@@ -643,25 +643,31 @@ function VideoRow({ video, onDelete }: { video: Video; onDelete: (id: string) =>
 }
 
 function CreativeCard({ tab, item }: { tab: string; item: any }) {
-    const router = useRouter();
     const [showPreview, setShowPreview] = useState(false);
     const videoUrl = item.finalVideoPath || item.outputUrl || item.storagePath;
-    const hasVideo = !!videoUrl;
+
+    const [statusState, setStatusState] = useState<string>(
+        item.status === "APPROVED" || item.status === "COMPLETED" || item.status === "DONE" || item.finalVideoPath ? "COMPLETED" : (item.status || "DRAFT")
+    );
 
     const handleClick = () => {
-        if (hasVideo) {
-            setShowPreview(true);
-            return;
-        }
-        if (tab === "kids") {
-            router.push(`/dashboard/animated?project=${item.id}`);
-        } else if (tab === "documentaries") {
-            router.push(`/dashboard/documentary/${item.id}`);
-        }
+        setShowPreview(true);
+    };
+
+    const handleToggleStatus = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        const newStatus = statusState === "COMPLETED" ? "DRAFT" : "COMPLETED";
+        setStatusState(newStatus);
+        try {
+            await fetch("/api/library/creatives", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id: item.id, tab, status: newStatus })
+            });
+        } catch {}
     };
 
     const isKids = tab === "kids";
-    const statusText = item.status === "APPROVED" || item.status === "COMPLETED" || item.status === "DONE" ? "COMPLETED" : (item.status || "DRAFT");
 
     return (
         <>
@@ -670,24 +676,25 @@ function CreativeCard({ tab, item }: { tab: string; item: any }) {
                 className="group bg-gray-900/50 border border-gray-800 rounded-2xl overflow-hidden hover:border-gray-700 transition-all duration-200 cursor-pointer"
             >
                 <div className="aspect-video bg-gray-800 flex items-center justify-center relative">
-                    {hasVideo ? (
-                        <div className="w-full h-full relative flex items-center justify-center bg-black/60">
-                            <Film className="w-10 h-10 text-gray-500 group-hover:scale-110 transition-transform" />
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Play className="w-10 h-10 text-white fill-white" />
-                            </div>
+                    <div className="w-full h-full relative flex items-center justify-center bg-black/60">
+                        <Film className="w-10 h-10 text-gray-500 group-hover:scale-110 transition-transform" />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Play className="w-10 h-10 text-white fill-white" />
                         </div>
-                    ) : (
-                        <Film className="w-10 h-10 text-gray-600 group-hover:scale-110 transition-transform" />
-                    )}
-                    <span className={cn(
-                        "absolute top-2 left-2 text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase border",
-                        statusText === "COMPLETED"
-                            ? "bg-emerald-600/20 text-emerald-400 border-emerald-500/20"
-                            : "bg-violet-600/20 text-violet-400 border-violet-500/20"
-                    )}>
-                        {statusText}
-                    </span>
+                    </div>
+
+                    <button 
+                        onClick={handleToggleStatus}
+                        title="Click to toggle status between DRAFT and COMPLETED"
+                        className={cn(
+                            "absolute top-2 left-2 text-[10px] font-semibold px-2.5 py-0.5 rounded-full uppercase border transition-all cursor-pointer hover:scale-105 z-10 font-mono",
+                            statusState === "COMPLETED"
+                                ? "bg-emerald-600/30 text-emerald-300 border-emerald-500/40 hover:bg-emerald-600/50"
+                                : "bg-violet-600/30 text-violet-300 border-violet-500/40 hover:bg-violet-600/50"
+                        )}
+                    >
+                        {statusState}
+                    </button>
                 </div>
                 <div className="p-4">
                     <h3 className="text-sm font-semibold text-white truncate mb-1">
