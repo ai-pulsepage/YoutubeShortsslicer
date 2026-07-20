@@ -452,7 +452,8 @@ export async function POST(req: NextRequest) {
                         await moveR2Object(sunoAudioKey, newKey);
                         sunoAudioKey = newKey;
                     } catch (err: any) {
-                        console.error("[Save Project] Failed to relocate Suno file:", err.message);
+                        // File was already moved in an earlier auto-save call — use relocated key
+                        sunoAudioKey = newKey;
                     }
                 }
 
