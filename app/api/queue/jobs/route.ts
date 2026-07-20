@@ -5,7 +5,7 @@ import { getRedis, CHANNELS } from "@/lib/documentary/redis-client";
 import IORedis from "ioredis";
 import { Queue } from "bullmq";
 
-const BULL_QUEUES = ["video-download", "transcription", "segmentation", "render"];
+const BULL_QUEUES = ["video-download", "transcription", "segmentation", "render", "ugc-generation"];
 
 export async function GET(req: NextRequest) {
     const session = await auth();
@@ -86,6 +86,28 @@ export async function GET(req: NextRequest) {
                     sourceApp: meta?.sourceApp || "Animated Shorts",
                     projectTitle: meta?.title || "Kids Story Project",
                     status: dbJob.status, // "QUEUED" or "PROCESSING"
+                });
+            }
+
+            // Query active UGC jobs from DB
+            const activeUgcJobs = await prisma.uGCJob.findMany({
+                where: {
+                    status: { in: ["PENDING", "GENERATING_VIDEO", "COMPOSITING"] }
+                },
+                include: { avatar: true, product: true },
+                orderBy: { createdAt: "desc" }
+            });
+
+            for (const ugcJob of activeUgcJobs) {
+                if (listJobs.some(j => j.id === ugcJob.id)) continue;
+                listJobs.push({
+                    id: ugcJob.id,
+                    type: "ugc_ad_video",
+                    prompt: ugcJob.script ? `Ad script: "${ugcJob.script.slice(0, 80)}..."` : `Ad for ${ugcJob.product?.name || "Product"}`,
+                    queueName: "ugc-generation",
+                    sourceApp: "UGC Studio",
+                    projectTitle: `Ad (${ugcJob.avatar?.name || "Avatar"} - ${ugcJob.product?.name || "Product"})`,
+                    status: ugcJob.status,
                 });
             }
         } catch (dbErr: any) {
