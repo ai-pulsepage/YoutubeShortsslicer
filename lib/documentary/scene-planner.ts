@@ -199,51 +199,35 @@ export async function planScenes(
  */
 function assignVerbatimNarration(plan: ScenePlan, script: StoryScript): void {
     const totalSegments = script.segments.length;
-    const totalScenes = plan.scenes.length;
+    if (totalSegments === 0) return;
 
-    if (totalScenes === 0 || totalSegments === 0) return;
-
-    console.log(`[ScenePlanner] Sequentially partitioning ${totalSegments} segments across ${totalScenes} scenes to prevent duplicates...`);
-
-    if (totalScenes >= totalSegments) {
-        // If there are more scenes than segments, assign one segment to each of the first N scenes.
-        // The remaining scenes get empty narration (pure visual/B-roll scenes).
-        for (let i = 0; i < totalScenes; i++) {
-            const scene = plan.scenes[i];
-            if (i < totalSegments) {
-                const seg = script.segments[i];
-                scene.narrationText = `[${seg.timestamp}] ${seg.narration}\n[VISUAL: ${seg.visualCue}]`;
-                scene.duration = Math.max(scene.duration || 10, 15);
-            } else {
-                scene.narrationText = "";
-                scene.duration = scene.duration || 10;
-            }
+    // Align plan scenes so there is a 1:1 mapping between script segments and scenes
+    // to guarantee no scene ever repeats narration text
+    if (plan.scenes.length !== totalSegments) {
+        console.log(`[ScenePlanner] Aligning scenes count (${plan.scenes.length} -> ${totalSegments}) to match script segments 1:1`);
+        const alignedScenes: PlannedScene[] = [];
+        for (let i = 0; i < totalSegments; i++) {
+            const existingScene = plan.scenes[i] || plan.scenes[i % plan.scenes.length];
+            const seg = script.segments[i];
+            alignedScenes.push({
+                ...existingScene,
+                title: existingScene?.title || `Scene ${i + 1}`,
+                narrationText: `${seg.narration}\n[VISUAL: ${seg.visualCue}]`,
+                duration: 15,
+                searchQueries: existingScene?.searchQueries || []
+            });
         }
+        plan.scenes = alignedScenes;
     } else {
-        // If there are more segments than scenes, partition them evenly and sequentially.
-        const baseSize = Math.floor(totalSegments / totalScenes);
-        const extra = totalSegments % totalScenes;
-        
-        let currentIdx = 0;
-        for (let i = 0; i < totalScenes; i++) {
-            const scene = plan.scenes[i];
-            const size = baseSize + (i < extra ? 1 : 0);
-            const start = currentIdx;
-            const end = currentIdx + size - 1;
-            
-            const assignedSegments = script.segments.slice(start, end + 1);
-            scene.narrationText = assignedSegments
-                .map(seg => `[${seg.timestamp}] ${seg.narration}\n[VISUAL: ${seg.visualCue}]`)
-                .join("\n\n");
-            
-            scene.duration = Math.max(scene.duration || 10, assignedSegments.length * 15);
-            currentIdx += size;
+        for (let i = 0; i < totalSegments; i++) {
+            const seg = script.segments[i];
+            plan.scenes[i].narrationText = `${seg.narration}\n[VISUAL: ${seg.visualCue}]`;
+            plan.scenes[i].duration = Math.max(plan.scenes[i].duration || 10, 15);
         }
     }
 
-    // Log total chars to verify no loss
     const totalChars = plan.scenes.reduce((sum, s) => sum + (s.narrationText?.length || 0), 0);
-    console.log(`[ScenePlanner] Total narration assigned: ${totalChars} chars across ${totalScenes} scenes`);
+    console.log(`[ScenePlanner] 1:1 Narration assigned: ${totalChars} chars across ${plan.scenes.length} scenes`);
 }
 
 /**

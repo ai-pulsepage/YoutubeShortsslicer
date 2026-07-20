@@ -871,6 +871,27 @@ export default function UGCStudioPage() {
                                 </div>
                             </div>
 
+                            {/* Active Selected Avatar Badge */}
+                            <div className="bg-gray-950 border border-violet-500/20 p-4 rounded-2xl flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-11 h-11 rounded-full bg-violet-600/20 border border-violet-500/40 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                                        {avatars.find(a => a.id === selectedAvatarId)?.referenceImageUrl ? (
+                                            <img src={avatars.find(a => a.id === selectedAvatarId)!.referenceImageUrl!} alt="" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <User className="w-5 h-5 text-violet-400" />
+                                        )}
+                                    </div>
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[9px] uppercase tracking-wider font-bold text-violet-400 bg-violet-600/10 px-2 py-0.5 rounded border border-violet-500/20">Selected Cast Avatar</span>
+                                            <span className="text-[10px] text-gray-500">Engine: {avatars.find(a => a.id === selectedAvatarId)?.voiceEngine || "elevenlabs"}</span>
+                                        </div>
+                                        <h4 className="text-xs font-bold text-white mt-0.5">{avatars.find(a => a.id === selectedAvatarId)?.name || "Select an Avatar from Left Panel"}</h4>
+                                    </div>
+                                </div>
+                                <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-lg">Active for Campaign</span>
+                            </div>
+
                             {/* Product details Banner */}
                             {activeCampaign && (
                                 <div className="bg-gray-950 border border-gray-850 p-5 rounded-3xl flex flex-col md:flex-row gap-5">

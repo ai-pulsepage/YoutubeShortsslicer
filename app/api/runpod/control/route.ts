@@ -171,8 +171,8 @@ export async function POST(req: NextRequest) {
             const templateId = await getDbConfig("runpod_template_id");
             const gpuType = await getDbConfig("runpod_gpu_type") || "NVIDIA GeForce RTX 4090";
             const cloudType = await getDbConfig("runpod_cloud_type") || "ALL";
-            const volumeSizeStr = await getDbConfig("runpod_volume_size") || "100";
-            const volumeSize = parseInt(volumeSizeStr, 10) || 100;
+            const volumeSizeStr = await getDbConfig("runpod_volume_size") || "200";
+            const volumeSize = parseInt(volumeSizeStr, 10) || 200;
             const dockerArgsSetting = await getDbConfig("runpod_docker_args");
             const gitToken = await getDbConfig("runpod_git_token");
             const activeRedisUrl = process.env.REDIS_URL || "";
@@ -237,7 +237,7 @@ export async function POST(req: NextRequest) {
                 cloudType: cloudType === "SECURE" ? "SECURE" : cloudType === "COMMUNITY" ? "COMMUNITY" : "ALL",
                 gpuCount: 1,
                 ports: "8888/http,22/tcp,8000/http",
-                containerDiskInGb: 40,
+                containerDiskInGb: 100,
             };
 
             if (templateId) {

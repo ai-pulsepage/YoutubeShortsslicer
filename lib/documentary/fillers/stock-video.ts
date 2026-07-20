@@ -37,9 +37,17 @@ interface PexelsResponse {
 function extractKeywords(narrationText: string, sceneTitle?: string): string {
     // Concrete visual nouns that Pexels has good footage for
     const VISUAL_NOUNS = new Set([
+        // Science, Space & Tech
+        "laser", "quantum", "quasar", "galaxy", "astronomy", "telescope", "microscope",
+        "laboratory", "science", "physicist", "experiment", "cage", "monitor", "waveform",
+        "graph", "data", "robot", "satellite", "spacecraft", "orbit", "planet", "nebula",
+        "lightning", "electricity", "signal", "photon", "chemistry", "beaker", "formula",
+        // Maritime & Storm
+        "boat", "ship", "captain", "sailor", "waves", "storm", "tsunami", "flood",
+        "deck", "mast", "anchor", "harbor", "lighthouse", "maritime", "submersible",
         // Nature
         "forest", "lake", "river", "ocean", "mountain", "trees", "sky", "clouds",
-        "sunset", "sunrise", "rain", "snow", "storm", "stars", "moon", "sun",
+        "sunset", "sunrise", "rain", "snow", "stars", "moon", "sun",
         "field", "meadow", "desert", "beach", "waterfall", "cave", "cliff",
         "woods", "path", "trail", "flowers", "garden", "fog", "mist",
         "clearing", "leaves", "branches", "roots", "moss",
@@ -54,7 +62,7 @@ function extractKeywords(narrationText: string, sceneTitle?: string): string {
         "camping", "hiking", "campfire", "bonfire", "fire", "candle",
         "whispering", "hugging", "waving", "crying", "smiling", "playing",
         // Objects
-        "car", "train", "boat", "airplane", "bicycle",
+        "car", "train", "airplane", "bicycle",
         "book", "letter", "map", "compass", "flashlight", "torch",
         "clock", "phone", "computer", "photograph", "mirror",
         "paper", "notebook", "documents", "folder", "cabinet",
@@ -70,7 +78,7 @@ function extractKeywords(narrationText: string, sceneTitle?: string): string {
     // Helper: scan text for visual nouns
     function findNouns(text: string, limit: number): string[] {
         const clean = text.replace(/[^a-zA-Z\s]/g, " ").toLowerCase();
-        const words = clean.split(/\s+/).filter(w => w.length > 2);
+        const words = clean.split(/\s+/).filter(w => w.length > 3 && !["this", "that", "there", "were", "with", "from", "have", "been", "they", "their", "them", "some"].includes(w));
         const found: string[] = [];
         const seen = new Set<string>();
         for (const word of words) {
@@ -80,6 +88,16 @@ function extractKeywords(narrationText: string, sceneTitle?: string): string {
                 seen.add(check);
                 found.push(check);
                 if (found.length >= limit) break;
+            }
+        }
+        // Fallback: if no whitelist noun found, pick up to 2 distinct 4+ letter capitalized/domain words
+        if (found.length === 0 && words.length > 0) {
+            for (const word of words) {
+                if (!seen.has(word)) {
+                    seen.add(word);
+                    found.push(word);
+                    if (found.length >= limit) break;
+                }
             }
         }
         return found;
@@ -250,7 +268,7 @@ export async function generateStockVideoFiller(
             execSync(
                 `ffmpeg -i "${rawPath}" -t ${segDuration} ` +
                 `-vf "scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:black" ` +
-                `-c:v libx264 -preset fast -pix_fmt yuv420p -an "${segPath}" -y`,
+                `-c:v libx264 -preset ultrafast -pix_fmt yuv420p -an "${segPath}" -y`,
                 { timeout: 120000, stdio: "pipe", maxBuffer: 50 * 1024 * 1024 }
             );
 

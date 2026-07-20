@@ -384,8 +384,42 @@ def generate_image(prompt: str, output_path: str, width: int = 768, height: int 
     print(f"  🖼️  Image generated ({model}, WebP): {output_path}")
 
 
-# ─── Wan2.1 Video Generation ──────────────────────────
+# ─── LTX & Wan Video Generation ──────────────────────────
 _wan_pipe = None
+_ltx_pipe = None
+
+def unload_video_pipelines():
+    global _wan_pipe, _ltx_pipe
+    if _wan_pipe is not None:
+        del _wan_pipe
+        _wan_pipe = None
+    if _ltx_pipe is not None:
+        del _ltx_pipe
+        _ltx_pipe = None
+    torch.cuda.empty_cache()
+
+def get_ltx_pipeline():
+    """Lazy-load LTX-Video image-to-video pipeline."""
+    global _ltx_pipe
+    unload_image_pipelines()
+    unload_musicgen()
+    if _ltx_pipe is None:
+        try:
+            from diffusers import LTXImageToVideoPipeline
+            model_id = "Lightricks/LTX-Video-0.9.1-Diffusers"
+            print(f"🔄 Loading {model_id}...")
+            _ltx_pipe = LTXImageToVideoPipeline.from_pretrained(
+                model_id,
+                torch_dtype=torch.bfloat16,
+                low_cpu_mem_usage=True,
+            )
+            if torch.cuda.is_available():
+                _ltx_pipe.enable_model_cpu_offload()
+            print(f"✅ {model_id} loaded")
+        except Exception as err:
+            print(f"⚠️ LTX-Video pipeline fallback error: {err}")
+            return get_wan_pipeline()
+    return _ltx_pipe
 
 def get_wan_pipeline():
     """Lazy-load Wan2.2 image-to-video pipeline."""
@@ -423,16 +457,21 @@ def generate_video(
     num_frames: int = 81,  # ~3.4 seconds at 24fps
     width: int = 1280,
     height: int = 704,
+    model_name: str = "ltx",
 ):
-    """Generate a video clip with Wan2.2 image-to-video."""
+    """Generate a video clip with LTX-Video or Wan2.2 image-to-video."""
     import gc
     from PIL import Image
 
-    # Wan2.2 requires dimensions divisible by 16
+    # Dimensions divisible by 16
     width = (width // 16) * 16
     height = (height // 16) * 16
 
-    pipe = get_wan_pipeline()
+    if model_name.lower() == "ltx":
+        pipe = get_ltx_pipeline()
+    else:
+        pipe = get_wan_pipeline()
+
     torch.cuda.empty_cache()
     gc.collect()
 
