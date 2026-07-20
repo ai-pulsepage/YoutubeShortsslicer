@@ -281,7 +281,6 @@ export default function UGCStudioPage() {
                     name: `${avatar.name} (Copy)`,
                     persona: avatar.persona,
                     voiceEngine: avatar.voiceEngine,
-                    voiceId: avatar.voiceId
                 })
             });
             if (res.ok) {
@@ -299,6 +298,18 @@ export default function UGCStudioPage() {
             }
         } catch (err) {
             console.error("Failed to clone avatar:", err);
+        }
+    };
+
+    const handleDeleteJob = async (jobId: string) => {
+        try {
+            const res = await fetch(`/api/ugc/${jobId}`, { method: "DELETE" });
+            if (res.ok) {
+                setJobs(prev => prev.filter(j => j.id !== jobId));
+                fetchJobs();
+            }
+        } catch (err) {
+            console.error("Failed to delete ad job:", err);
         }
     };
 
@@ -1069,15 +1080,24 @@ export default function UGCStudioPage() {
                                                     )}
                                                 </div>
 
-                                                {/* Right Video Preview Player */}
-                                                <div className="w-full md:w-36 aspect-video bg-black/40 border border-gray-850 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center">
-                                                    {job.status === "DONE" && job.outputUrl ? (
-                                                        <video src={`/api/storage/signed?key=${job.outputUrl}`} controls className="w-full h-full object-cover" />
-                                                    ) : job.status === "FAILED" ? (
-                                                        <div className="text-center p-2"><XCircle className="w-5 h-5 text-red-500 mx-auto" /><span className="text-[8px] text-red-400 mt-1 block font-sans">Failed</span></div>
-                                                    ) : (
-                                                        <div className="text-center p-2 text-gray-600"><Loader2 className="w-5 h-5 animate-spin mx-auto text-violet-500" /><span className="text-[8px] mt-1 block font-sans">Generating...</span></div>
-                                                    )}
+                                                {/* Right Video Preview Player & Actions */}
+                                                <div className="flex items-center gap-3 w-full md:w-auto">
+                                                    <div className="w-full md:w-36 aspect-video bg-black/40 border border-gray-850 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center">
+                                                        {job.status === "DONE" && job.outputUrl ? (
+                                                            <video src={`/api/storage/signed?key=${job.outputUrl}`} controls className="w-full h-full object-cover" />
+                                                        ) : job.status === "FAILED" ? (
+                                                            <div className="text-center p-2"><XCircle className="w-5 h-5 text-red-500 mx-auto" /><span className="text-[8px] text-red-400 mt-1 block font-sans">Failed</span></div>
+                                                        ) : (
+                                                            <div className="text-center p-2 text-gray-600"><Loader2 className="w-5 h-5 animate-spin mx-auto text-violet-500" /><span className="text-[8px] mt-1 block font-sans">Generating...</span></div>
+                                                        )}
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleDeleteJob(job.id)}
+                                                        title="Delete Ad Video"
+                                                        className="p-2 bg-gray-900 border border-gray-800 hover:border-red-500/50 hover:bg-red-500/10 text-gray-500 hover:text-red-400 rounded-xl transition-all cursor-pointer flex-shrink-0"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
                                                 </div>
 
                                             </div>

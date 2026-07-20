@@ -23,3 +23,25 @@ export async function GET(
 
     return NextResponse.json(job);
 }
+
+export async function DELETE(
+    req: Request,
+    { params }: { params: Promise<{ id: string }> }
+) {
+    const session = await auth();
+    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const { id } = await params;
+
+    const job = await prisma.uGCJob.findFirst({
+        where: { id, userId: session.user.id }
+    });
+
+    if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
+
+    await prisma.uGCJob.delete({
+        where: { id }
+    });
+
+    return NextResponse.json({ success: true, deletedId: id });
+}
