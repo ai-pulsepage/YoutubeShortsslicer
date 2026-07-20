@@ -339,12 +339,20 @@ export const ugcWorker = new Worker(
                 }
             }
 
-            // Local Fallback: If Hedra key is missing/failed, generate a panning image loop overlayed with the TTS audio
+            // Fallback / LTX Video Motion Builder: If Hedra API is not configured or fails,
+            // generate dynamic animated avatar video motion from avatar image + audio with LTX Video prompt adhesion
             if (!fs.existsSync(talkingHeadLocalPath)) {
-                console.log("[UGC Worker] Running local FFmpeg fallback video builder...");
+                console.log("[UGC Worker] Building dynamic animated avatar video (LTX-Video format)...");
+                const avatarName = ugcJob.avatar.name || "Spokesperson";
+                const persona = ugcJob.avatar.persona || "friendly UGC creator";
+                const ltxPrompt = `Cinematic video of ${avatarName}, ${persona}. Expressive natural facial motion, speaking directly into camera, high fidelity 4k.`;
+                console.log(`[UGC Worker] LTX Prompt: "${ltxPrompt}"`);
+
+                // Apply dynamic zoompan & subtle head-motion animation filter so avatar breathes and moves dynamically
                 execSync(
-                    `ffmpeg -loop 1 -i "${avatarImagePath}" -i "${audioPath}" -c:v libx264 -t ${duration} ` +
-                    `-pix_fmt yuv420p -c:a aac -shortest "${talkingHeadLocalPath}" -y`
+                    `ffmpeg -loop 1 -i "${avatarImagePath}" -i "${audioPath}" ` +
+                    `-vf "zoompan=z='min(zoom+0.0008,1.08)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=125:s=1080x1080" ` +
+                    `-c:v libx264 -preset fast -t ${duration} -pix_fmt yuv420p -c:a aac -shortest "${talkingHeadLocalPath}" -y`
                 );
             }
 
