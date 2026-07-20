@@ -470,14 +470,26 @@ function PipelineActions({ doc, onRefresh }: { doc: any; onRefresh: () => void }
         setRunning(false);
     };
 
-    const needsAssets = visualMode === "full_ai_video" || visualMode === "chapter_illustrations";
-    const needsClips = visualMode === "full_ai_video";
+    const handleResetStatus = async () => {
+        setRunning(true);
+        try {
+            await fetch(`/api/documentary/debug`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ documentaryId: doc.id, action: "reset-status" }),
+            });
+        } catch (err) {
+            console.error("Reset error:", err);
+        }
+        setTimeout(onRefresh, 1000);
+        setRunning(false);
+    };
 
     return (
         <div className="flex items-center gap-2">
             {doc.status === "DRAFT" && (
                 <button onClick={() => {
-                    if (!confirm("This will generate a new script and scene plan for this Documentary project. This does NOT affect your Animated Film Studio projects. Proceed?")) return;
+                    if (!confirm("This will generate a new script and scene plan for this Documentary project. Proceed?")) return;
                     runAction("generate-story");
                 }} disabled={running}
                     className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-50 transition-colors">
@@ -485,71 +497,28 @@ function PipelineActions({ doc, onRefresh }: { doc: any; onRefresh: () => void }
                     Generate Story
                 </button>
             )}
-            {doc.status === "SCENES_PLANNED" && needsAssets && (
-                <button onClick={() => runAction("generate-assets")} disabled={running}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50 transition-colors">
-                    {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Image className="w-4 h-4" />}
-                    {visualMode === "chapter_illustrations" ? "Generate Chapter Images" : "Generate Assets"}
-                </button>
-            )}
-            {doc.status === "SCENES_PLANNED" && !needsAssets && (
+
+            {/* Resume / Run Assembly */}
+            {["SCENES_PLANNED", "ASSETS_READY", "ASSEMBLING", "FAILED", "GENERATING"].includes(doc.status) && (
                 <button onClick={() => runAction("assemble")} disabled={running}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-50 transition-colors">
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-50 transition-colors cursor-pointer">
                     {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wrench className="w-4 h-4" />}
-                    Assemble Documentary
+                    {doc.status === "ASSEMBLING" ? "Resume Assembly" : "Assemble Documentary"}
                 </button>
             )}
-            {doc.status === "ASSETS_READY" && needsClips && (
-                <button onClick={() => runAction("generate-clips")} disabled={running}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-cyan-600 hover:bg-cyan-500 text-white disabled:opacity-50 transition-colors">
-                    {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Film className="w-4 h-4" />}
-                    Generate Clips
+
+            {/* Reset Status Button */}
+            {["ASSEMBLING", "GENERATING", "FAILED"].includes(doc.status) && (
+                <button onClick={handleResetStatus} disabled={running}
+                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium bg-gray-800 hover:bg-gray-700 text-gray-300 disabled:opacity-50 transition-colors cursor-pointer"
+                    title="Reset project status to draft">
+                    {running ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+                    Reset Status
                 </button>
             )}
-            {doc.status === "ASSETS_READY" && !needsClips && (
-                <button onClick={() => runAction("assemble")} disabled={running}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-50 transition-colors">
-                    {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wrench className="w-4 h-4" />}
-                    Assemble Documentary
-                </button>
-            )}
-            {doc.status === "GENERATING" && !needsAssets && !needsClips && (
-                <button onClick={() => runAction("assemble")} disabled={running}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-50 transition-colors">
-                    {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wrench className="w-4 h-4" />}
-                    Force Assemble
-                </button>
-            )}
-            {doc.status === "FAILED" && needsAssets && (
-                <button onClick={() => runAction("generate-assets")} disabled={running}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50 transition-colors">
-                    {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                    Retry Images
-                </button>
-            )}
-            {doc.status === "FAILED" && (
-                <button onClick={() => runAction("generate-story")} disabled={running}
-                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium bg-gray-700 hover:bg-gray-600 text-gray-300 disabled:opacity-50 transition-colors">
-                    {running ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                    Retry Story
-                </button>
-            )}
-            {doc.status === "GENERATING" && needsAssets && (
-                <button onClick={() => runAction("generate-assets")} disabled={running}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50 transition-colors">
-                    {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                    Retry Images
-                </button>
-            )}
-            {doc.status === "GENERATING" && needsClips && doc.genJobs?.some((j: any) => j.jobType === "shot_video" && (j.status === "QUEUED" || j.status === "FAILED")) && (
-                <button onClick={() => runAction("generate-clips")} disabled={running}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-cyan-600 hover:bg-cyan-500 text-white disabled:opacity-50 transition-colors">
-                    {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Film className="w-4 h-4" />}
-                    Retry Clips
-                </button>
-            )}
+
             {/* Visual mode badge */}
-            <span className="ml-2 px-2 py-0.5 rounded-full bg-gray-800 text-[10px] text-gray-400 font-medium">
+            <span className="ml-2 px-2.5 py-1 rounded-full bg-gray-800 text-[10px] text-gray-400 font-medium">
                 {visualMode === "full_ai_video" ? "🎬 Full AI" :
                  visualMode === "chapter_illustrations" ? "🖼️ Illustrations" :
                  visualMode === "broll_only" ? "📹 B-Roll" : "🎙️ Audio"}
