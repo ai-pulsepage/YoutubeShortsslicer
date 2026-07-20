@@ -9,6 +9,8 @@ import path from "path";
 import os from "os";
 import FormData from "form-data";
 
+import { dispatchJob, RedisJob } from "../lib/documentary/redis-client";
+
 // Helper to query API keys from the database (for admin configuration)
 async function getDbApiKey(service: string): Promise<string | null> {
     try {
@@ -321,7 +323,7 @@ export const ugcWorker = new Worker(
                 execSync(`ffmpeg -f lavfi -i color=c=gray:s=1080x1080:d=1 -vframes 1 "${avatarImagePath}" -y`);
             }
 
-            // 5. Generate Hedra Talking Head
+            // 5. Generate LTX-Video / Hedra Avatar Motion
             let talkingHeadLocalPath = path.join(tempDir, "talking_head.mp4");
             const hedraKey = process.env.HEDRA_API_KEY;
 
@@ -330,25 +332,77 @@ export const ugcWorker = new Worker(
                     const videoUrl = await generateHedraTalkingHead(avatarImagePath, audioPath, hedraKey, tempDir);
                     console.log(`[UGC Worker] Downloading generated Hedra video: ${videoUrl}`);
                     const headResponse = await fetch(videoUrl);
-                    if (!headResponse.ok) throw new Error("Failed to download generated talking head");
-                    const headBuffer = Buffer.from(await headResponse.arrayBuffer());
-                    fs.writeFileSync(talkingHeadLocalPath, headBuffer);
+                    if (headResponse.ok) {
+                        const headBuffer = Buffer.from(await headResponse.arrayBuffer());
+                        fs.writeFileSync(talkingHeadLocalPath, headBuffer);
+                    }
                 } catch (hedraErr: any) {
-                    console.error("[UGC Worker] Hedra generation failed, utilizing local fallback:", hedraErr.message);
-                    hedraKey === ""; // trigger local fallback
+                    console.error("[UGC Worker] Hedra generation failed, attempting RunPod LTX-Video GPU fallback:", hedraErr.message);
                 }
             }
 
-            // Fallback / LTX Video Motion Builder: If Hedra API is not configured or fails,
-            // generate dynamic animated avatar video motion from avatar image + audio with LTX Video prompt adhesion
-            if (!fs.existsSync(talkingHeadLocalPath)) {
-                console.log("[UGC Worker] Building dynamic animated avatar video (LTX-Video format)...");
-                const avatarName = ugcJob.avatar.name || "Spokesperson";
-                const persona = ugcJob.avatar.persona || "friendly UGC creator";
-                const ltxPrompt = `Cinematic video of ${avatarName}, ${persona}. Expressive natural facial motion, speaking directly into camera, high fidelity 4k.`;
-                console.log(`[UGC Worker] LTX Prompt: "${ltxPrompt}"`);
+            // Attempt RunPod GPU LTX-Video Generation
+            if (!fs.existsSync(talkingHeadLocalPath) && process.env.REDIS_URL) {
+                try {
+                    const avatarName = ugcJob.avatar.name || "Spokesperson";
+                    const persona = ugcJob.avatar.persona || "friendly UGC creator";
+                    const ltxPrompt = `Cinematic video of ${avatarName}, ${persona}. Expressive natural facial motion, speaking directly into camera, high fidelity 4k. Narration: "${script.slice(0, 150)}"`;
+                    const runpodJobId = `ugc-ltx-${jobId}-${Date.now()}`;
+                    const ltxOutputR2Key = `ugc/jobs/${jobId}/ltx_avatar.mp4`;
 
-                // Apply dynamic zoompan & subtle head-motion animation filter so avatar breathes and moves dynamically
+                    console.log(`[UGC Worker] 🚀 Dispatching LTX-Video job to RunPod GPU Queue: ${runpodJobId}`);
+                    const redisJob: RedisJob = {
+                        jobId: runpodJobId,
+                        documentaryId: jobId,
+                        type: "shot_video",
+                        prompt: ltxPrompt,
+                        referenceImages: ugcJob.avatar.referenceImageUrl ? [ugcJob.avatar.referenceImageUrl] : [],
+                        metadata: {
+                            model: "ltx",
+                            duration: Math.min(Math.ceil(duration), 15),
+                            width: 1280,
+                            height: 720,
+                            r2Key: ltxOutputR2Key,
+                            sourceApp: "UGC Studio",
+                            title: avatarName
+                        }
+                    };
+
+                    await dispatchJob(redisJob);
+
+                    // Download generated LTX video from R2 if ready within 90 seconds
+                    const startTime = Date.now();
+                    let ltxSuccess = false;
+                    while (Date.now() - startTime < 90000) {
+                        try {
+                            const ltxTempFile = path.join(tempDir, "ltx_download.mp4");
+                            await downloadFileFromR2(ltxOutputR2Key, ltxTempFile);
+                            if (fs.existsSync(ltxTempFile) && fs.statSync(ltxTempFile).size > 1000) {
+                                console.log("[UGC Worker] ✅ Downloaded generated LTX-Video clip from RunPod GPU!");
+                                // Multiplex generated LTX video with TTS audio
+                                execSync(
+                                    `ffmpeg -i "${ltxTempFile}" -i "${audioPath}" -c:v libx264 -preset fast ` +
+                                    `-c:a aac -shortest "${talkingHeadLocalPath}" -y`
+                                );
+                                ltxSuccess = true;
+                                break;
+                            }
+                        } catch {
+                            // Wait 5s before polling again
+                            await new Promise(r => setTimeout(r, 5000));
+                        }
+                    }
+                    if (!ltxSuccess) {
+                        console.warn("[UGC Worker] RunPod LTX GPU job timeout (90s). Running fallback animation loop.");
+                    }
+                } catch (ltxErr: any) {
+                    console.warn(`[UGC Worker] RunPod LTX dispatch failed: ${ltxErr.message}`);
+                }
+            }
+
+            // Fallback Animation Loop if neither Hedra nor RunPod LTX completed in time
+            if (!fs.existsSync(talkingHeadLocalPath)) {
+                console.log("[UGC Worker] Running fallback zoompan motion animation...");
                 execSync(
                     `ffmpeg -loop 1 -i "${avatarImagePath}" -i "${audioPath}" ` +
                     `-vf "zoompan=z='min(zoom+0.0008,1.08)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=125:s=1080x1080" ` +
