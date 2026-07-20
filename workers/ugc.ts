@@ -445,10 +445,10 @@ export const ugcWorker = new Worker(
 
                     await dispatchJob(redisJob);
 
-                    // Download generated LTX video from R2 if ready within 90 seconds
+                    // Download generated LTX video from R2 when ready (up to 15 minute timeout for GPU rendering)
                     const startTime = Date.now();
                     let ltxSuccess = false;
-                    while (Date.now() - startTime < 90000) {
+                    while (Date.now() - startTime < 900000) {
                         try {
                             const ltxTempFile = path.join(tempDir, "ltx_download.mp4");
                             await downloadFileFromR2(ltxOutputR2Key, ltxTempFile);
@@ -464,15 +464,12 @@ export const ugcWorker = new Worker(
                         }
                     }
                     if (!ltxSuccess) {
-                        console.warn("[UGC Worker] RunPod LTX GPU job timeout (90s). Running fallback animation loop.");
+                        throw new Error("RunPod LTX GPU job timed out after 15 minutes");
                     }
                 } catch (ltxErr: any) {
-                    console.warn(`[UGC Worker] RunPod LTX dispatch failed: ${ltxErr.message}`);
+                    console.error(`[UGC Worker] RunPod LTX GPU error: ${ltxErr.message}`);
+                    throw ltxErr;
                 }
-            }
-
-            if (!fs.existsSync(talkingHeadLocalPath)) {
-                throw new Error("LTX Video generation did not complete on GPU worker");
             }
 
             // Set state to compositing

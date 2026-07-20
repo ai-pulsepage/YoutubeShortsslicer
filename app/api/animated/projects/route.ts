@@ -224,7 +224,7 @@ export async function GET(req: NextRequest) {
                 id: p.id,
                 title: p.title,
                 script: p.script,
-                status: p.status,
+                status: p.finalVideoPath || p.status === "APPROVED" ? "COMPLETED" : p.status,
                 finalVideoPath: p.finalVideoPath,
                 sourceUrls: p.sourceUrls || [],
                 targetDuration: p.totalDuration || 2.0,

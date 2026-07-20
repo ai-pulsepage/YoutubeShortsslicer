@@ -605,7 +605,16 @@ export default function KidsStoryBuilderPage() {
             setTargetAge((proj as any).targetAge || "Kids");
             setGenre((proj as any).genre || "Adventure");
             setVisualAnalysis((proj as any).visualAnalysis || null);
-            setCurrentStep(defaultStep);
+            if (proj.finalVideoPath || proj.status === "COMPLETED" || proj.status === "APPROVED") {
+                if (proj.finalVideoPath) {
+                    setCompiledVideoUrl(proj.finalVideoPath.startsWith("http") ? proj.finalVideoPath : `/api/storage/signed?key=${proj.finalVideoPath}`);
+                }
+                setCurrentStep(5);
+            } else if (cleanedScenes.length > 0) {
+                setCurrentStep(4);
+            } else {
+                setCurrentStep(defaultStep);
+            }
         }
     };
 
