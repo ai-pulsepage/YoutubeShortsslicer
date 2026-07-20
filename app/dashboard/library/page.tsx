@@ -654,7 +654,7 @@ function CreativeCard({ tab, item }: { tab: string; item: any }) {
             return;
         }
         if (tab === "kids") {
-            router.push("/dashboard/animated");
+            router.push(`/dashboard/animated?project=${item.id}`);
         } else if (tab === "documentaries") {
             router.push(`/dashboard/documentary/${item.id}`);
         }

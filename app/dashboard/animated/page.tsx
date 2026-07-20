@@ -305,8 +305,8 @@ export default function KidsStoryBuilderPage() {
             const queryProjId = params.get("project");
             const queryStep = params.get("step");
             if (queryProjId && queryProjId !== selectedProjectId) {
-                const parsedStep = queryStep ? parseInt(queryStep, 10) : 1;
-                const targetStep = (parsedStep >= 1 && parsedStep <= 5) ? parsedStep : 1;
+                const parsedStep = queryStep ? parseInt(queryStep, 10) : 4;
+                const targetStep = (parsedStep >= 1 && parsedStep <= 5) ? parsedStep : 4;
                 handleSelectProject(queryProjId, targetStep);
             }
         }
