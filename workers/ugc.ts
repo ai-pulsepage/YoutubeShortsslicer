@@ -22,6 +22,64 @@ async function getDbApiKey(service: string): Promise<string | null> {
     return null;
 }
 
+// ─── Category Action Template Matrix ───────────────────────
+function detectActionTemplate(productName: string, description: string): { category: string; actionHook: string; ltxAction: string; brollPattern: string; searchTerms: string[] } {
+    const text = `${productName} ${description}`.toLowerCase();
+
+    if (/massager|massage|gun|neck|back|muscle|tissue|relief|sore|kneading|therapy/.test(text)) {
+        return {
+            category: "Health & Muscle Relief",
+            actionHook: "Using a deep-tissue massager on neck and shoulders with a relaxed expression of relief",
+            ltxAction: "using a deep-tissue massager on neck and shoulders, relaxed facial expression of physical relief",
+            brollPattern: "Close-up massager pulsing on muscles, relaxed relief expression, daily recovery routine",
+            searchTerms: ["neck massager massage", "massage gun shoulder", "muscle relief therapy"]
+        };
+    }
+    if (/pressure|washer|car|auto|foam|tire|grill|hose|power tool|drill|wrench/.test(text)) {
+        return {
+            category: "Automotive & Outdoor Tools",
+            actionHook: "Blasting thick grime off a dirty car with a high-pressure washer foam spray",
+            ltxAction: "holding a high-pressure washer hose spraying water foam on car, satisfying clean transform",
+            brollPattern: "Close-up high pressure water spraying, foam application, satisfying before-and-after clean car transform",
+            searchTerms: ["pressure washer car", "car detailing foam", "pressure washing grill"]
+        };
+    }
+    if (/clean|mop|vacuum|steam|stain|soap|scrub|wipe|dust|floor|carpet/.test(text)) {
+        return {
+            category: "Home & Cleaning",
+            actionHook: "Single-swipe steam mop cleaning a muddy floor and instantly wiping away stubborn stains",
+            ltxAction: "holding a steam mop cleaning floor, satisfied smile, wiping away stubborn grime",
+            brollPattern: "Close-up steam mopping, wiping away stubborn grime, satisfying clean floor transformation",
+            searchTerms: ["steam mop floor", "cleaning muddy floor", "vacuum carpet clean"]
+        };
+    }
+    if (/blender|smoothie|mixer|juice|coffee|kitchen|cook|air fryer|pan|pot|recipe|pastry/.test(text)) {
+        return {
+            category: "Kitchen & Food",
+            actionHook: "Drinking a fresh fruit smoothie from a glass with a high-speed blender whirlpool in background",
+            ltxAction: "drinking a fresh fruit smoothie from a glass, smiling in delight",
+            brollPattern: "Dropping fresh fruit into blender, high-speed blending vortex, pouring into glass and tasting",
+            searchTerms: ["drinking smoothie glass", "blender smoothie fruit", "pouring smoothie glass"]
+        };
+    }
+    if (/serum|skin|face|cream|lotion|beauty|makeup|hair|shampoo|supplement|vitamin|dopamine|pill/.test(text)) {
+        return {
+            category: "Beauty & Health",
+            actionHook: "Satisfying morning serum dropper application and healthy daily routine mix",
+            ltxAction: "applying skincare serum dropper to cheek, glowing facial expression, morning routine",
+            brollPattern: "Close-up product application, morning routine glow, daily habit demo",
+            searchTerms: ["skincare serum drop", "morning health routine", "vitamin drink mix"]
+        };
+    }
+    return {
+        category: "Gadgets & Everyday Tools",
+        actionHook: "Tactile hands-on product unboxing and magnetic snap-on feature demo",
+        ltxAction: "holding product doing hands-on demonstration, smiling confidently at camera",
+        brollPattern: "Close-up hands-on demonstration, unboxing reveal, daily practical use",
+        searchTerms: ["unboxing tech gadget", "hands on product demo", "magnetic snap tech"]
+    };
+}
+
 // ─── DeepSeek Script Generator ───────────────────────────
 async function generateScriptWithDeepSeek(job: any): Promise<string> {
     let apiKey = process.env.DEEPSEEK_API_KEY;
@@ -43,18 +101,34 @@ async function generateScriptWithDeepSeek(job: any): Promise<string> {
         styleInstruction = `Focus on hook style: ${hookStyle}. Keep it highly engaging and natural.`;
     }
 
-    const systemPrompt = `You are an elite viral short-form content creator and UGC copywriter. Write a 30-45 second video script specifically selling the following item:
-Product Name: "${job.product.name}"
-Product Brand: "${job.product.brand || "Brand"}"
-Product Details & Features: "${job.product.description || job.product.name}"
-Price: ${job.product.price || "great deal"}
-Presenter Persona: ${job.avatar.persona || "Friendly enthusiast"}
+    // Sanitize product name to remove any lingering tracking query strings like Ref=Sspa
+    const cleanProductName = (job.product.name || "Featured Product")
+        .replace(/\bRef\s*=\s*\w+/gi, "")
+        .replace(/\bSspa\s*\w+/gi, "")
+        .replace(/\s+/g, " ")
+        .trim();
 
-CRITICAL SCRIPTING RULES:
-1. Ground every sentence around "${job.product.name}". Highlight its unique features, user problem, and real-world value.
-2. NEVER write a generic story about Amazon or generic shopping unless it directly explains why THIS SPECIFIC PRODUCT (${job.product.name}) is awesome.
-3. ${styleInstruction}
-4. Output ONLY the words spoken by the presenter. Do NOT include scene directions, sound effects, timestamps, or speaker labels.`;
+    const avatarName = job.avatar?.name || "Presenter";
+    const avatarPersona = job.avatar?.persona || "Friendly enthusiast";
+    const actionTemplate = detectActionTemplate(cleanProductName, job.product.description || "");
+
+    const systemPrompt = `You are a world-class viral TikTok / Reels UGC content creator and viral scriptwriter. 
+
+Write a 30-45 second VIRAL short-form video script for a creator named "${avatarName}" (${avatarPersona || "authentic reviewer"}).
+
+PRODUCT TO SELL:
+- Name: "${cleanProductName}"
+- Category: "${actionTemplate.category}"
+- Visual Action Pattern: "${actionTemplate.actionHook}"
+- Features: "${job.product.description || cleanProductName}"
+- Price: ${job.product.price || "great deal"}
+
+STRICT VIRAL ACTION SCRIPTING RULES:
+1. VISUAL ACTION HOOK: Incorporate the satisfying real-world action: "${actionTemplate.actionHook}". The presenter talks while performing or demonstrating this action (e.g., pressure washing, blending a smoothie, mopping a floor, or applying a serum).
+2. PRODUCT IS THE HERO: The script MUST be 100% focused on using and demonstrating "${cleanProductName}". Show the satisfying result of using this product.
+3. CONVERSATIONAL TIKTOK SPOKEN VOICE: Authentic, energetic, relatable spoken English. No stiff corporate sales pitches.
+4. NO URL OR TRACKING JARGON: Never mention URL parameter codes or tracking tags.
+5. OUTPUT FORMAT: Output ONLY the exact words spoken by ${avatarName}. No scene directions, sound effects, timestamps, or character labels.`;
 
     if (!apiKey) {
         console.warn("[UGC Worker] DeepSeek API Key not configured. Using fallback script.");
@@ -346,7 +420,8 @@ export const ugcWorker = new Worker(
                 try {
                     const avatarName = ugcJob.avatar.name || "Spokesperson";
                     const persona = ugcJob.avatar.persona || "friendly UGC creator";
-                    const ltxPrompt = `Cinematic video of ${avatarName}, ${persona}. Expressive natural facial motion, speaking directly into camera, high fidelity 4k. Narration: "${script.slice(0, 150)}"`;
+                    const actionTpl = detectActionTemplate(ugcJob.product?.name || "", ugcJob.product?.description || "");
+                    const ltxPrompt = `Cinematic video of ${avatarName}, ${persona}. ${actionTpl.ltxAction}. Expressive natural facial motion, speaking directly into camera, high fidelity 4k. Narration: "${script.slice(0, 150)}"`;
                     const runpodJobId = `ugc-ltx-${jobId}-${Date.now()}`;
                     const ltxOutputR2Key = `ugc/jobs/${jobId}/ltx_avatar.mp4`;
 
@@ -378,12 +453,8 @@ export const ugcWorker = new Worker(
                             const ltxTempFile = path.join(tempDir, "ltx_download.mp4");
                             await downloadFileFromR2(ltxOutputR2Key, ltxTempFile);
                             if (fs.existsSync(ltxTempFile) && fs.statSync(ltxTempFile).size > 1000) {
-                                console.log("[UGC Worker] ✅ Downloaded generated LTX-Video clip from RunPod GPU!");
-                                // Multiplex generated LTX video with TTS audio
-                                execSync(
-                                    `ffmpeg -i "${ltxTempFile}" -i "${audioPath}" -c:v libx264 -preset fast ` +
-                                    `-c:a aac -shortest "${talkingHeadLocalPath}" -y`
-                                );
+                                console.log("[UGC Worker] ✅ Downloaded generated native LTX-Video ad clip from RunPod GPU!");
+                                fs.copyFileSync(ltxTempFile, talkingHeadLocalPath);
                                 ltxSuccess = true;
                                 break;
                             }

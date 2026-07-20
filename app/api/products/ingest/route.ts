@@ -32,16 +32,34 @@ export async function POST(req: Request) {
         name = name.trim().replace(/^Amazon\.com\s*:\s*/i, "").replace(/\s*:\s*Amazon\.com.*$/i, "").replace(/\s*\|\s*Amazon.*$/i, "");
 
         // If title is still generic, parse the URL path slug
-        if (name === "Scraped Product" || name.toLowerCase().includes("amazon") || name.length < 5) {
+        if (name === "Scraped Product" || name.toLowerCase().includes("amazon") || name.toLowerCase().includes("ref=") || name.length < 5) {
             try {
                 const urlObj = new URL(url);
-                const pathParts = urlObj.pathname.split("/").filter(p => p.length > 0 && p !== "dp" && p !== "gp" && p !== "product" && !p.startsWith("B0"));
+                const pathParts = urlObj.pathname.split("/").filter(p => {
+                    const clean = p.toLowerCase();
+                    return p.length > 0 && p !== "dp" && p !== "gp" && p !== "product" && 
+                           !p.startsWith("B0") && !clean.includes("ref=") && !clean.includes("sspa") && 
+                           !clean.includes("detail") && !clean.includes("search");
+                });
                 if (pathParts.length > 0) {
-                    const slug = decodeURIComponent(pathParts[0]).replace(/[-_]/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+                    const slug = decodeURIComponent(pathParts[0])
+                        .replace(/[-_]/g, " ")
+                        .replace(/ref=.*$/i, "")
+                        .replace(/sspa.*$/i, "")
+                        .replace(/\b\w/g, l => l.toUpperCase())
+                        .trim();
                     if (slug.length > 3) name = slug;
                 }
             } catch {}
         }
+
+        // Final sanitation: strip any remaining URL query parameters from name
+        name = name
+            .replace(/\bRef\s*=\s*\w+/gi, "")
+            .replace(/\bSspa\s*\w+/gi, "")
+            .replace(/\s+/g, " ")
+            .trim();
+        if (!name || name.length < 3) name = "Featured Product";
 
         // Extract description
         let description = $('meta[property="og:description"]').attr("content") || 
