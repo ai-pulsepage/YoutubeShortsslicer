@@ -644,143 +644,91 @@ function VideoRow({ video, onDelete }: { video: Video; onDelete: (id: string) =>
 
 function CreativeCard({ tab, item }: { tab: string; item: any }) {
     const router = useRouter();
+    const [showPreview, setShowPreview] = useState(false);
+    const videoUrl = item.finalVideoPath || item.outputUrl || item.storagePath;
+    const hasVideo = !!videoUrl;
 
-    if (tab === "documentaries" || tab === "kids") {
-        return (
+    const handleClick = () => {
+        if (hasVideo) {
+            setShowPreview(true);
+            return;
+        }
+        if (tab === "kids") {
+            router.push("/dashboard/animated");
+        } else if (tab === "documentaries") {
+            router.push(`/dashboard/documentary/${item.id}`);
+        }
+    };
+
+    const isKids = tab === "kids";
+    const statusText = item.status === "APPROVED" || item.status === "COMPLETED" || item.status === "DONE" ? "COMPLETED" : (item.status || "DRAFT");
+
+    return (
+        <>
             <div 
-                onClick={() => router.push(`/dashboard/documentary/${item.id}`)}
+                onClick={handleClick}
                 className="group bg-gray-900/50 border border-gray-800 rounded-2xl overflow-hidden hover:border-gray-700 transition-all duration-200 cursor-pointer"
             >
                 <div className="aspect-video bg-gray-800 flex items-center justify-center relative">
-                    <Film className="w-10 h-10 text-gray-600 group-hover:scale-110 transition-transform" />
-                    {item.status && (
-                        <span className="absolute top-2 left-2 text-[10px] font-semibold bg-violet-600/20 text-violet-400 border border-violet-500/20 px-2 py-0.5 rounded-full uppercase">
-                            {item.status}
-                        </span>
+                    {hasVideo ? (
+                        <div className="w-full h-full relative flex items-center justify-center bg-black/60">
+                            <Film className="w-10 h-10 text-gray-500 group-hover:scale-110 transition-transform" />
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Play className="w-10 h-10 text-white fill-white" />
+                            </div>
+                        </div>
+                    ) : (
+                        <Film className="w-10 h-10 text-gray-600 group-hover:scale-110 transition-transform" />
                     )}
+                    <span className={cn(
+                        "absolute top-2 left-2 text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase border",
+                        statusText === "COMPLETED"
+                            ? "bg-emerald-600/20 text-emerald-400 border-emerald-500/20"
+                            : "bg-violet-600/20 text-violet-400 border-violet-500/20"
+                    )}>
+                        {statusText}
+                    </span>
                 </div>
                 <div className="p-4">
                     <h3 className="text-sm font-semibold text-white truncate mb-1">
-                        {item.title || "Untitled Project"}
+                        {item.title || item.product?.name || "Untitled Asset"}
                     </h3>
                     <div className="flex items-center justify-between text-xs text-gray-500 mt-2">
                         <span className="capitalize px-2 py-0.5 rounded bg-gray-800 text-[10px]">
-                            {item.genre} / {item.subStyle.replace(/_/g, " ")}
+                            {isKids ? "Kids Studio" : (item.genre || tab)}
                         </span>
                         <span>{new Date(item.createdAt).toLocaleDateString()}</span>
                     </div>
                 </div>
             </div>
-        );
-    }
 
-    if (tab === "ugc") {
-        const hasUrl = !!item.outputUrl;
-        return (
-            <div className="group bg-gray-900/50 border border-gray-800 rounded-2xl overflow-hidden hover:border-gray-700 transition-all duration-200">
-                <div className="aspect-video bg-gray-800 relative flex items-center justify-center">
-                    {item.thumbnailUrl ? (
-                        <img src={item.thumbnailUrl} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                        <Sparkles className="w-10 h-10 text-gray-600" />
-                    )}
-                    {hasUrl && (
-                        <a 
-                            href={item.outputUrl} 
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                            <Play className="w-8 h-8 text-white fill-white" />
-                        </a>
-                    )}
-                </div>
-                <div className="p-4">
-                    <h3 className="text-sm font-semibold text-white truncate mb-1">
-                        Ad for {item.product?.name || "Product"}
-                    </h3>
-                    <p className="text-xs text-gray-500 line-clamp-2 mt-1 min-h-[2rem]">
-                        {item.script || "No script content"}
-                    </p>
-                    <div className="flex items-center justify-between text-[10px] text-gray-500 mt-3 pt-2 border-t border-gray-800/60">
-                        <span className="bg-blue-600/10 text-blue-400 px-2 py-0.5 rounded">
-                            {item.hookStyle}
-                        </span>
-                        <span>{item.campaign?.name || "No Campaign"}</span>
+            {/* Clean Video Preview Modal */}
+            {showPreview && videoUrl && (
+                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowPreview(false)}>
+                    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 max-w-3xl w-full space-y-4" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-bold text-white truncate">{item.title || "Video Asset"}</h3>
+                            <button onClick={() => setShowPreview(false)} className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="aspect-video bg-black rounded-xl overflow-hidden">
+                            <video src={videoUrl.startsWith("http") ? videoUrl : `/api/storage/signed?key=${videoUrl}`} controls autoPlay className="w-full h-full object-contain" />
+                        </div>
+                        <div className="flex items-center justify-end gap-3 pt-2">
+                            <a
+                                href={videoUrl.startsWith("http") ? videoUrl : `/api/storage/signed?key=${videoUrl}`}
+                                download
+                                target="_blank"
+                                rel="noreferrer"
+                                className="px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold rounded-xl transition-all"
+                            >
+                                Download Video
+                            </a>
+                        </div>
                     </div>
                 </div>
-            </div>
-        );
-    }
-
-    if (tab === "podcasts") {
-        return (
-            <div className="group bg-gray-900/50 border border-gray-800 rounded-2xl overflow-hidden hover:border-gray-700 transition-all duration-200">
-                <div className="aspect-video bg-gray-800 flex items-center justify-center relative">
-                    <Headphones className="w-10 h-10 text-gray-600" />
-                    {item.audioUrl && (
-                        <a 
-                            href={item.audioUrl} 
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                            <Play className="w-8 h-8 text-white fill-white" />
-                        </a>
-                    )}
-                </div>
-                <div className="p-4">
-                    <h3 className="text-sm font-semibold text-white truncate mb-1">
-                        {item.title || "Untitled Episode"}
-                    </h3>
-                    <p className="text-xs text-gray-500 truncate">
-                        Show: {item.show?.name || "Podcast Show"}
-                    </p>
-                    <div className="flex items-center justify-between text-[10px] text-gray-500 mt-3 pt-2 border-t border-gray-800/60">
-                        <span>{item.durationMin} mins</span>
-                        <span>{new Date(item.createdAt).toLocaleDateString()}</span>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    if (tab === "shorts") {
-        const hasUrl = !!item.storagePath;
-        return (
-            <div className="group bg-gray-900/50 border border-gray-800 rounded-2xl overflow-hidden hover:border-gray-700 transition-all duration-200">
-                <div className="aspect-video bg-gray-800 relative flex items-center justify-center">
-                    {item.thumbnailPath ? (
-                        <img src={item.thumbnailPath} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                        <Film className="w-10 h-10 text-gray-600" />
-                    )}
-                    {hasUrl && (
-                        <a 
-                            href={item.storagePath} 
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                            <Play className="w-8 h-8 text-white fill-white" />
-                        </a>
-                    )}
-                </div>
-                <div className="p-4">
-                    <h3 className="text-sm font-semibold text-white truncate mb-1">
-                        {item.segment?.title || "Rendered Short"}
-                    </h3>
-                    <p className="text-xs text-gray-500 truncate">
-                        Source: {item.segment?.video?.title || "Video Source"}
-                    </p>
-                    <div className="flex items-center justify-between text-[10px] text-gray-500 mt-3 pt-2 border-t border-gray-800/60">
-                        <span>{item.duration ? `${Math.round(item.duration)}s` : "--"}</span>
-                        <span>{new Date(item.createdAt).toLocaleDateString()}</span>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    return null;
+            )}
+        </>
+    );
 }

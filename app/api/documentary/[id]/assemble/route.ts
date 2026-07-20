@@ -48,7 +48,7 @@ export async function POST(
         try {
             await prisma.documentary.update({
                 where: { id },
-                data: { status: "DRAFT", errorMsg: `Assembly error: ${err.message}` }
+                data: { status: "FAILED", errorMsg: `Assembly error: ${err.message}` }
             });
         } catch {}
     });
