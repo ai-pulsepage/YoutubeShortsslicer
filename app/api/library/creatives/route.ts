@@ -121,27 +121,80 @@ export async function PATCH(req: Request) {
     }
 
     try {
-        const { id, tab, status } = await req.json();
-        if (!id || !status) {
-            return NextResponse.json({ error: "id and status are required" }, { status: 400 });
+        const { id, tab, status, newCategory } = await req.json();
+        if (!id) {
+            return NextResponse.json({ error: "id is required" }, { status: 400 });
         }
 
-        const dbStatus = status === "COMPLETED" ? "APPROVED" : "DRAFT";
+        // Category / Location update
+        if (newCategory) {
+            if (newCategory === "kids") {
+                await prisma.documentary.update({
+                    where: { id, userId: session.user.id },
+                    data: { genre: "children" }
+                });
+            } else if (newCategory === "documentaries") {
+                await prisma.documentary.update({
+                    where: { id, userId: session.user.id },
+                    data: { genre: "history" }
+                });
+            }
+        }
 
-        if (tab === "kids" || tab === "documentaries") {
-            await prisma.documentary.update({
-                where: { id, userId: session.user.id },
-                data: { status: dbStatus }
-            });
-        } else if (tab === "ugc") {
-            await prisma.uGCJob.update({
-                where: { id, userId: session.user.id },
-                data: { status: status === "COMPLETED" ? "DONE" : "FAILED" }
-            });
+        // Status update
+        if (status) {
+            const dbStatus = status === "COMPLETED" ? "APPROVED" : "DRAFT";
+
+            if (tab === "kids" || tab === "documentaries") {
+                await prisma.documentary.update({
+                    where: { id, userId: session.user.id },
+                    data: { status: dbStatus }
+                });
+            } else if (tab === "ugc") {
+                await prisma.uGCJob.update({
+                    where: { id, userId: session.user.id },
+                    data: { status: status === "COMPLETED" ? "DONE" : "FAILED" }
+                });
+            }
         }
 
         return NextResponse.json({ success: true });
     } catch (err: any) {
-        return NextResponse.json({ error: "Failed to update status", details: err.message }, { status: 500 });
+        return NextResponse.json({ error: "Failed to update asset", details: err.message }, { status: 500 });
+    }
+}
+
+export async function DELETE(req: Request) {
+    const session = await auth();
+    if (!session?.user?.id) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    try {
+        const url = new URL(req.url);
+        const id = url.searchParams.get("id");
+        const tab = url.searchParams.get("tab") || "sources";
+
+        if (!id) {
+            return NextResponse.json({ error: "Asset id is required" }, { status: 400 });
+        }
+
+        if (tab === "kids" || tab === "documentaries") {
+            // Delete associated scenes, assets, and documentary
+            await prisma.docScene.deleteMany({ where: { documentaryId: id } });
+            await prisma.docAsset.deleteMany({ where: { documentaryId: id } });
+            await prisma.genJob.deleteMany({ where: { documentaryId: id } });
+            await prisma.documentary.delete({ where: { id, userId: session.user.id } });
+        } else if (tab === "ugc") {
+            await prisma.uGCJob.delete({ where: { id, userId: session.user.id } });
+        } else if (tab === "podcasts") {
+            await prisma.podcastEpisode.delete({ where: { id } });
+        } else if (tab === "shorts") {
+            await prisma.shortVideo.delete({ where: { id } });
+        }
+
+        return NextResponse.json({ success: true });
+    } catch (err: any) {
+        return NextResponse.json({ error: "Failed to delete asset", details: err.message }, { status: 500 });
     }
 }

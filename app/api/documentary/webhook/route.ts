@@ -35,9 +35,48 @@ export async function POST(req: NextRequest) {
 
     console.log(`[Webhook] Job ${jobId}: ${status}${outputPath ? ` → ${outputPath}` : ""}`);
 
-    // Find the job
+    // Handle UGC Ad jobs (jobId starts with ugc- or matches uGCJob ID directly)
+    if (jobId.startsWith("ugc-")) {
+        console.log(`[Webhook] Processing UGC Ad job callback: ${jobId}`);
+        const parts = jobId.split("-");
+        // Extract candidate ID from parts (e.g. "ugc-ltx-{ugcJobId}-{timestamp}")
+        const candidateId = parts.length >= 3 ? parts[2] : null;
+
+        let ugcJob = candidateId ? await prisma.uGCJob.findUnique({ where: { id: candidateId } }) : null;
+        if (!ugcJob) {
+            ugcJob = await prisma.uGCJob.findUnique({ where: { id: jobId } });
+        }
+
+        if (ugcJob) {
+            await prisma.uGCJob.update({
+                where: { id: ugcJob.id },
+                data: {
+                    status: status === "completed" ? "DONE" : "FAILED",
+                    outputUrl: outputPath || ugcJob.outputUrl,
+                }
+            });
+            console.log(`[Webhook] ✅ Updated uGCJob ${ugcJob.id} status to ${status === "completed" ? "DONE" : "FAILED"}`);
+            return NextResponse.json({ success: true, ugcJobId: ugcJob.id });
+        }
+    }
+
+    // Find standard GenJob
     const job = await prisma.genJob.findUnique({ where: { id: jobId } });
     if (!job) {
+        // Fallback: check if jobId directly matches a uGCJob
+        const ugcJob = await prisma.uGCJob.findUnique({ where: { id: jobId } });
+        if (ugcJob) {
+            await prisma.uGCJob.update({
+                where: { id: ugcJob.id },
+                data: {
+                    status: status === "completed" ? "DONE" : "FAILED",
+                    outputUrl: outputPath || ugcJob.outputUrl,
+                }
+            });
+            console.log(`[Webhook] ✅ Updated uGCJob ${ugcJob.id} status to ${status === "completed" ? "DONE" : "FAILED"}`);
+            return NextResponse.json({ success: true, ugcJobId: ugcJob.id });
+        }
+
         console.warn(`[Webhook] Job ${jobId} not found in DB`);
         return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }

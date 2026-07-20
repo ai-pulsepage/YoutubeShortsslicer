@@ -644,6 +644,8 @@ function VideoRow({ video, onDelete }: { video: Video; onDelete: (id: string) =>
 
 function CreativeCard({ tab, item }: { tab: string; item: any }) {
     const [showPreview, setShowPreview] = useState(false);
+    const [deleted, setDeleted] = useState(false);
+    const [currentTab, setCurrentTab] = useState(tab);
     const videoUrl = item.finalVideoPath || item.outputUrl || item.storagePath;
 
     const [statusState, setStatusState] = useState<string>(
@@ -662,18 +664,41 @@ function CreativeCard({ tab, item }: { tab: string; item: any }) {
             await fetch("/api/library/creatives", {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ id: item.id, tab, status: newStatus })
+                body: JSON.stringify({ id: item.id, tab: currentTab, status: newStatus })
             });
         } catch {}
     };
 
-    const isKids = tab === "kids";
+    const handleDeleteAsset = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!confirm("Are you sure you want to delete this asset from your library?")) return;
+        setDeleted(true);
+        setShowPreview(false);
+        try {
+            await fetch(`/api/library/creatives?id=${item.id}&tab=${currentTab}`, { method: "DELETE" });
+        } catch {}
+    };
+
+    const handleChangeCategory = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+        e.stopPropagation();
+        const newCat = e.target.value;
+        setCurrentTab(newCat);
+        try {
+            await fetch("/api/library/creatives", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id: item.id, tab: currentTab, newCategory: newCat })
+            });
+        } catch {}
+    };
+
+    if (deleted) return null;
 
     return (
         <>
             <div 
                 onClick={handleClick}
-                className="group bg-gray-900/50 border border-gray-800 rounded-2xl overflow-hidden hover:border-gray-700 transition-all duration-200 cursor-pointer"
+                className="group bg-gray-900/50 border border-gray-800 rounded-2xl overflow-hidden hover:border-gray-700 transition-all duration-200 cursor-pointer relative"
             >
                 <div className="aspect-video bg-gray-800 flex items-center justify-center relative">
                     <div className="w-full h-full relative flex items-center justify-center bg-black/60">
@@ -695,15 +720,32 @@ function CreativeCard({ tab, item }: { tab: string; item: any }) {
                     >
                         {statusState}
                     </button>
+
+                    <button
+                        onClick={handleDeleteAsset}
+                        title="Delete asset from library"
+                        className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 hover:bg-red-900/80 text-gray-400 hover:text-red-200 border border-gray-750 transition-all z-10 cursor-pointer"
+                    >
+                        <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                 </div>
                 <div className="p-4">
                     <h3 className="text-sm font-semibold text-white truncate mb-1">
                         {item.title || item.product?.name || "Untitled Asset"}
                     </h3>
                     <div className="flex items-center justify-between text-xs text-gray-500 mt-2">
-                        <span className="capitalize px-2 py-0.5 rounded bg-gray-800 text-[10px]">
-                            {isKids ? "Kids Studio" : (item.genre || tab)}
-                        </span>
+                        <select 
+                            value={currentTab}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={handleChangeCategory}
+                            className="bg-gray-800 border border-gray-750 rounded px-1.5 py-0.5 text-[10px] text-gray-300 focus:outline-none focus:border-violet-500 cursor-pointer"
+                        >
+                            <option value="kids">Kids Animation</option>
+                            <option value="documentaries">Documentaries</option>
+                            <option value="ugc">UGC Ads</option>
+                            <option value="podcasts">Podcasts</option>
+                            <option value="shorts">Sliced Shorts</option>
+                        </select>
                         <span>{new Date(item.createdAt).toLocaleDateString()}</span>
                     </div>
                 </div>
@@ -715,9 +757,14 @@ function CreativeCard({ tab, item }: { tab: string; item: any }) {
                     <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 max-w-3xl w-full space-y-4" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-between">
                             <h3 className="text-sm font-bold text-white truncate">{item.title || "Video Asset"}</h3>
-                            <button onClick={() => setShowPreview(false)} className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800">
-                                <X className="w-5 h-5" />
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <button onClick={handleDeleteAsset} className="p-1.5 rounded-lg text-red-400 hover:text-red-200 hover:bg-red-950/40 border border-red-900/30 transition-all">
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
+                                <button onClick={() => setShowPreview(false)} className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
                         </div>
                         <div className="aspect-video bg-black rounded-xl overflow-hidden">
                             <video src={videoUrl.startsWith("http") ? videoUrl : `/api/storage/signed?key=${videoUrl}`} controls autoPlay className="w-full h-full object-contain" />
