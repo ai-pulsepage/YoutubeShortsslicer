@@ -33,7 +33,9 @@ export async function POST(req: NextRequest) {
             shotId: shotId || undefined,
             duration: duration || 5,
             chainFromPrevious: !!chainFromPrevious,
-            sourceApp: "Animated Shorts"
+            sourceApp: "Animated Shorts",
+            r2Key: `animated/projects/${activeDocId}/scenes/${sceneId}/shots/shot_${shotId || Date.now()}.mp4`,
+            r2KeyLastFrame: `animated/projects/${activeDocId}/scenes/${sceneId}/shots/shot_${shotId || Date.now()}_last_frame.png`
         };
 
         let finalRefImage = null;

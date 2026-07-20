@@ -268,6 +268,7 @@ export default function KidsStoryBuilderPage() {
     // Compilation states
     const [compiling, setCompiling] = useState(false);
     const [compiledVideoUrl, setCompiledVideoUrl] = useState<string | null>(null);
+    const [customOutputTitle, setCustomOutputTitle] = useState("");
     const [error, setError] = useState("");
     const [insufficientFunds, setInsufficientFunds] = useState(false);
     const [translating, setTranslating] = useState(false);
@@ -1613,6 +1614,44 @@ export default function KidsStoryBuilderPage() {
         );
     };
 
+    // Insert scene at specific timeline index
+    const handleInsertSceneAtIndex = (insertIdx: number) => {
+        const newScene: Scene = {
+            id: `scene-manual-${Date.now()}`,
+            text: "Type scene dialogue narration here...",
+            type: "dialogue",
+            character: characters?.[0]?.name || "Narrator",
+            voice: "en-US-AnaNeural-Female",
+            visualPrompt: "3D animation Pixar style scene background",
+            voiceStatus: "IDLE",
+            visualShots: [
+                {
+                    id: `shot-manual-${Date.now()}-1`,
+                    primaryCharacter: characters?.[0]?.name || "Narrator",
+                    visualPrompt: "3D animation Pixar style background",
+                    jobStatus: "IDLE"
+                }
+            ]
+        };
+
+        setScenes(prev => {
+            const next = [...prev];
+            next.splice(insertIdx + 1, 0, newScene);
+            return next;
+        });
+    };
+
+    // Reorder scene position in timeline up or down
+    const handleMoveScene = (fromIdx: number, toIdx: number) => {
+        if (toIdx < 0 || toIdx >= scenes.length) return;
+        setScenes(prev => {
+            const next = [...prev];
+            const [moved] = next.splice(fromIdx, 1);
+            next.splice(toIdx, 0, moved);
+            return next;
+        });
+    };
+
     // Delete shot from scene
     const deleteShotFromScene = (sceneId: string, shotId: string) => {
         if (typeof window !== "undefined" && !window.confirm("Are you sure you want to delete this visual shot from the scene?")) {
@@ -1701,7 +1740,7 @@ export default function KidsStoryBuilderPage() {
             const res = await fetch("/api/animated/scenes/compile", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ scenes, docId })
+                body: JSON.stringify({ scenes, docId, title: customOutputTitle || projectTitle })
             });
 
             const data = await res.json();
@@ -2518,6 +2557,18 @@ export default function KidsStoryBuilderPage() {
                                                 
                                                 <div className="flex items-center gap-2 border-b border-gray-850/60 pb-1.5">
                                                     <span className="w-5 h-5 rounded bg-gray-800 border border-gray-700 flex items-center justify-center text-[10px] font-bold text-white">{idx + 1}</span>
+                                                    <div className="flex items-center gap-0.5">
+                                                        <button onClick={() => handleMoveScene(idx, idx - 1)} disabled={idx === 0}
+                                                            title="Move scene up in timeline"
+                                                            className="p-1 bg-gray-850 hover:bg-gray-800 disabled:opacity-30 text-gray-400 hover:text-white rounded border border-gray-750 transition-all text-[9px]">
+                                                            <ArrowLeft className="w-2.5 h-2.5 rotate-90" />
+                                                        </button>
+                                                        <button onClick={() => handleMoveScene(idx, idx + 1)} disabled={idx === scenes.length - 1}
+                                                            title="Move scene down in timeline"
+                                                            className="p-1 bg-gray-850 hover:bg-gray-800 disabled:opacity-30 text-gray-400 hover:text-white rounded border border-gray-750 transition-all text-[9px]">
+                                                            <ArrowRight className="w-2.5 h-2.5 rotate-90" />
+                                                        </button>
+                                                    </div>
                                                     <select value={scene.type} onChange={e => updateScene(scene.id, { type: e.target.value as "dialogue" | "song" })}
                                                         className="bg-gray-850 border border-gray-750 text-[10px] font-bold text-white px-2 py-0.5 rounded uppercase focus:outline-none cursor-pointer">
                                                         <option value="dialogue">Dialogue</option>
@@ -2900,6 +2951,12 @@ export default function KidsStoryBuilderPage() {
                                             </div>
 
                                         </div>
+                                        <div className="flex justify-center pt-2">
+                                            <button onClick={() => handleInsertSceneAtIndex(idx)}
+                                                className="flex items-center gap-1 px-3 py-1 bg-violet-950/60 hover:bg-violet-900/80 border border-violet-800/40 hover:border-violet-500 text-violet-300 text-[10px] font-bold rounded-lg transition-all shadow-sm">
+                                                <Plus className="w-3 h-3" /> Insert Scene Here
+                                            </button>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -2913,6 +2970,13 @@ export default function KidsStoryBuilderPage() {
                                 <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto" />
                                 <h3 className="text-lg font-bold text-white tracking-tight">Stitch & Export Timeline</h3>
                                 <p className="text-gray-400 text-xs font-sans">Stitches pre-generated dialogue voice tracks, loops visual shots, overlays custom Suno music, and compiles your final kids movie.</p>
+                            </div>
+
+                            <div className="space-y-1 text-left bg-gray-900/50 p-4 border border-gray-800 rounded-2xl">
+                                <label className="text-[10px] font-bold text-gray-300 uppercase tracking-wider block">Custom Output Video Title</label>
+                                <input type="text" value={customOutputTitle} onChange={e => setCustomOutputTitle(e.target.value)}
+                                    placeholder={projectTitle || "My Stitched Kids Movie"}
+                                    className="w-full bg-gray-950 border border-gray-750 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-sans" />
                             </div>
 
                             <button onClick={handleCompile} disabled={compiling || scenes.some(s => !s.visualPath)}
