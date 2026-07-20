@@ -6,6 +6,7 @@ import {
     Loader2,
     Play,
     AlertCircle,
+    AlertTriangle,
     Film,
     FileText,
     Sparkles,
@@ -2969,6 +2970,20 @@ export default function KidsStoryBuilderPage() {
                             <div className="text-center space-y-2">
                                 <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto" />
                                 <h3 className="text-lg font-bold text-white tracking-tight">Stitch & Export Timeline</h3>
+                                
+                                {error && (
+                                    <div className="p-4 bg-red-950/40 border border-red-800/60 rounded-2xl space-y-2 text-left">
+                                        <p className="text-xs text-red-300 font-bold font-sans flex items-center gap-1.5">
+                                            <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                                            {error}
+                                        </p>
+                                        <button onClick={() => setCurrentStep(4)}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-900/40 hover:bg-red-900/70 border border-red-700/50 text-red-200 text-xs font-bold rounded-xl transition-all font-sans">
+                                            <ArrowLeft className="w-3.5 h-3.5" /> Return to Storyboard (Step 4) to Generate Missing Video
+                                        </button>
+                                    </div>
+                                )}
+
                                 <p className="text-gray-400 text-xs font-sans">Stitches pre-generated dialogue voice tracks, loops visual shots, overlays custom Suno music, and compiles your final kids movie.</p>
                             </div>
 
