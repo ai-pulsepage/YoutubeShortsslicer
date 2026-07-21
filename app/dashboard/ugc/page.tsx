@@ -994,15 +994,19 @@ export default function UGCStudioPage() {
                                             <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">AI Video Model</label>
                                             <select value={selectedVideoModel} onChange={e => setSelectedVideoModel(e.target.value)}
                                                 className="w-full bg-gray-900 border border-gray-850 focus:border-violet-500 rounded-xl p-2.5 text-xs text-white focus:outline-none transition-all cursor-pointer">
-                                                <option value="ltx">LTX-Video (Local/RunPod)</option>
-                                                <option value="wan2.1">Wan 2.1 (Local/RunPod)</option>
+                                                <option value="ltx2.3">LTX-Video 2.3 (Local/RunPod)</option>
+                                                <option value="wan2.3">Wan 2.3 / 2.2 (Local/RunPod)</option>
+                                                <option value="ltx">LTX-Video 2.2 (Legacy)</option>
+                                                <option value="wan2.1">Wan 2.1 (Legacy)</option>
                                             </select>
                                         </div>
                                         <div className="space-y-1">
                                             <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">AI Voice Engine</label>
                                             <select value={selectedVoiceEngine} onChange={e => setSelectedVoiceEngine(e.target.value)}
                                                 className="w-full bg-gray-900 border border-gray-850 focus:border-violet-500 rounded-xl p-2.5 text-xs text-white focus:outline-none transition-all cursor-pointer">
-                                                <option value="elevenlabs">ElevenLabs (Premium)</option>
+                                                <option value="cosyvoice2">CosyVoice 2 (Alibaba - Emotion Tagged)</option>
+                                                <option value="chatterbox">Chatterbox (Resemble AI - Zero-Shot Emotion)</option>
+                                                <option value="elevenlabs">ElevenLabs (Premium API)</option>
                                                 <option value="xtts">XTTS-v2 (Local/RunPod)</option>
                                                 <option value="edge_tts">Edge TTS (Free)</option>
                                                 <option value="gemini">Gemini TTS (Fast)</option>

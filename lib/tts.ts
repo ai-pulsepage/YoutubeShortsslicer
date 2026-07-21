@@ -33,8 +33,10 @@ import {
     healthCheck as geminiHealthCheck,
     GEMINI_VOICES,
 } from "./tts/gemini";
+import { generateCosyVoice } from "./tts/cosyvoice";
+import { generateChatterbox } from "./tts/chatterbox";
 
-export type TtsEngine = "elevenlabs" | "xtts" | "dia" | "gemini" | "edge_tts";
+export type TtsEngine = "elevenlabs" | "xtts" | "dia" | "gemini" | "edge_tts" | "cosyvoice2" | "chatterbox" | "qwen3_tts";
 export { GEMINI_VOICES };
 export type { NarratorStyle } from "./tts/narrator-style";
 
@@ -193,6 +195,24 @@ export async function generateVoiceover(options: VoiceoverOptions): Promise<Buff
                 console.error("[Edge TTS] Service unreachable or failed:", err.message);
                 throw new Error(`Edge TTS was not available (${err.message})`);
             }
+        }
+
+        case "cosyvoice2": {
+            return generateCosyVoice({
+                text,
+                speakerWav,
+                speed: effectiveSpeed,
+                emotion: "neutral",
+            });
+        }
+
+        case "chatterbox": {
+            return generateChatterbox({
+                text,
+                speakerWav,
+                speed: effectiveSpeed,
+                exaggeration: 1.0,
+            });
         }
 
         default:
