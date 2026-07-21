@@ -140,7 +140,8 @@ function extractKeywords(narrationText: string, sceneTitle?: string): string {
 }
 
 /**
- * Search Pexels for stock videos matching keywords.
+ * Search Pexels for stock videos with Subject-Preserving Fallback Matrix.
+ * If exact query fails, relaxes words along the SAME subject rather than jumping topics.
  */
 async function searchPexelsVideos(query: string, count = 5): Promise<PexelsVideo[]> {
     if (!PEXELS_API_KEY) {
@@ -148,23 +149,40 @@ async function searchPexelsVideos(query: string, count = 5): Promise<PexelsVideo
         return [];
     }
 
-    try {
-        const url = `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=${count}&orientation=landscape&size=medium`;
-        const response = await fetch(url, {
-            headers: { Authorization: PEXELS_API_KEY },
-        });
+    // Build subject-preserving fallback query list
+    const words = query.trim().split(/\s+/).filter(Boolean);
+    const candidateQueries: string[] = [query];
 
-        if (!response.ok) {
-            console.warn(`[StockVideo] Pexels API returned ${response.status}`);
-            return [];
-        }
-
-        const data: PexelsResponse = await response.json();
-        return data.videos || [];
-    } catch (err: any) {
-        console.warn(`[StockVideo] Pexels search failed: ${err.message}`);
-        return [];
+    if (words.length > 2) {
+        // Attempt 2: Drop hyper-specific modifiers, keep main subject nouns (first 2-3 words)
+        candidateQueries.push(words.slice(0, words.length - 1).join(" "));
+        candidateQueries.push(words.slice(0, 2).join(" "));
+    } else if (words.length === 2) {
+        // Attempt 3: Core subject noun
+        candidateQueries.push(words[0]);
     }
+
+    for (const q of candidateQueries) {
+        try {
+            console.log(`[StockVideo] Querying Pexels with subject candidate: "${q}"`);
+            const url = `https://api.pexels.com/videos/search?query=${encodeURIComponent(q)}&per_page=${count}&orientation=landscape&size=medium`;
+            const response = await fetch(url, {
+                headers: { Authorization: PEXELS_API_KEY },
+            });
+
+            if (response.ok) {
+                const data: PexelsResponse = await response.json();
+                if (data.videos && data.videos.length > 0) {
+                    console.log(`[StockVideo] ✅ Found ${data.videos.length} stock video results for query "${q}"`);
+                    return data.videos;
+                }
+            }
+        } catch (err: any) {
+            console.warn(`[StockVideo] Pexels query "${q}" failed: ${err.message}`);
+        }
+    }
+
+    return [];
 }
 
 async function downloadVideo(url: string, outputPath: string): Promise<void> {

@@ -81,12 +81,12 @@ RULES:
 7. Group every 2-3 script segments into one scene
 8. For narrationText, just write "ASSIGNED_POST_PLAN" — the verbatim script text will be assigned automatically
 9. For segmentRange, specify [startIndex, endIndex] of which script segments belong to this scene (0-indexed)
-10. For searchQueries, provide 2-3 SHORT stock video search terms per scene. These are used to find relevant stock footage on Pexels.
-    - Each query should be 2-3 words max (noun + optional adjective)
-    - Focus on CONCRETE, filmable subjects: "solar flare sun", "forest path night", "trading floor screens", "old telegraph office"
-    - Do NOT use abstract concepts: avoid "despair", "fragility", "paradox", "protocol"
+10. For searchQueries, provide 2-3 SHORT stock video search terms per scene anchored by the 3-Point Script Context:
+    - Point 1 (Primary World Context): Derive the overall setting from the script (e.g., "Cuban town", "space station", "ancient forest").
+    - Point 2 (Secondary Scene Setting): Capture the specific environment (e.g., "candlelit altar room", "control room").
+    - Point 3 (Focus Subject Action): Capture concrete filmable subjects (e.g., "hands placing bone in clay pot", "astronomer gazing telescope").
+    - Do NOT use abstract concepts like "despair", "paradox", or hyper-specific niche terms that stock libraries lack.
     - Think: what would a stock video library actually have footage of?
-    - Each query should match a different visual from the scene's narration
 
 Return ONLY valid JSON.`;
 

@@ -257,9 +257,11 @@ export async function POST(req: NextRequest) {
                     if (searchQueriesMeta.visualShots && Array.isArray(searchQueriesMeta.visualShots)) {
                         searchQueriesMeta.visualShots = searchQueriesMeta.visualShots.map((shot: any) => {
                             if ((shotId && shot.id === shotId) || shot.jobId === jobId) {
+                                const resolvedKey = meta?.r2Key || finalPath;
                                 return { 
                                     ...shot, 
-                                    visualPath: finalPath, 
+                                    visualPath: resolvedKey, 
+                                    clipPath: resolvedKey,
                                     jobStatus: "COMPLETED",
                                     lastFramePath: lastFramePath || undefined
                                 };

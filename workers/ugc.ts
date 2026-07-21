@@ -397,79 +397,55 @@ export const ugcWorker = new Worker(
                 execSync(`ffmpeg -f lavfi -i color=c=gray:s=1080x1080:d=1 -vframes 1 "${avatarImagePath}" -y`);
             }
 
-            // 5. Generate LTX-Video / Hedra Avatar Motion
+            // 5. Generate Native Video Ad Clip from RunPod GPU Worker
             let talkingHeadLocalPath = path.join(tempDir, "talking_head.mp4");
-            const hedraKey = process.env.HEDRA_API_KEY;
+            const avatarName = ugcJob.avatar.name || "Spokesperson";
+            const persona = ugcJob.avatar.persona || "friendly UGC creator";
+            const actionTpl = detectActionTemplate(ugcJob.product?.name || "", ugcJob.product?.description || "");
+            const ltxPrompt = `Cinematic video of ${avatarName}, ${persona}. ${actionTpl.ltxAction}. Expressive natural facial motion, speaking directly into camera, high fidelity 4k. Narration: "${script.slice(0, 150)}"`;
+            const runpodJobId = `ugc-ltx-${jobId}-${Date.now()}`;
+            const ltxOutputR2Key = `ugc/jobs/${jobId}/ltx_avatar.mp4`;
 
-            if (hedraKey && hedraKey !== "mock" && hedraKey.trim().length > 0) {
+            console.log(`[UGC Worker] 🚀 Dispatching native video job to RunPod GPU Queue: ${runpodJobId}`);
+            const redisJob: RedisJob = {
+                jobId: runpodJobId,
+                documentaryId: jobId,
+                type: "shot_video",
+                prompt: ltxPrompt,
+                referenceImages: ugcJob.avatar.referenceImageUrl ? [ugcJob.avatar.referenceImageUrl] : [],
+                metadata: {
+                    model: "ltx",
+                    duration: Math.min(Math.ceil(duration), 15),
+                    width: 768,
+                    height: 1280,
+                    r2Key: ltxOutputR2Key,
+                    sourceApp: "UGC Studio",
+                    title: avatarName
+                }
+            };
+
+            await dispatchJob(redisJob);
+
+            // Wait for generated video from R2 (up to 15 minute timeout for GPU rendering)
+            const startTime = Date.now();
+            let ltxSuccess = false;
+            while (Date.now() - startTime < 900000) {
                 try {
-                    const videoUrl = await generateHedraTalkingHead(avatarImagePath, audioPath, hedraKey, tempDir);
-                    console.log(`[UGC Worker] Downloading generated Hedra video: ${videoUrl}`);
-                    const headResponse = await fetch(videoUrl);
-                    if (headResponse.ok) {
-                        const headBuffer = Buffer.from(await headResponse.arrayBuffer());
-                        fs.writeFileSync(talkingHeadLocalPath, headBuffer);
+                    const ltxTempFile = path.join(tempDir, "ltx_download.mp4");
+                    await downloadFileFromR2(ltxOutputR2Key, ltxTempFile);
+                    if (fs.existsSync(ltxTempFile) && fs.statSync(ltxTempFile).size > 1000) {
+                        console.log("[UGC Worker] ✅ Downloaded generated native video ad clip from RunPod GPU!");
+                        fs.copyFileSync(ltxTempFile, talkingHeadLocalPath);
+                        ltxSuccess = true;
+                        break;
                     }
-                } catch (hedraErr: any) {
-                    console.error("[UGC Worker] Hedra generation failed, attempting RunPod LTX-Video GPU fallback:", hedraErr.message);
+                } catch {
+                    // Wait 5s before polling again
+                    await new Promise(r => setTimeout(r, 5000));
                 }
             }
-
-            // Attempt RunPod GPU LTX-Video Generation
-            if (!fs.existsSync(talkingHeadLocalPath) && process.env.REDIS_URL) {
-                try {
-                    const avatarName = ugcJob.avatar.name || "Spokesperson";
-                    const persona = ugcJob.avatar.persona || "friendly UGC creator";
-                    const actionTpl = detectActionTemplate(ugcJob.product?.name || "", ugcJob.product?.description || "");
-                    const ltxPrompt = `Cinematic video of ${avatarName}, ${persona}. ${actionTpl.ltxAction}. Expressive natural facial motion, speaking directly into camera, high fidelity 4k. Narration: "${script.slice(0, 150)}"`;
-                    const runpodJobId = `ugc-ltx-${jobId}-${Date.now()}`;
-                    const ltxOutputR2Key = `ugc/jobs/${jobId}/ltx_avatar.mp4`;
-
-                    console.log(`[UGC Worker] 🚀 Dispatching LTX-Video job to RunPod GPU Queue: ${runpodJobId}`);
-                    const redisJob: RedisJob = {
-                        jobId: runpodJobId,
-                        documentaryId: jobId,
-                        type: "shot_video",
-                        prompt: ltxPrompt,
-                        referenceImages: ugcJob.avatar.referenceImageUrl ? [ugcJob.avatar.referenceImageUrl] : [],
-                        metadata: {
-                            model: "ltx",
-                            duration: Math.min(Math.ceil(duration), 15),
-                            width: 768,
-                            height: 1280,
-                            r2Key: ltxOutputR2Key,
-                            sourceApp: "UGC Studio",
-                            title: avatarName
-                        }
-                    };
-
-                    await dispatchJob(redisJob);
-
-                    // Download generated LTX video from R2 when ready (up to 15 minute timeout for GPU rendering)
-                    const startTime = Date.now();
-                    let ltxSuccess = false;
-                    while (Date.now() - startTime < 900000) {
-                        try {
-                            const ltxTempFile = path.join(tempDir, "ltx_download.mp4");
-                            await downloadFileFromR2(ltxOutputR2Key, ltxTempFile);
-                            if (fs.existsSync(ltxTempFile) && fs.statSync(ltxTempFile).size > 1000) {
-                                console.log("[UGC Worker] ✅ Downloaded generated native LTX-Video ad clip from RunPod GPU!");
-                                fs.copyFileSync(ltxTempFile, talkingHeadLocalPath);
-                                ltxSuccess = true;
-                                break;
-                            }
-                        } catch {
-                            // Wait 5s before polling again
-                            await new Promise(r => setTimeout(r, 5000));
-                        }
-                    }
-                    if (!ltxSuccess) {
-                        throw new Error("RunPod LTX GPU job timed out after 15 minutes");
-                    }
-                } catch (ltxErr: any) {
-                    console.error(`[UGC Worker] RunPod LTX GPU error: ${ltxErr.message}`);
-                    throw ltxErr;
-                }
+            if (!ltxSuccess) {
+                throw new Error("RunPod GPU video generation timed out after 15 minutes");
             }
 
             // Set state to compositing
@@ -478,123 +454,16 @@ export const ugcWorker = new Worker(
                 data: { status: "COMPOSITING" },
             });
 
-            // 6. Optionally fetch product B-roll
-            let bRollLocalPath = "";
-            const togetherKey = process.env.TOGETHER_API_KEY;
-            if (togetherKey && togetherKey.trim().length > 0) {
-                try {
-                    const bRollUrl = await generateWanVideoBRoll(ugcJob);
-                    bRollLocalPath = path.join(tempDir, "broll.mp4");
-                    console.log(`[UGC Worker] Downloading Wan B-Roll: ${bRollUrl}`);
-                    const brollRes = await fetch(bRollUrl);
-                    if (brollRes.ok) {
-                        const brollBuf = Buffer.from(await brollRes.arrayBuffer());
-                        fs.writeFileSync(bRollLocalPath, brollBuf);
-                    }
-                } catch (brollErr: any) {
-                    console.warn("[UGC Worker] Wan B-Roll failed (non-fatal):", brollErr.message);
-                }
-            }
-
-            // 7. Stack composite layout
+            // 6. Native Video Ad Output Assembly
             const finalVideoPath = path.join(tempDir, "final.mp4");
-
-            // Extract layout configurations from job metadata
-            const meta = (ugcJob.metadata as any) || {};
-            const layoutType = meta.layoutType || "SPLIT"; // SPLIT, GREEN_SCREEN, PIP
-            console.log(`[UGC Worker] Selected layout type: ${layoutType}`);
-
-            if (bRollLocalPath && fs.existsSync(bRollLocalPath)) {
-                if (layoutType === "GREEN_SCREEN") {
-                    console.log("[UGC Worker] Compositing green screen key overlay...");
-                    execSync(
-                        `ffmpeg -i "${talkingHeadLocalPath}" -i "${bRollLocalPath}" -filter_complex ` +
-                        `"[0:v]colorkey=0x00FF00:0.12:0.12[ck];` +
-                        `[ck]scale=1080:1080[avatar];` +
-                        `[1:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[bg];` +
-                        `[bg][avatar]overlay=0:H-h[v]" ` +
-                        `-map "[v]" -map 0:a -c:v libx264 -preset fast -crf 23 -c:a aac "${finalVideoPath}" -y`
-                    );
-                } else if (layoutType === "PIP") {
-                    console.log("[UGC Worker] Compositing Picture-in-Picture circle bubble...");
-                    execSync(
-                        `ffmpeg -i "${talkingHeadLocalPath}" -i "${bRollLocalPath}" -filter_complex ` +
-                        `"[0:v]scale=360:360[av_scaled];` +
-                        `[av_scaled]geq=r='if(lte(hypot(X-180,Y-180),180),r(X,Y),0)':g='if(lte(hypot(X-180,Y-180),180),g(X,Y),0)':b='if(lte(hypot(X-180,Y-180),180),b(X,Y),0)':a='if(lte(hypot(X-180,Y-180),180),255,0)'[masked];` +
-                        `[1:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[bg];` +
-                        `[bg][masked]overlay=W-w-50:H-h-50[v]" ` +
-                        `-map "[v]" -map 0:a -c:v libx264 -preset fast -crf 23 -c:a aac "${finalVideoPath}" -y`
-                    );
-                } else {
-                    // Default SPLIT Layout
-                    console.log("[UGC Worker] Compositing talking head + Wan B-roll stacked...");
-                    execSync(
-                        `ffmpeg -i "${talkingHeadLocalPath}" -i "${bRollLocalPath}" -filter_complex ` +
-                        `"[0:v]crop='min(iw,ih)':'min(iw,ih)',scale=1080:960[top];` +
-                        `[1:v]crop='min(iw,ih)':'min(iw,ih)',scale=1080:960[bot];` +
-                        `[top][bot]vstack=inputs=2[v]" ` +
-                        `-map "[v]" -map 0:a -c:v libx264 -preset fast -crf 23 -c:a aac "${finalVideoPath}" -y`
-                    );
-                }
-            } else if (ugcJob.product.imageUrls && ugcJob.product.imageUrls.length > 0) {
-                console.log("[UGC Worker] Compositing talking head + static product image stacked...");
-                const productImagePath = path.join(tempDir, "product.jpg");
-
-                try {
-                    const imgRes = await fetch(ugcJob.product.imageUrls[0]);
-                    if (imgRes.ok) {
-                        const imgBuf = Buffer.from(await imgRes.arrayBuffer());
-                        fs.writeFileSync(productImagePath, imgBuf);
-                    }
-                } catch (imgErr) {
-                    console.warn("[UGC Worker] Failed to fetch product image, using fallback...");
-                }
-
-                if (fs.existsSync(productImagePath)) {
-                    if (layoutType === "GREEN_SCREEN") {
-                        console.log("[UGC Worker] Compositing green screen overlay over product image background...");
-                        execSync(
-                            `ffmpeg -i "${talkingHeadLocalPath}" -loop 1 -i "${productImagePath}" -filter_complex ` +
-                            `"[0:v]colorkey=0x00FF00:0.12:0.12[ck];` +
-                            `[ck]scale=1080:1080[avatar];` +
-                            `[1:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[bg];` +
-                            `[bg][avatar]overlay=0:H-h[v]" ` +
-                            `-map "[v]" -map 0:a -c:v libx264 -preset fast -crf 23 -t ${duration} -c:a aac "${finalVideoPath}" -y`
-                        );
-                    } else if (layoutType === "PIP") {
-                        console.log("[UGC Worker] Compositing PiP circle bubble over product image background...");
-                        execSync(
-                            `ffmpeg -i "${talkingHeadLocalPath}" -loop 1 -i "${productImagePath}" -filter_complex ` +
-                            `"[0:v]scale=360:360[av_scaled];` +
-                            `[av_scaled]geq=r='if(lte(hypot(X-180,Y-180),180),r(X,Y),0)':g='if(lte(hypot(X-180,Y-180),180),g(X,Y),0)':b='if(lte(hypot(X-180,Y-180),180),b(X,Y),0)':a='if(lte(hypot(X-180,Y-180),180),255,0)'[masked];` +
-                            `[1:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[bg];` +
-                            `[bg][masked]overlay=W-w-50:H-h-50[v]" ` +
-                            `-map "[v]" -map 0:a -c:v libx264 -preset fast -crf 23 -t ${duration} -c:a aac "${finalVideoPath}" -y`
-                        );
-                    } else {
-                        // Default SPLIT Layout
-                        execSync(
-                            `ffmpeg -i "${talkingHeadLocalPath}" -loop 1 -i "${productImagePath}" -filter_complex ` +
-                            `"[0:v]crop='min(iw,ih)':'min(iw,ih)',scale=1080:960[top];` +
-                            `[1:v]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960[bot];` +
-                            `[top][bot]vstack=inputs=2[v]" ` +
-                            `-map "[v]" -map 0:a -c:v libx264 -preset fast -crf 23 -t ${duration} -c:a aac "${finalVideoPath}" -y`
-                        );
-                    }
-                } else {
-                    bRollLocalPath = ""; // trigger avatar only pad
-                }
-            }
-
-            if (!fs.existsSync(finalVideoPath)) {
-                // Pad avatar talking head only to a standard 9:16 frame
-                console.log("[UGC Worker] Padding talking head to 9:16 vertical...");
-                execSync(
-                    `ffmpeg -i "${talkingHeadLocalPath}" -vf ` +
-                    `"scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black" ` +
-                    `-c:v libx264 -preset fast -crf 23 -c:a copy "${finalVideoPath}" -y`
-                );
-            }
+            
+            // Pad avatar talking head only to a standard 9:16 frame
+            console.log("[UGC Worker] Padding talking head to 9:16 vertical...");
+            execSync(
+                `ffmpeg -i "${talkingHeadLocalPath}" -vf ` +
+                `"scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black" ` +
+                `-c:v libx264 -preset fast -crf 23 -c:a copy "${finalVideoPath}" -y`
+            );
 
             // 8. Upload results to R2 storage & save
             const campaignId = ugcJob.campaignId;
