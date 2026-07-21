@@ -22,7 +22,9 @@ export type GenreId =
     | "comedy"
     | "nature"
     | "romance_telenovela"
-    | "anthropomorphic_animal";
+    | "anthropomorphic_animal"
+    | "kung_fu_classics"
+    | "dystopian_scifi";
 
 export type VisualMode = "full_ai_video" | "chapter_illustrations" | "broll_only" | "narration_only";
 export type ImageModel = "chroma" | "flux" | "juggernaut";
@@ -518,6 +520,52 @@ export const GENRES: GenreDef[] = [
                 label: "Anthropomorphic Noir",
                 promptBlock: "You are writing a hardboiled detective mystery starring an anthropomorphic cat in a trench coat navigating a rainy, neon-lit 1940s metropolis. Smoke swirls in dark alleys as secrets unfold.",
                 defaults: { narratorStyle: "conversational", musicMood: "dark_ambient", useBRoll: false, useKenBurns: false, visualMode: "full_ai_video", imageModel: "flux", pacing: "standard", audience: "adults", perspective: "first_person", ending: "cliffhanger", contentMode: "creative" },
+            },
+        ],
+    },
+
+    // ── Kung-Fu Martial Arts Classics ────────────────────
+    {
+        id: "kung_fu_classics",
+        label: "Kung-Fu Martial Arts Classics",
+        icon: "🥋",
+        description: "High-octane martial arts choreography, wuxia wirework, and revenge duels",
+        imageStyle: "70s Shaw Brothers kung-fu cinema aesthetic, vibrant primary colors, high-contrast dynamic lighting, sweeping mountain temple backgrounds, sharp motion blur, classic wuxia attire.",
+        subStyles: [
+            {
+                id: "wuxia_temple",
+                label: "Wuxia Temple Showdown",
+                promptBlock: "You are writing an epic Wuxia martial arts film script. Every scene features intense character rivalries, wooden staff duels, tea house confrontations, and high-flying combat stances. Dialogue is honor-bound, intense, and focused on martial arts mastery and clan revenge.",
+                defaults: { narratorStyle: "dramatic", musicMood: "epic", useBRoll: false, useKenBurns: false, visualMode: "full_ai_video", imageModel: "juggernaut", pacing: "fast", audience: "adults", perspective: "omniscient", ending: "cliffhanger", contentMode: "creative" },
+            },
+            {
+                id: "shaw_brothers_70s",
+                label: "70s Martial Arts Classic",
+                promptBlock: "You are writing a 1970s Hong Kong kung-fu action film. Dynamic whip-pans, intense eye-to-eye staring contests, fast combat choreography, and revenge-fueled dialogue turns.",
+                defaults: { narratorStyle: "dramatic", musicMood: "epic", useBRoll: false, useKenBurns: false, visualMode: "full_ai_video", imageModel: "juggernaut", pacing: "fast", audience: "adults", perspective: "omniscient", ending: "cliffhanger", contentMode: "creative" },
+            },
+        ],
+    },
+
+    // ── Dystopian Sci-Fi & Cyberpunk Worlds ──────────────
+    {
+        id: "dystopian_scifi",
+        label: "Dystopian Sci-Fi & Cyberpunk",
+        icon: "🌆",
+        description: "High-tech low-life megacities, cybernetic rebels, and post-apocalyptic sagas",
+        imageStyle: "Cyberpunk Blade Runner aesthetic, rain-soaked asphalt, towering holographic billboards, neon cyan and magenta illumination, dark dystopian megastructures, cybernetic implants.",
+        subStyles: [
+            {
+                id: "cyberpunk_slums",
+                label: "Neon Cyberpunk Rebellion",
+                promptBlock: "You are writing a high-voltage Cyberpunk sci-fi mini-series. Dystopian megacities, rogue AI hunters, cybernetic mercenaries, and underground hackers. Every scene has high stakes, intense character conflict, and glowing neon atmosphere.",
+                defaults: { narratorStyle: "dramatic", musicMood: "electronic", useBRoll: false, useKenBurns: false, visualMode: "full_ai_video", imageModel: "flux", pacing: "fast", audience: "young_adults", perspective: "omniscient", ending: "cliffhanger", contentMode: "creative" },
+            },
+            {
+                id: "wasteland_survival",
+                label: "Post-Apocalyptic Wasteland",
+                promptBlock: "You are writing a gritty post-apocalyptic survival drama — think 'Mad Max meets Dune'. Desolate desert highways, scavenged armors, scarce resources, and desperate faction clashes.",
+                defaults: { narratorStyle: "dramatic", musicMood: "dark_ambient", useBRoll: false, useKenBurns: false, visualMode: "full_ai_video", imageModel: "flux", pacing: "standard", audience: "adults", perspective: "omniscient", ending: "cliffhanger", contentMode: "creative" },
             },
         ],
     },

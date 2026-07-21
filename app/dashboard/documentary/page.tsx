@@ -317,7 +317,7 @@ function CreateDocumentaryModal({
     onClose: () => void;
     onCreated: (id: string) => void;
 }) {
-    const [mode, setMode] = useState<"topic" | "urls" | "text">("topic");
+    const [mode, setMode] = useState<"topic" | "urls" | "text" | "shows">("topic");
     const [title, setTitle] = useState("");
     const [urlsText, setUrlsText] = useState("");
     const [textStory, setTextStory] = useState("");
@@ -360,6 +360,30 @@ function CreateDocumentaryModal({
 
     const handleCreate = async () => {
         setCreating(true);
+
+        if (mode === "shows") {
+            try {
+                const res = await fetch("/api/shows/generate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        title: title.trim() || "Untitled TV Mini-Series",
+                        concept: textStory.trim() || title.trim() || "Dramatic multi-episode story arc",
+                        genre,
+                        subStyle,
+                        numEpisodes: 3,
+                    })
+                });
+                const data = await res.json();
+                setCreating(false);
+                if (data.showId) onCreated(data.showId);
+            } catch (err) {
+                setCreating(false);
+                alert("Failed to generate TV Mini-Series.");
+            }
+            return;
+        }
+
         const sourceUrls = mode === "urls"
             ? urlsText.split("\n").map((u) => u.trim()).filter(Boolean)
             : [];
@@ -400,12 +424,17 @@ function CreateDocumentaryModal({
                         <button onClick={() => setMode("topic")}
                             className={cn("flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
                                 mode === "topic" ? "bg-violet-600 text-white" : "text-gray-400 hover:text-white")}>
-                            <Sparkles className="w-3.5 h-3.5" /> AI Research
+                            <Sparkles className="w-3.5 h-3.5" /> AI Movie
+                        </button>
+                        <button onClick={() => setMode("shows")}
+                            className={cn("flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                                mode === "shows" ? "bg-gradient-to-r from-amber-500 to-violet-600 text-white font-bold" : "text-gray-400 hover:text-white")}>
+                            <Film className="w-3.5 h-3.5" /> 📺 TV Mini-Series
                         </button>
                         <button onClick={() => setMode("text")}
                             className={cn("flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
                                 mode === "text" ? "bg-violet-600 text-white" : "text-gray-400 hover:text-white")}>
-                            <FileText className="w-3.5 h-3.5" /> From Script/Text
+                            <FileText className="w-3.5 h-3.5" /> From Text
                         </button>
                         <button onClick={() => setMode("urls")}
                             className={cn("flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
