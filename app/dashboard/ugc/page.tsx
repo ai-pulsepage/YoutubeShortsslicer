@@ -1036,6 +1036,10 @@ export default function UGCStudioPage() {
                                                  <option value="applying_using">✨ Applying / Using Product on Camera</option>
                                                  <option value="drinking_gasping">🥤 Drinking / Tasting Product with Gasp</option>
                                                  <option value="unboxing_opening">🎁 Opening Package & Pulling Product Out</option>
+                                                 <option value="car_wash">🚗 Washing Car / Auto Detailing Action</option>
+                                                 <option value="power_tools">🛠 Using Power Tools / Drilling Action</option>
+                                                 <option value="paint_scraping">🎨 Scraping Paint / Restoration Action</option>
+                                                 <option value="blender_use">🍹 Blender / Kitchen Appliance Action</option>
                                              </select>
                                          </div>
                                      </div>

@@ -58,12 +58,22 @@ export function buildHighConvertingUGCPrompt(config: UGCPromptConfig): UGCPrompt
     }
 
     // 2. Specific Physical Hand & Product Motion Overrides
-    if (config.productAction === "applying_using") {
+    const actionKey = (config.productAction as string).toLowerCase();
+
+    if (actionKey === "applying_using") {
         visualMotion = `holding ${product} container, gently applying sample to face, smiling with radiant expression`;
-    } else if (config.productAction === "drinking_gasping") {
+    } else if (actionKey === "drinking_gasping") {
         visualMotion = `taking a refreshingly smooth sip from ${product} bottle, looking at camera with delighted energetic gasp`;
-    } else if (config.productAction === "unboxing_opening") {
+    } else if (actionKey === "unboxing_opening") {
         visualMotion = `opening outer box, pulling out ${product} with amazed wide-eyed expression`;
+    } else if (actionKey === "car_wash") {
+        visualMotion = `holding high-pressure water nozzle in right hand, spraying thick soapy foam across shiny car hood, wiping door with microfiber cloth`;
+    } else if (actionKey === "power_tools") {
+        visualMotion = `holding electric cordless power drill with both hands, driving screw into wooden beam with precision, sawdust flying off timber`;
+    } else if (actionKey === "paint_scraping") {
+        visualMotion = `holding metal scraper angled at 45 degrees, scraping peeling old paint flakes off wooden door frame smoothly`;
+    } else if (actionKey === "blender_use") {
+        visualMotion = `pressing power button on stainless steel countertop blender, watching vibrant fruit smoothie swirl rapidly inside glass pitcher`;
     }
 
     // 3. Build Clean Kinematic Visual Prompt (Strictly NO raw narration text pollution)
