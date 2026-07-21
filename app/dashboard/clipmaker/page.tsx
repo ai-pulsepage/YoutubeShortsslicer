@@ -682,21 +682,29 @@ export default function ClipStudioPage() {
                                     <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Video Model Wiring</label>
                                     <select value={trailerVideoModel} onChange={e => setTrailerVideoModel(e.target.value)}
                                         className="w-full bg-gray-950 border border-gray-800 focus:border-amber-500 rounded-xl p-2.5 text-xs text-white focus:outline-none transition-all cursor-pointer">
-                                        <option value="wan2.3">Wan 2.3 / 2.2 (Local/RunPod)</option>
-                                        <option value="ltx2.3">LTX-Video 2.3 (Local/RunPod)</option>
-                                        <option value="wan2.1">Wan 2.1 (Legacy)</option>
+                                        <option value="wan2.3">Wan 2.3 / 2.2 (High-Fidelity Action Transformer)</option>
+                                        <option value="ltx2.3">LTX-Video 2.3 (Native Audio-Video Integrated)</option>
+                                        <option value="wan2.1">Wan 2.1 (Standard)</option>
                                         <option value="ltx">LTX-Video 2.2 (Legacy)</option>
                                     </select>
                                 </div>
                                 <div className="space-y-1">
-                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Trailer Narrator Voice Engine</label>
-                                    <select value={trailerVoiceEngine} onChange={e => setTrailerVoiceEngine(e.target.value)}
-                                        className="w-full bg-gray-950 border border-gray-800 focus:border-amber-500 rounded-xl p-2.5 text-xs text-white focus:outline-none transition-all cursor-pointer">
-                                        <option value="cosyvoice2">CosyVoice 2 (Alibaba - Emotion Tagged)</option>
-                                        <option value="chatterbox">Chatterbox (Resemble AI - Zero-Shot)</option>
-                                        <option value="elevenlabs">ElevenLabs (Premium)</option>
-                                        <option value="xtts">XTTS-v2 (Local/RunPod)</option>
-                                    </select>
+                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">
+                                        {trailerVideoModel === "ltx2.3" ? "🎙 Voice Engine (Bypassed)" : "Trailer Narrator Voice Engine"}
+                                    </label>
+                                    {trailerVideoModel === "ltx2.3" ? (
+                                        <div className="w-full bg-gray-950/80 border border-violet-500/30 rounded-xl p-2.5 text-xs text-violet-300 font-medium flex items-center gap-2">
+                                            <span>⚡ Native Audio Bypass (LTX 2.3 generates native lip-synced audio)</span>
+                                        </div>
+                                    ) : (
+                                        <select value={trailerVoiceEngine} onChange={e => setTrailerVoiceEngine(e.target.value)}
+                                            className="w-full bg-gray-950 border border-gray-800 focus:border-amber-500 rounded-xl p-2.5 text-xs text-white focus:outline-none transition-all cursor-pointer">
+                                            <option value="cosyvoice2">CosyVoice 2 (Alibaba - Emotion Tagged)</option>
+                                            <option value="chatterbox">Chatterbox (Resemble AI - Zero-Shot)</option>
+                                            <option value="elevenlabs">ElevenLabs (Premium)</option>
+                                            <option value="xtts">XTTS-v2 (Local/RunPod)</option>
+                                        </select>
+                                    )}
                                 </div>
                             </div>
 
@@ -962,40 +970,7 @@ export default function ClipStudioPage() {
             </div>
             )}
 
-            {/* Earnings Calculator */}
-            {projects.some((p) => p.campaignCpm) && (
-                <div className="bg-gradient-to-r from-emerald-900/30 to-green-900/20 border border-emerald-800/40 rounded-2xl p-5">
-                    <h3 className="text-sm font-semibold text-emerald-400 mb-3 flex items-center gap-2">
-                        <DollarSign className="w-4 h-4" />
-                        Earnings Calculator
-                    </h3>
-                    <div className="flex items-center gap-4">
-                        <div className="flex-1">
-                            <input
-                                type="number"
-                                value={viewCount}
-                                onChange={(e) => setViewCount(e.target.value)}
-                                placeholder="Enter total views"
-                                className="w-full px-3 py-2 bg-gray-900/60 border border-emerald-800/40 rounded-lg text-white placeholder-gray-500 focus:border-emerald-500 focus:outline-none text-sm"
-                            />
-                        </div>
-                        {viewCount && (
-                            <div className="text-right">
-                                {projects
-                                    .filter((p) => p.campaignCpm)
-                                    .map((p) => (
-                                        <div key={p.id} className="text-sm">
-                                            <span className="text-gray-400">{p.campaignName || "Campaign"}:</span>{" "}
-                                            <span className="text-emerald-400 font-bold text-lg">
-                                                ${((parseInt(viewCount) / 1000) * (p.campaignCpm || 0)).toFixed(2)}
-                                            </span>
-                                        </div>
-                                    ))}
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
+
 
             {/* Projects Grid */}
             <div>
