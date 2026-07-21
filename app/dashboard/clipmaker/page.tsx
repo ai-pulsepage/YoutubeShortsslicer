@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { cn } from "@/lib/utils";
 import {
     Scissors,
     Play,
@@ -28,6 +29,7 @@ import {
     ChevronDown,
     ChevronUp,
     Save,
+    Wand2,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────
@@ -177,7 +179,17 @@ export default function ClipStudioPage() {
     const [creating, setCreating] = useState(false);
     const [rendering, setRendering] = useState<Set<string>>(new Set());
 
-    // Form state
+    // Tab Mode Toggle: "trailer" (Text-to-Trailer ClipMaker) vs "slicer" (Long-video slicer)
+    const [studioTab, setStudioTab] = useState<"trailer" | "slicer">("trailer");
+
+    // Trailer Form States
+    const [trailerTitle, setTrailerTitle] = useState("");
+    const [trailerConcept, setTrailerConcept] = useState("");
+    const [trailerGenre, setTrailerGenre] = useState("Game Trailer");
+    const [trailerVideoModel, setTrailerVideoModel] = useState("wan2.3");
+    const [trailerVoiceEngine, setTrailerVoiceEngine] = useState("cosyvoice2");
+    const [generatingTrailer, setGeneratingTrailer] = useState(false);
+    const [generatedTrailerShots, setGeneratedTrailerShots] = useState<any[]>([]);
     const [inputMode, setInputMode] = useState<"url" | "upload">("url");
     const [url, setUrl] = useState("");
     const [uploadFile, setUploadFile] = useState<File | null>(null);
@@ -515,6 +527,36 @@ export default function ClipStudioPage() {
         }
     };
 
+    const handleGenerateTrailer = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!trailerTitle.trim() || !trailerConcept.trim()) return;
+
+        setGeneratingTrailer(true);
+        try {
+            const res = await fetch("/api/clipmaker/trailer/generate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    title: trailerTitle.trim(),
+                    concept: trailerConcept.trim(),
+                    genre: trailerGenre,
+                    videoModel: trailerVideoModel,
+                    voiceEngine: trailerVoiceEngine
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Trailer generation failed");
+
+            setGeneratedTrailerShots(data.shots || []);
+            alert(`✅ Viral Trailer Storyboard generated for "${data.title}"! Dispatched to ${trailerVideoModel} and ${trailerVoiceEngine}.`);
+        } catch (err: any) {
+            console.error("Trailer generation error:", err);
+            alert(`Error: ${err.message}`);
+        } finally {
+            setGeneratingTrailer(false);
+        }
+    };
+
     // ─── Render ──────────────────────────────────────────
 
     return (
@@ -541,8 +583,169 @@ export default function ClipStudioPage() {
                 </button>
             </div>
 
-            {/* Create New Project */}
-            <div className="bg-gray-900/80 backdrop-blur-xl rounded-2xl border border-gray-800 p-6">
+            {/* Tab Switcher: ClipMaker Trailer Creator vs Video Slicer */}
+            <div className="flex items-center gap-2 p-1.5 bg-gray-900 border border-gray-800 rounded-2xl w-fit font-sans">
+                <button
+                    onClick={() => setStudioTab("trailer")}
+                    className={cn(
+                        "flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer",
+                        studioTab === "trailer"
+                            ? "bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-md"
+                            : "text-gray-400 hover:text-white hover:bg-gray-800/60"
+                    )}
+                >
+                    <Wand2 className="w-4 h-4" />
+                    Fake Game & Movie Trailer Creator
+                </button>
+                <button
+                    onClick={() => setStudioTab("slicer")}
+                    className={cn(
+                        "flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer",
+                        studioTab === "slicer"
+                            ? "bg-violet-600 text-white shadow-md"
+                            : "text-gray-400 hover:text-white hover:bg-gray-800/60"
+                    )}
+                >
+                    <Scissors className="w-4 h-4" />
+                    Long-Form Video Slicer
+                </button>
+            </div>
+
+            {studioTab === "trailer" ? (
+                /* ─── Fake Game & Movie Trailer Studio ─── */
+                <div className="space-y-6 font-sans">
+                    <div className="bg-gray-900/80 backdrop-blur-xl rounded-2xl border border-amber-500/30 p-6 space-y-5">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                                    <Sparkles className="w-5 h-5 text-amber-400" />
+                                    Viral Fake Game & Movie Trailer Generator
+                                </h2>
+                                <p className="text-xs text-gray-400 mt-1">
+                                    Input your fake game concept or movie idea → AI prepares Kinematic Prompts → Generates high-impact trailer clips.
+                                </p>
+                            </div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-lg">
+                                AI ClipMaker
+                            </span>
+                        </div>
+
+                        <form onSubmit={handleGenerateTrailer} className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-300 mb-1">
+                                        Game / Movie Title
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={trailerTitle}
+                                        onChange={(e) => setTrailerTitle(e.target.value)}
+                                        placeholder="e.g. Cyberpunk 2099: Neon Horizon or Shadowborn RPG"
+                                        required
+                                        className="w-full bg-gray-950 border border-gray-800 focus:border-amber-500 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-300 mb-1">
+                                        Trailer Format / Genre
+                                    </label>
+                                    <select
+                                        value={trailerGenre}
+                                        onChange={(e) => setTrailerGenre(e.target.value)}
+                                        className="w-full bg-gray-950 border border-gray-800 focus:border-amber-500 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none"
+                                    >
+                                        <option value="Game Trailer">AAA Video Game Trailer</option>
+                                        <option value="Movie Teaser">Hollywood Movie Teaser</option>
+                                        <option value="Anime Opening">High-Octane Anime Opening</option>
+                                        <option value="Cinematic Short">Dark Fantasy Cinematic</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-gray-300 mb-1">
+                                    Game Premise & Storyboard Concept
+                                </label>
+                                <textarea
+                                    value={trailerConcept}
+                                    onChange={(e) => setTrailerConcept(e.target.value)}
+                                    rows={3}
+                                    placeholder="Describe the gameplay, world, protagonist, boss fight, and mood..."
+                                    required
+                                    className="w-full bg-gray-950 border border-gray-800 focus:border-amber-500 rounded-xl p-3.5 text-xs text-white focus:outline-none leading-relaxed resize-none"
+                                />
+                            </div>
+
+                            {/* Model & Voice Selectors for Trailer */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Video Model Wiring</label>
+                                    <select value={trailerVideoModel} onChange={e => setTrailerVideoModel(e.target.value)}
+                                        className="w-full bg-gray-950 border border-gray-800 focus:border-amber-500 rounded-xl p-2.5 text-xs text-white focus:outline-none transition-all cursor-pointer">
+                                        <option value="wan2.3">Wan 2.3 / 2.2 (Local/RunPod)</option>
+                                        <option value="ltx2.3">LTX-Video 2.3 (Local/RunPod)</option>
+                                        <option value="wan2.1">Wan 2.1 (Legacy)</option>
+                                        <option value="ltx">LTX-Video 2.2 (Legacy)</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Trailer Narrator Voice Engine</label>
+                                    <select value={trailerVoiceEngine} onChange={e => setTrailerVoiceEngine(e.target.value)}
+                                        className="w-full bg-gray-950 border border-gray-800 focus:border-amber-500 rounded-xl p-2.5 text-xs text-white focus:outline-none transition-all cursor-pointer">
+                                        <option value="cosyvoice2">CosyVoice 2 (Alibaba - Emotion Tagged)</option>
+                                        <option value="chatterbox">Chatterbox (Resemble AI - Zero-Shot)</option>
+                                        <option value="elevenlabs">ElevenLabs (Premium)</option>
+                                        <option value="xtts">XTTS-v2 (Local/RunPod)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <button
+                                type="submit"
+                                disabled={generatingTrailer}
+                                className="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                            >
+                                {generatingTrailer ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" /> Preparing Kinematic Prompts...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Wand2 className="w-4 h-4" /> Generate Viral Trailer Storyboard
+                                    </>
+                                )}
+                            </button>
+                        </form>
+
+                        {/* Generated Storyboard Shot Preview */}
+                        {generatedTrailerShots.length > 0 && (
+                            <div className="mt-6 border-t border-gray-800 pt-5 space-y-4">
+                                <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+                                    AI Prepared Kinematic Storyboard ({generatedTrailerShots.length} Shots)
+                                </h3>
+                                <div className="space-y-3">
+                                    {generatedTrailerShots.map((shot: any) => (
+                                        <div key={shot.shotIndex} className="bg-gray-950 border border-gray-800 p-4 rounded-xl space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-xs font-bold text-amber-400">Shot #{shot.shotIndex}</span>
+                                                <span className="text-[10px] text-gray-500 font-mono">Model: {shot.videoModel} • Voice: {shot.voiceEngine}</span>
+                                            </div>
+                                            <p className="text-xs text-violet-300 font-serif italic">🎙 Narration: &quot;{shot.narration}&quot;</p>
+                                            <div className="text-[11px] text-gray-400 bg-gray-900 p-2.5 rounded-lg font-mono border border-gray-850">
+                                                🎬 Kinematic Prompt: {shot.kinematicPrompt}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            ) : null}
+
+            {/* Long-Form Video Slicer Interface */}
+            {studioTab === "slicer" && (
+                <div className="bg-gray-900/80 backdrop-blur-xl rounded-2xl border border-gray-800 p-6">
                 <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                     <Sparkles className="w-5 h-5 text-violet-400" />
                     New Clip Project
@@ -757,6 +960,7 @@ export default function ClipStudioPage() {
                     </button>
                 </form>
             </div>
+            )}
 
             {/* Earnings Calculator */}
             {projects.some((p) => p.campaignCpm) && (
