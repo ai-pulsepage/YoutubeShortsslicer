@@ -108,8 +108,10 @@ export default function UGCStudioPage() {
     const [selectedPresetPack, setSelectedPresetPack] = useState<'SINGLE' | 'TIKTOK_3X' | 'OMNICHANNEL_5X'>('SINGLE');
     const [useCustomScript, setUseCustomScript] = useState(false);
     const [customScript, setCustomScript] = useState("");
-    const [selectedVideoModel, setSelectedVideoModel] = useState("ltx");
-    const [selectedVoiceEngine, setSelectedVoiceEngine] = useState("elevenlabs");
+    const [selectedVideoModel, setSelectedVideoModel] = useState("ltx2.3");
+    const [selectedVoiceEngine, setSelectedVoiceEngine] = useState("cosyvoice2");
+    const [selectedAdFormat, setSelectedAdFormat] = useState("problem_solution");
+    const [selectedProductAction, setSelectedProductAction] = useState("holding_to_camera");
     const [generatingVideo, setGeneratingVideo] = useState(false);
     const [activeJobId, setActiveJobId] = useState<string | null>(null);
 
@@ -450,6 +452,8 @@ export default function UGCStudioPage() {
                     layoutType: selectedLayoutType,
                     videoModel: selectedVideoModel,
                     voiceEngine: selectedVoiceEngine,
+                    adFormat: selectedAdFormat,
+                    productAction: selectedProductAction,
                     customScript: useCustomScript ? customScript : undefined
                 })
             });
@@ -485,6 +489,8 @@ export default function UGCStudioPage() {
                             layoutType: selectedLayoutType,
                             videoModel: selectedVideoModel,
                             voiceEngine: selectedVoiceEngine,
+                            adFormat: selectedAdFormat,
+                            productAction: selectedProductAction,
                         })
                     });
                     const data = await res.json();
@@ -988,31 +994,51 @@ export default function UGCStudioPage() {
                                         </div>
                                     </div>
 
-                                    {/* Model & Voice Selectors */}
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 font-sans">
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">AI Video Model</label>
-                                            <select value={selectedVideoModel} onChange={e => setSelectedVideoModel(e.target.value)}
-                                                className="w-full bg-gray-900 border border-gray-850 focus:border-violet-500 rounded-xl p-2.5 text-xs text-white focus:outline-none transition-all cursor-pointer">
-                                                <option value="ltx2.3">LTX-Video 2.3 (Local/RunPod)</option>
-                                                <option value="wan2.3">Wan 2.3 / 2.2 (Local/RunPod)</option>
-                                                <option value="ltx">LTX-Video 2.2 (Legacy)</option>
-                                                <option value="wan2.1">Wan 2.1 (Legacy)</option>
-                                            </select>
-                                        </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">AI Voice Engine</label>
-                                            <select value={selectedVoiceEngine} onChange={e => setSelectedVoiceEngine(e.target.value)}
-                                                className="w-full bg-gray-900 border border-gray-850 focus:border-violet-500 rounded-xl p-2.5 text-xs text-white focus:outline-none transition-all cursor-pointer">
-                                                <option value="cosyvoice2">CosyVoice 2 (Alibaba - Emotion Tagged)</option>
-                                                <option value="chatterbox">Chatterbox (Resemble AI - Zero-Shot Emotion)</option>
-                                                <option value="elevenlabs">ElevenLabs (Premium API)</option>
-                                                <option value="xtts">XTTS-v2 (Local/RunPod)</option>
-                                                <option value="edge_tts">Edge TTS (Free)</option>
-                                                <option value="gemini">Gemini TTS (Fast)</option>
-                                            </select>
-                                        </div>
-                                    </div>
+                                     {/* Model, Voice, & Product Action Selectors */}
+                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 font-sans">
+                                         <div className="space-y-1">
+                                             <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">AI Video Model</label>
+                                             <select value={selectedVideoModel} onChange={e => setSelectedVideoModel(e.target.value)}
+                                                 className="w-full bg-gray-900 border border-gray-850 focus:border-violet-500 rounded-xl p-2.5 text-xs text-white focus:outline-none transition-all cursor-pointer">
+                                                 <option value="ltx2.3">LTX-Video 2.3 (Local/RunPod)</option>
+                                                 <option value="wan2.3">Wan 2.3 / 2.2 (Local/RunPod)</option>
+                                                 <option value="ltx">LTX-Video 2.2 (Legacy)</option>
+                                                 <option value="wan2.1">Wan 2.1 (Legacy)</option>
+                                             </select>
+                                         </div>
+                                         <div className="space-y-1">
+                                             <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">AI Voice Engine</label>
+                                             <select value={selectedVoiceEngine} onChange={e => setSelectedVoiceEngine(e.target.value)}
+                                                 className="w-full bg-gray-900 border border-gray-850 focus:border-violet-500 rounded-xl p-2.5 text-xs text-white focus:outline-none transition-all cursor-pointer">
+                                                 <option value="cosyvoice2">CosyVoice 2 (Alibaba - Emotion Tagged)</option>
+                                                 <option value="chatterbox">Chatterbox (Resemble AI - Zero-Shot Emotion)</option>
+                                                 <option value="elevenlabs">ElevenLabs (Premium API)</option>
+                                                 <option value="xtts">XTTS-v2 (Local/RunPod)</option>
+                                                 <option value="edge_tts">Edge TTS (Free)</option>
+                                                 <option value="gemini">Gemini TTS (Fast)</option>
+                                             </select>
+                                         </div>
+                                         <div className="space-y-1">
+                                             <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Ad High-Converting Format</label>
+                                             <select value={selectedAdFormat} onChange={e => setSelectedAdFormat(e.target.value)}
+                                                 className="w-full bg-gray-900 border border-gray-850 focus:border-violet-500 rounded-xl p-2.5 text-xs text-white focus:outline-none transition-all cursor-pointer">
+                                                 <option value="problem_solution">⚡ Problem & Solution Hook ("Stop Scrolling!")</option>
+                                                 <option value="product_demo">🧪 Live Product Demo & Texture Test</option>
+                                                 <option value="unboxing">📦 Package Unboxing & First Reaction</option>
+                                                 <option value="reasons_why">🔥 3 Reasons Why Everyone is Obsessed</option>
+                                             </select>
+                                         </div>
+                                         <div className="space-y-1">
+                                             <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Avatar Product Interaction</label>
+                                             <select value={selectedProductAction} onChange={e => setSelectedProductAction(e.target.value)}
+                                                 className="w-full bg-gray-900 border border-gray-850 focus:border-violet-500 rounded-xl p-2.5 text-xs text-white focus:outline-none transition-all cursor-pointer">
+                                                 <option value="holding_to_camera">📸 Holding Product directly to Camera Lens</option>
+                                                 <option value="applying_using">✨ Applying / Using Product on Camera</option>
+                                                 <option value="drinking_gasping">🥤 Drinking / Tasting Product with Gasp</option>
+                                                 <option value="unboxing_opening">🎁 Opening Package & Pulling Product Out</option>
+                                             </select>
+                                         </div>
+                                     </div>
 
                                     {/* Batch Ad Pack Templates */}
                                     <div className="space-y-2">

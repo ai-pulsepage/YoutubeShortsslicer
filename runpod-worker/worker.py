@@ -399,8 +399,8 @@ def unload_video_pipelines():
         _ltx_pipe = None
     torch.cuda.empty_cache()
 
-def get_ltx_pipeline():
-    """Lazy-load LTX-Video image-to-video pipeline."""
+def get_ltx_pipeline(model_variant: str = "ltx2.3"):
+    """Lazy-load LTX-Video image-to-video pipeline (supports LTX-Video 2.3 & 2.2)."""
     global _ltx_pipe, _wan_pipe
     unload_image_pipelines()
     unload_musicgen()
@@ -413,13 +413,28 @@ def get_ltx_pipeline():
     if _ltx_pipe is None:
         try:
             from diffusers import LTXImageToVideoPipeline
-            model_id = "Lightricks/LTX-Video"
-            print(f"🔄 Loading {model_id}...")
-            _ltx_pipe = LTXImageToVideoPipeline.from_pretrained(
-                model_id,
-                torch_dtype=torch.bfloat16,
-                low_cpu_mem_usage=True,
-            )
+            # Determine target model repository based on model_variant
+            if "2.3" in model_variant:
+                model_id = "Lightricks/LTX-Video-2.3"
+            else:
+                model_id = "Lightricks/LTX-Video"
+
+            print(f"🔄 Loading {model_id} (Variant: {model_variant})...")
+            try:
+                _ltx_pipe = LTXImageToVideoPipeline.from_pretrained(
+                    model_id,
+                    torch_dtype=torch.bfloat16,
+                    low_cpu_mem_usage=True,
+                )
+            except Exception as download_err:
+                print(f"⚠️ Primary repository {model_id} unavailable ({download_err}). Falling back to Lightricks/LTX-Video...")
+                model_id = "Lightricks/LTX-Video"
+                _ltx_pipe = LTXImageToVideoPipeline.from_pretrained(
+                    model_id,
+                    torch_dtype=torch.bfloat16,
+                    low_cpu_mem_usage=True,
+                )
+
             if torch.cuda.is_available():
                 _ltx_pipe.enable_model_cpu_offload()
                 if hasattr(_ltx_pipe, "vae"):
@@ -428,14 +443,14 @@ def get_ltx_pipeline():
                         _ltx_pipe.vae.enable_tiling()
                     except Exception:
                         pass
-            print(f"✅ {model_id} loaded")
+            print(f"✅ {model_id} loaded successfully")
         except Exception as err:
             print(f"⚠️ LTX-Video pipeline loading error: {err}")
-            return get_wan_pipeline()
+            return get_wan_pipeline(model_variant="wan2.2")
     return _ltx_pipe
 
-def get_wan_pipeline():
-    """Lazy-load Wan2.2 image-to-video pipeline."""
+def get_wan_pipeline(model_variant: str = "wan2.3"):
+    """Lazy-load Wan2.3 / Wan2.2 / Wan2.1 image-to-video pipeline."""
     global _wan_pipe, _ltx_pipe
     
     # Free other loaded models to prevent VRAM overflow
@@ -450,13 +465,27 @@ def get_wan_pipeline():
     if _wan_pipe is None:
         from diffusers import WanImageToVideoPipeline
 
-        model_id = "Wan-AI/Wan2.2-TI2V-5B-Diffusers"
-        print(f"🔄 Loading {model_id}...")
-        _wan_pipe = WanImageToVideoPipeline.from_pretrained(
-            model_id,
-            torch_dtype=torch.bfloat16,
-            low_cpu_mem_usage=True,
-        )
+        if "2.1" in model_variant:
+            model_id = "Wan-AI/Wan2.1-I2V-14B-480P"
+        else:
+            model_id = "Wan-AI/Wan2.2-TI2V-5B-Diffusers"
+
+        print(f"🔄 Loading {model_id} (Variant: {model_variant})...")
+        try:
+            _wan_pipe = WanImageToVideoPipeline.from_pretrained(
+                model_id,
+                torch_dtype=torch.bfloat16,
+                low_cpu_mem_usage=True,
+            )
+        except Exception as download_err:
+            print(f"⚠️ Repo {model_id} load error ({download_err}). Falling back to Wan-AI/Wan2.2-TI2V-5B-Diffusers...")
+            model_id = "Wan-AI/Wan2.2-TI2V-5B-Diffusers"
+            _wan_pipe = WanImageToVideoPipeline.from_pretrained(
+                model_id,
+                torch_dtype=torch.bfloat16,
+                low_cpu_mem_usage=True,
+            )
+
         if torch.cuda.is_available():
             print("  🚀 Enabling CPU offload for Wan pipeline to prevent VRAM overflow...")
             _wan_pipe.enable_model_cpu_offload()
@@ -464,7 +493,7 @@ def get_wan_pipeline():
             _wan_pipe.enable_model_cpu_offload()
         _wan_pipe.vae.enable_slicing()
         _wan_pipe.vae.enable_tiling()
-        print(f"✅ {model_id} loaded")
+        print(f"✅ {model_id} loaded successfully")
     return _wan_pipe
 
 
@@ -486,10 +515,10 @@ def generate_video(
     height = min((height // 16) * 16, 1280)
     num_frames = min(num_frames, 49)
 
-    if model_name.lower() == "ltx":
-        pipe = get_ltx_pipeline()
+    if "ltx" in model_name.lower():
+        pipe = get_ltx_pipeline(model_variant=model_name)
     else:
-        pipe = get_wan_pipeline()
+        pipe = get_wan_pipeline(model_variant=model_name)
 
     torch.cuda.empty_cache()
     gc.collect()

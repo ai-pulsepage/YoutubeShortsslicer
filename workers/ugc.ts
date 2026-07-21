@@ -11,6 +11,7 @@ import FormData from "form-data";
 
 import { dispatchJob, RedisJob } from "../lib/documentary/redis-client";
 import { buildUGCPrompt } from "@/lib/ai/prompt-builder";
+import { buildHighConvertingUGCPrompt } from "@/lib/ai/ugc-prompt-engine";
 
 // Helper to query API keys from the database (for admin configuration)
 async function getDbApiKey(service: string): Promise<string | null> {
@@ -418,8 +419,15 @@ export const ugcWorker = new Worker(
             const persona = ugcJob.avatar.persona || "friendly UGC creator";
             const actionTpl = detectActionTemplate(ugcJob.product?.name || "", ugcJob.product?.description || "");
             
-            // Clean Kinematic Prose Prompt (NO raw narration text pollution)
-            const ltxPrompt = buildUGCPrompt(avatarName, persona, actionTpl.ltxAction, ugcJob.product?.name);
+            // Build High-Converting Kinematic Visual Prompt (Strictly NO raw narration text pollution)
+            const ugcPromptResult = buildHighConvertingUGCPrompt({
+                avatarName,
+                persona,
+                productName: ugcJob.product?.name || "featured product",
+                adFormat: (metadataObj.adFormat as any) || "problem_solution",
+                productAction: (metadataObj.productAction as any) || "holding_to_camera"
+            });
+            const ltxPrompt = ugcPromptResult.kinematicVisualPrompt;
             const runpodJobId = `ugc-${selectedVideoModel}-${jobId}-${Date.now()}`;
             const ltxOutputR2Key = `ugc/jobs/${jobId}/ltx_avatar.mp4`;
 
