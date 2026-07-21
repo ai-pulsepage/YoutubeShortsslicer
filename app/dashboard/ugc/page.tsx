@@ -108,6 +108,8 @@ export default function UGCStudioPage() {
     const [selectedPresetPack, setSelectedPresetPack] = useState<'SINGLE' | 'TIKTOK_3X' | 'OMNICHANNEL_5X'>('SINGLE');
     const [useCustomScript, setUseCustomScript] = useState(false);
     const [customScript, setCustomScript] = useState("");
+    const [selectedVideoModel, setSelectedVideoModel] = useState("ltx");
+    const [selectedVoiceEngine, setSelectedVoiceEngine] = useState("elevenlabs");
     const [generatingVideo, setGeneratingVideo] = useState(false);
     const [activeJobId, setActiveJobId] = useState<string | null>(null);
 
@@ -446,6 +448,8 @@ export default function UGCStudioPage() {
                     productId: selectedCampaignId,
                     hookStyle: selectedHookStyle,
                     layoutType: selectedLayoutType,
+                    videoModel: selectedVideoModel,
+                    voiceEngine: selectedVoiceEngine,
                     customScript: useCustomScript ? customScript : undefined
                 })
             });
@@ -479,6 +483,8 @@ export default function UGCStudioPage() {
                             productId: selectedCampaignId,
                             hookStyle: style,
                             layoutType: selectedLayoutType,
+                            videoModel: selectedVideoModel,
+                            voiceEngine: selectedVoiceEngine,
                         })
                     });
                     const data = await res.json();
@@ -979,6 +985,28 @@ export default function UGCStudioPage() {
                                                     <div className="text-[9px] text-gray-550 font-mono mt-0.5">{l.desc}</div>
                                                 </button>
                                             ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Model & Voice Selectors */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 font-sans">
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">AI Video Model</label>
+                                            <select value={selectedVideoModel} onChange={e => setSelectedVideoModel(e.target.value)}
+                                                className="w-full bg-gray-900 border border-gray-850 focus:border-violet-500 rounded-xl p-2.5 text-xs text-white focus:outline-none transition-all cursor-pointer">
+                                                <option value="ltx">LTX-Video (Local/RunPod)</option>
+                                                <option value="wan2.1">Wan 2.1 (Local/RunPod)</option>
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">AI Voice Engine</label>
+                                            <select value={selectedVoiceEngine} onChange={e => setSelectedVoiceEngine(e.target.value)}
+                                                className="w-full bg-gray-900 border border-gray-850 focus:border-violet-500 rounded-xl p-2.5 text-xs text-white focus:outline-none transition-all cursor-pointer">
+                                                <option value="elevenlabs">ElevenLabs (Premium)</option>
+                                                <option value="xtts">XTTS-v2 (Local/RunPod)</option>
+                                                <option value="edge_tts">Edge TTS (Free)</option>
+                                                <option value="gemini">Gemini TTS (Fast)</option>
+                                            </select>
                                         </div>
                                     </div>
 

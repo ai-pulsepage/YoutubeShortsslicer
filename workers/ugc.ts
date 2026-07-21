@@ -367,11 +367,16 @@ export const ugcWorker = new Worker(
             const tempDir = path.join(os.tmpdir(), `ugc-${jobId}`);
             if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
+            // Read selected model/voice settings from job metadata
+            const metadataObj = ugcJob.metadata ? (ugcJob.metadata as any) : {};
+            const selectedVoiceEngine = metadataObj.voiceEngine || ugcJob.avatar.voiceEngine || "elevenlabs";
+            const selectedVideoModel = metadataObj.videoModel || "ltx";
+
             // 3. Generate TTS audio from script using local tts utility
-            console.log("[UGC Worker] Running TTS audio generation...");
+            console.log(`[UGC Worker] Running TTS audio generation using engine: ${selectedVoiceEngine}...`);
             const audioBuffer = await generateVoiceover({
                 text: script,
-                engine: (ugcJob.avatar.voiceEngine as any) || "elevenlabs",
+                engine: (selectedVoiceEngine as any),
                 voiceId: ugcJob.avatar.voiceId || "21m00Tcm4TlvDq8ikWAM",
                 speakerWav: ugcJob.avatar.voiceRefPath || undefined,
             });
@@ -399,7 +404,6 @@ export const ugcWorker = new Worker(
             }
 
             // 5. Generate Native Video Ad Clip from RunPod GPU Worker
-            // 5. Generate Native Video Ad Clip from RunPod GPU Worker
             let talkingHeadLocalPath = path.join(tempDir, "talking_head.mp4");
             const avatarName = ugcJob.avatar.name || "Spokesperson";
             const persona = ugcJob.avatar.persona || "friendly UGC creator";
@@ -407,10 +411,10 @@ export const ugcWorker = new Worker(
             
             // Clean Kinematic Prose Prompt (NO raw narration text pollution)
             const ltxPrompt = buildUGCPrompt(avatarName, persona, actionTpl.ltxAction, ugcJob.product?.name);
-            const runpodJobId = `ugc-ltx-${jobId}-${Date.now()}`;
+            const runpodJobId = `ugc-${selectedVideoModel}-${jobId}-${Date.now()}`;
             const ltxOutputR2Key = `ugc/jobs/${jobId}/ltx_avatar.mp4`;
 
-            console.log(`[UGC Worker] 🚀 Dispatching clean video job to RunPod GPU Queue: ${runpodJobId}`);
+            console.log(`[UGC Worker] 🚀 Dispatching clean video job to RunPod GPU Queue: ${runpodJobId} (${selectedVideoModel})`);
             console.log(`[UGC Worker] Kinematic Prompt: "${ltxPrompt}"`);
             const redisJob: RedisJob = {
                 jobId: runpodJobId,
@@ -419,7 +423,7 @@ export const ugcWorker = new Worker(
                 prompt: ltxPrompt,
                 referenceImages: ugcJob.avatar.referenceImageUrl ? [ugcJob.avatar.referenceImageUrl] : [],
                 metadata: {
-                    model: "ltx",
+                    model: selectedVideoModel,
                     duration: Math.min(Math.ceil(duration), 15),
                     width: 768,
                     height: 1280,

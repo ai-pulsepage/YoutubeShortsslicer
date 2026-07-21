@@ -81,7 +81,7 @@ export async function POST(req: Request) {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { avatarId, productId, campaignId, hookStyle, customScript, layoutType } = await req.json();
+    const { avatarId, productId, campaignId, hookStyle, customScript, layoutType, videoModel, voiceEngine } = await req.json();
 
     if (!avatarId || !productId) {
         return NextResponse.json({ error: "Missing avatarId or productId" }, { status: 400 });
@@ -123,7 +123,11 @@ export async function POST(req: Request) {
             hookStyle: hookStyle || "TESTIMONIAL",
             script,
             status: "PENDING",
-            metadata: layoutType ? { layoutType } : undefined
+            metadata: {
+                layoutType: layoutType || "SPLIT",
+                videoModel: videoModel || "ltx",
+                voiceEngine: voiceEngine || "elevenlabs"
+            }
         }
     });
 
