@@ -14,6 +14,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { CHANNELS, type RedisJob, dispatchJob } from "./redis-client";
+import { buildKinematicPrompt } from "@/lib/ai/prompt-builder";
 
 /**
  * Generates video prompts for all shots and dispatches to RunPod
@@ -157,56 +158,34 @@ function buildShotPrompt(
     genre: string,
     subStyle: string
 ): string {
-    const styleLabel = `${genre} ${subStyle}`.replace(/_/g, " ");
-    const parts: string[] = [];
-
-    // Camera direction
-    parts.push(`${shot.shotType} shot`);
-    if (shot.cameraAngle && shot.cameraAngle !== "eye-level") {
-        parts.push(`from ${shot.cameraAngle}`);
-    }
-    if (shot.cameraMovement && shot.cameraMovement !== "static") {
-        parts.push(`with ${shot.cameraMovement} camera movement`);
-    }
-
-    // Subject/Action
     const focusAssets = shot.shotAssets.filter(
         (sa) => sa.role === "focus" || sa.role === "foreground"
     );
     const bgAssets = shot.shotAssets.filter((sa) => sa.role === "background");
 
-    if (focusAssets.length > 0) {
-        const subjects = focusAssets
-            .map((sa) => sa.asset.label)
-            .join(" and ");
-        parts.push(`featuring ${subjects}`);
-    }
+    const subjectStr = focusAssets.length > 0
+        ? focusAssets.map((sa) => sa.asset.label).join(" and ")
+        : "The subject";
 
-    if (shot.action) {
-        parts.push(`— ${shot.action}`);
-    }
+    const environmentStr = bgAssets.length > 0
+        ? bgAssets.map((sa) => sa.asset.description || sa.asset.label).join(", ")
+        : "a cinematic environment";
 
-    // Environment
-    if (bgAssets.length > 0) {
-        const locations = bgAssets
-            .map((sa) => sa.asset.description || sa.asset.label)
-            .join(", ");
-        parts.push(`set in ${locations}`);
-    }
+    const lightingStr = shot.lighting || shot.mood
+        ? `${shot.lighting || "soft ambient lighting"}, ${shot.mood || "dramatic"} atmosphere`
+        : "soft directional key light";
 
-    // Mood & Atmosphere
-    if (shot.mood) parts.push(`mood: ${shot.mood}`);
-    if (shot.lighting) parts.push(`lighting: ${shot.lighting}`);
-    if (shot.colorPalette) parts.push(`colors: ${shot.colorPalette}`);
-
-    // Style
-    parts.push(`style: ${styleLabel}, cinematic, documentary quality`);
-
-    // Transitions
-    if (shot.transitionIn === "fade-in") parts.push("fade in from black");
-    if (shot.transitionOut === "fade-out") parts.push("fade to black at end");
-
-    return parts.join(". ") + ".";
+    return buildKinematicPrompt({
+        aspectRatio: "16:9",
+        shotType: shot.shotType || "medium shot",
+        cameraAngle: shot.cameraAngle || "eye-level",
+        cameraMovement: shot.cameraMovement || "gentle push in",
+        subject: subjectStr,
+        action: shot.action || "gazing forward attentively",
+        environment: environmentStr,
+        lighting: lightingStr,
+        stylePreset: `${genre} ${subStyle}`.replace(/_/g, " ")
+    });
 }
 
 /**

@@ -126,6 +126,28 @@ export default function DocumentaryDetailPage({ params }: { params: Promise<{ id
                     </div>
                 </div>
                 <StatusBadge status={doc.status} />
+                <button
+                    onClick={async () => {
+                        if (!confirm("Re-evaluate all stock video search queries using the new 3-Point Context Search Engine? Existing video renders will be preserved in history.")) return;
+                        try {
+                            const res = await fetch(`/api/documentary/${doc.id}/reevaluate-searches`, { method: "POST" });
+                            const data = await res.json();
+                            if (res.ok) {
+                                alert("✅ Stock search queries re-evaluated using 3-Point Context!");
+                                fetchDoc();
+                            } else {
+                                alert(`Error: ${data.error || "Failed to re-evaluate searches"}`);
+                            }
+                        } catch (err: any) {
+                            alert(`Error: ${err.message}`);
+                        }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600/80 hover:bg-violet-500 text-white font-medium rounded-xl text-xs transition-all shadow-sm"
+                    title="Re-run stock video search engine with 3-Point Context"
+                >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Re-evaluate Searches
+                </button>
                 <PipelineActions doc={doc} onRefresh={fetchDoc} />
             </div>
 

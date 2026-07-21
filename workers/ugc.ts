@@ -10,6 +10,7 @@ import os from "os";
 import FormData from "form-data";
 
 import { dispatchJob, RedisJob } from "../lib/documentary/redis-client";
+import { buildUGCPrompt } from "@/lib/ai/prompt-builder";
 
 // Helper to query API keys from the database (for admin configuration)
 async function getDbApiKey(service: string): Promise<string | null> {
@@ -398,15 +399,19 @@ export const ugcWorker = new Worker(
             }
 
             // 5. Generate Native Video Ad Clip from RunPod GPU Worker
+            // 5. Generate Native Video Ad Clip from RunPod GPU Worker
             let talkingHeadLocalPath = path.join(tempDir, "talking_head.mp4");
             const avatarName = ugcJob.avatar.name || "Spokesperson";
             const persona = ugcJob.avatar.persona || "friendly UGC creator";
             const actionTpl = detectActionTemplate(ugcJob.product?.name || "", ugcJob.product?.description || "");
-            const ltxPrompt = `Cinematic video of ${avatarName}, ${persona}. ${actionTpl.ltxAction}. Expressive natural facial motion, speaking directly into camera, high fidelity 4k. Narration: "${script.slice(0, 150)}"`;
+            
+            // Clean Kinematic Prose Prompt (NO raw narration text pollution)
+            const ltxPrompt = buildUGCPrompt(avatarName, persona, actionTpl.ltxAction, ugcJob.product?.name);
             const runpodJobId = `ugc-ltx-${jobId}-${Date.now()}`;
             const ltxOutputR2Key = `ugc/jobs/${jobId}/ltx_avatar.mp4`;
 
-            console.log(`[UGC Worker] 🚀 Dispatching native video job to RunPod GPU Queue: ${runpodJobId}`);
+            console.log(`[UGC Worker] 🚀 Dispatching clean video job to RunPod GPU Queue: ${runpodJobId}`);
+            console.log(`[UGC Worker] Kinematic Prompt: "${ltxPrompt}"`);
             const redisJob: RedisJob = {
                 jobId: runpodJobId,
                 documentaryId: jobId,
@@ -454,26 +459,38 @@ export const ugcWorker = new Worker(
                 data: { status: "COMPOSITING" },
             });
 
-            // 6. Native Video Ad Output Assembly
+            // 6. Native Video Ad Output Assembly (Mux ElevenLabs Audio Track + Video Clip)
             const finalVideoPath = path.join(tempDir, "final.mp4");
             
-            // Pad avatar talking head only to a standard 9:16 frame
-            console.log("[UGC Worker] Padding talking head to 9:16 vertical...");
-            execSync(
-                `ffmpeg -i "${talkingHeadLocalPath}" -vf ` +
-                `"scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black" ` +
-                `-c:v libx264 -preset fast -crf 23 -c:a copy "${finalVideoPath}" -y`
-            );
+            console.log("[UGC Worker] Muxing ElevenLabs speech audio track into 9:16 vertical video...");
+            if (fs.existsSync(audioPath) && fs.statSync(audioPath).size > 100) {
+                execSync(
+                    `ffmpeg -i "${talkingHeadLocalPath}" -i "${audioPath}" -filter_complex ` +
+                    `"[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black[v]" ` +
+                    `-map "[v]" -map 1:a -c:v libx264 -preset fast -crf 23 -c:a aac -shortest "${finalVideoPath}" -y`
+                );
+            } else {
+                execSync(
+                    `ffmpeg -i "${talkingHeadLocalPath}" -vf ` +
+                    `"scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black" ` +
+                    `-c:v libx264 -preset fast -crf 23 -an "${finalVideoPath}" -y`
+                );
+            }
 
-            // 8. Upload results to R2 storage & save
+            // 7. Upload results to R2 storage with descriptive filenames
             const campaignId = ugcJob.campaignId;
             const productId = ugcJob.productId;
-            let finalR2Key = `ugc/products/${productId}/ads/${jobId}/final.mp4`;
-            let thumbR2Key = `ugc/products/${productId}/ads/${jobId}/thumb.jpg`;
+            const cleanAvatar = avatarName.replace(/[^a-zA-Z0-9]/g, "_");
+            const cleanProduct = (ugcJob.product?.name || "Product").replace(/[^a-zA-Z0-9]/g, "_");
+            const descriptiveFileName = `${cleanAvatar}_${cleanProduct}_Ad_${jobId.slice(0, 6)}.mp4`;
+            const descriptiveThumbName = `${cleanAvatar}_${cleanProduct}_Ad_${jobId.slice(0, 6)}.jpg`;
+
+            let finalR2Key = `ugc/products/${productId}/ads/${jobId}/${descriptiveFileName}`;
+            let thumbR2Key = `ugc/products/${productId}/ads/${jobId}/${descriptiveThumbName}`;
 
             if (campaignId) {
-                finalR2Key = `ugc/campaigns/${campaignId}/products/${productId}/ads/${jobId}/final.mp4`;
-                thumbR2Key = `ugc/campaigns/${campaignId}/products/${productId}/ads/${jobId}/thumb.jpg`;
+                finalR2Key = `ugc/campaigns/${campaignId}/products/${productId}/ads/${jobId}/${descriptiveFileName}`;
+                thumbR2Key = `ugc/campaigns/${campaignId}/products/${productId}/ads/${jobId}/${descriptiveThumbName}`;
             }
 
             console.log(`[UGC Worker] Uploading final video to R2 key: ${finalR2Key}`);
