@@ -51,7 +51,7 @@ type Shot = {
     chainFromPrevious?: boolean; // Optional flag to chain keyframe context
 };
 
-type TtsProvider = "edge_tts" | "gemini" | "elevenlabs" | "dia";
+type TtsProvider = "edge_tts" | "gemini" | "elevenlabs" | "dia" | "cosyvoice2" | "chatterbox";
 
 type Scene = {
     id: string;

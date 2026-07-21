@@ -371,24 +371,33 @@ export const ugcWorker = new Worker(
             const metadataObj = ugcJob.metadata ? (ugcJob.metadata as any) : {};
             const selectedVoiceEngine = metadataObj.voiceEngine || ugcJob.avatar.voiceEngine || "elevenlabs";
             const selectedVideoModel = metadataObj.videoModel || "ltx";
-
-            // 3. Generate TTS audio from script using local tts utility
-            console.log(`[UGC Worker] Running TTS audio generation using engine: ${selectedVoiceEngine}...`);
-            const audioBuffer = await generateVoiceover({
-                text: script,
-                engine: (selectedVoiceEngine as any),
-                voiceId: ugcJob.avatar.voiceId || "21m00Tcm4TlvDq8ikWAM",
-                speakerWav: ugcJob.avatar.voiceRefPath || undefined,
-            });
+            
+            // Native Audio-Video models (e.g. LTX 2.3 Audio-to-Video, Wan 2.3 A2V) generate lip-synced audio natively inside the video clip
+            const isNativeAudioVideoModel = selectedVideoModel === "ltx2.3" || selectedVideoModel.includes("a2v") || metadataObj.hasNativeAudio === true;
 
             const audioPath = path.join(tempDir, "tts.mp3");
-            fs.writeFileSync(audioPath, audioBuffer);
+            let duration = 15.0;
 
-            // Get audio duration using ffprobe
-            const audioDurationStr = execSync(
-                `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${audioPath}"`
-            ).toString().trim();
-            const duration = parseFloat(audioDurationStr) || 15.0;
+            if (isNativeAudioVideoModel) {
+                console.log(`[UGC Worker] 🔇 Video model "${selectedVideoModel}" features native integrated audio/video synthesis. Bypassing standalone TTS voice engine...`);
+            } else {
+                // 3. Generate TTS audio from script using local tts utility
+                console.log(`[UGC Worker] Running TTS audio generation using engine: ${selectedVoiceEngine}...`);
+                const audioBuffer = await generateVoiceover({
+                    text: script,
+                    engine: (selectedVoiceEngine as any),
+                    voiceId: ugcJob.avatar.voiceId || "21m00Tcm4TlvDq8ikWAM",
+                    speakerWav: ugcJob.avatar.voiceRefPath || undefined,
+                });
+
+                fs.writeFileSync(audioPath, audioBuffer);
+
+                // Get audio duration using ffprobe
+                const audioDurationStr = execSync(
+                    `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${audioPath}"`
+                ).toString().trim();
+                duration = parseFloat(audioDurationStr) || 15.0;
+            }
 
             // 4. Retrieve character's reference image
             let avatarImagePath = "";
