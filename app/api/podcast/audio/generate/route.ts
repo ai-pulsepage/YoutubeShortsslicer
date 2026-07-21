@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "episodeId required" }, { status: 400 });
   }
 
-  let engine: TtsEngine = requestedEngine === "dia" ? "dia" : "elevenlabs";
+  let engine: TtsEngine = (requestedEngine as TtsEngine) || "cosyvoice2";
 
   // Load episode with script, participants, and show
   const episode = await prisma.podcastEpisode.findUnique({

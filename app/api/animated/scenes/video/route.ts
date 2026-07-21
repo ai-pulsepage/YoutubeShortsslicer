@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { sceneId, visualPrompt, docId, refImage, shotId, duration, chainFromPrevious } = await req.json();
+    const { sceneId, visualPrompt, docId, refImage, shotId, duration, chainFromPrevious, videoModel } = await req.json();
     if (!sceneId || !visualPrompt) {
         return NextResponse.json({ error: "sceneId and visualPrompt are required" }, { status: 400 });
     }
@@ -28,12 +28,15 @@ export async function POST(req: NextRequest) {
             activeDocId = doc.id;
         }
 
+        const selectedVideoModel = videoModel || "wan2.3";
         const jobMetadata = {
             sceneId,
             shotId: shotId || undefined,
             duration: duration || 5,
             chainFromPrevious: !!chainFromPrevious,
             sourceApp: "Animated Shorts",
+            model: selectedVideoModel,
+            hasNativeAudio: selectedVideoModel === "ltx2.3" || selectedVideoModel.includes("a2v"),
             r2Key: `animated/projects/${activeDocId}/scenes/${sceneId}/shots/shot_${shotId || Date.now()}.mp4`,
             r2KeyLastFrame: `animated/projects/${activeDocId}/scenes/${sceneId}/shots/shot_${shotId || Date.now()}_last_frame.png`
         };
