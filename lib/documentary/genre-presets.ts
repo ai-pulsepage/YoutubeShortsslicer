@@ -20,7 +20,9 @@ export type GenreId =
     | "children"
     | "sleep"
     | "comedy"
-    | "nature";
+    | "nature"
+    | "romance_telenovela"
+    | "anthropomorphic_animal";
 
 export type VisualMode = "full_ai_video" | "chapter_illustrations" | "broll_only" | "narration_only";
 export type ImageModel = "chroma" | "flux" | "juggernaut";
@@ -464,6 +466,58 @@ export const GENRES: GenreDef[] = [
                 label: "Micro World (Insects)",
                 promptBlock: "Narrate the microscopic world of insects and tiny creatures. Describe a blade of grass as a towering forest. A raindrop is a catastrophic flood. A beetle crossing a path is an epic expedition. Use scale shifts to create wonder — zoom in until the familiar becomes alien.",
                 defaults: { narratorStyle: "documentary", musicMood: "whimsical", useBRoll: true, useKenBurns: true, visualMode: "broll_only", imageModel: "flux", pacing: "standard", audience: "adults", perspective: "omniscient", ending: "reflective", contentMode: "factual" },
+            },
+        ],
+    },
+
+    // ── Romance & Telenovela Soap Opera Drama ────────────
+    {
+        id: "romance_telenovela",
+        label: "Telenovela & Soap Opera Drama",
+        icon: "🌹",
+        description: "High-voltage romance, family secrets, dramatic betrayals, and cliffhangers",
+        imageStyle: "Glamorous high-contrast cinematic lighting, vibrant saturated colors, dramatic over-the-shoulder framing, soft focus backgrounds, luxury mansion interiors, intense emotional expressions.",
+        subStyles: [
+            {
+                id: "telenovela_classic",
+                label: "Classic Telenovela",
+                promptBlock: "You are writing a classic Mexican Telenovela drama script. Every scene is overflowing with high emotion, forbidden love, secret heirs, and shocking betrayals. Use passionate dialogue, dramatic gasps, slow-motion face slaps, and dramatic cliffhangers before commercial breaks. Make the stakes personal, urgent, and deeply emotional.",
+                defaults: { narratorStyle: "dramatic", musicMood: "epic", useBRoll: false, useKenBurns: false, visualMode: "full_ai_video", imageModel: "juggernaut", pacing: "fast", audience: "adults", perspective: "omniscient", ending: "cliffhanger", contentMode: "creative" },
+            },
+            {
+                id: "kdrama_melodrama",
+                label: "K-Drama Romance",
+                promptBlock: "You are writing a Korean Drama romance narrative. Focus on emotional intensity, unspoken longing, rain-soaked reunions, and secret identities. Build dramatic tension through subtle glances, character dialogue turns, and emotional climaxes.",
+                defaults: { narratorStyle: "dramatic", musicMood: "piano", useBRoll: false, useKenBurns: false, visualMode: "full_ai_video", imageModel: "juggernaut", pacing: "standard", audience: "young_adults", perspective: "omniscient", ending: "cliffhanger", contentMode: "creative" },
+            },
+            {
+                id: "dynasty_wealth",
+                label: "High-Society Soap Opera (Dynasty)",
+                promptBlock: "You are writing a high-society billionaire soap opera. Focus on wealthy estate feuds, corporate backstabbing, wine glass drops, and glamorous betrayals among rich heirs. Dialogue is sharp, witty, and venomous.",
+                defaults: { narratorStyle: "dramatic", musicMood: "classical", useBRoll: false, useKenBurns: false, visualMode: "full_ai_video", imageModel: "juggernaut", pacing: "standard", audience: "adults", perspective: "omniscient", ending: "cliffhanger", contentMode: "creative" },
+            },
+        ],
+    },
+
+    // ── Anthropomorphic Animal Drama ─────────────────────
+    {
+        id: "anthropomorphic_animal",
+        label: "Anthropomorphic Animal Drama",
+        icon: "🦁",
+        description: "Humanlike animal royals, mafia bosses, and epic fantasy soap operas",
+        imageStyle: "Anthropomorphic animal characters in tailor-made human suits and luxury attire, highly detailed fur and feline textures, cinematic photorealistic lighting, dramatic character portraits.",
+        subStyles: [
+            {
+                id: "lion_royals",
+                label: "Animal Kingdom Dynasty",
+                promptBlock: "You are writing an epic anthropomorphic animal royal drama — think 'The Lion King meets Succession'. Suit-wearing lions, panther heiresses, and wolf generals fight for control of a luxury savanna estate. Every scene features intense character dialogue, power plays, and regal betrayals.",
+                defaults: { narratorStyle: "dramatic", musicMood: "epic", useBRoll: false, useKenBurns: false, visualMode: "full_ai_video", imageModel: "flux", pacing: "standard", audience: "adults", perspective: "omniscient", ending: "cliffhanger", contentMode: "creative" },
+            },
+            {
+                id: "noir_detective_cat",
+                label: "Anthropomorphic Noir",
+                promptBlock: "You are writing a hardboiled detective mystery starring an anthropomorphic cat in a trench coat navigating a rainy, neon-lit 1940s metropolis. Smoke swirls in dark alleys as secrets unfold.",
+                defaults: { narratorStyle: "conversational", musicMood: "dark_ambient", useBRoll: false, useKenBurns: false, visualMode: "full_ai_video", imageModel: "flux", pacing: "standard", audience: "adults", perspective: "first_person", ending: "cliffhanger", contentMode: "creative" },
             },
         ],
     },
