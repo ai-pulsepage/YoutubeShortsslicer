@@ -187,7 +187,7 @@ export async function GET(req: NextRequest) {
         const projects = await prisma.documentary.findMany({
             where: {
                 userId: session.user.id,
-                genre: "children"
+                genre: { in: ["children", "kids", "animation"] }
             },
             include: {
                 assets: {

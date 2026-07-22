@@ -56,13 +56,15 @@ export async function generateCinematicShow(params: {
     genre: "romance_telenovela" | "anthropomorphic_animal" | "kung_fu_classics" | "dystopian_scifi" | "horror" | "true_crime";
     subStyle?: string;
     numEpisodes?: number;
+    targetEpisodeMinutes?: number;
     shotsPerEpisode?: number;
     videoModel?: string;
     voiceEngine?: string;
 }): Promise<MiniSeriesOutput> {
     const { title, concept, genre } = params;
     const numEp = params.numEpisodes || 3;
-    const shotsPerEp = params.shotsPerEpisode || 5;
+    const targetEpMins = params.targetEpisodeMinutes || 3;
+    const shotsPerEp = params.shotsPerEpisode || Math.max(5, Math.round((targetEpMins * 60) / 5));
     const targetVideoModel = params.videoModel || "wan2.3";
     const targetVoiceEngine = params.voiceEngine || "cosyvoice2";
 

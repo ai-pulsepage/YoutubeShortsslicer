@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { title, concept, genre, subStyle, numEpisodes, videoModel, voiceEngine } = await req.json();
+    const { title, concept, genre, subStyle, numEpisodes, targetEpisodeMinutes, videoModel, voiceEngine } = await req.json();
 
     if (!title || !concept) {
         return NextResponse.json({ error: "title and concept are required" }, { status: 400 });
@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
             genre: genre || "dystopian_scifi",
             subStyle: subStyle || "default",
             numEpisodes: parseInt(numEpisodes) || 3,
+            targetEpisodeMinutes: parseInt(targetEpisodeMinutes) || 3,
             videoModel: videoModel || "wan2.3",
             voiceEngine: voiceEngine || "cosyvoice2",
         });

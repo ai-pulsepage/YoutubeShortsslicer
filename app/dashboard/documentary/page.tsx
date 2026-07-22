@@ -341,7 +341,7 @@ function CreateDocumentaryModal({
                         genre,
                         subStyle,
                         numEpisodes,
-                        shotsPerEpisode,
+                        targetEpisodeMinutes: targetDurationMinutes,
                     })
                 });
                 const data = await res.json();
@@ -510,7 +510,7 @@ function CreateDocumentaryModal({
                         </div>
                     )}
 
-                    {/* ── TV Mini-Series: Episode + shot count ── */}
+                    {/* ── TV Mini-Series: Episode + Episode Length Controls ── */}
                     {mode === "shows" && (
                         <div className="grid grid-cols-2 gap-3">
                             <div>
@@ -532,23 +532,23 @@ function CreateDocumentaryModal({
                             </div>
                             <div>
                                 <label className="block text-xs font-medium text-gray-400 mb-1.5">
-                                    🎬 Shots per Episode
+                                    ⏱️ Length per Episode
                                 </label>
                                 <div className="flex gap-1.5">
-                                    {[4, 5, 6, 7, 8].map((n) => (
-                                        <button key={n}
-                                            onClick={() => setShotsPerEpisode(n)}
+                                    {[1, 2, 3, 5, 10].map((mins) => (
+                                        <button key={mins}
+                                            onClick={() => setTargetDurationMinutes(mins)}
                                             className={cn("flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors",
-                                                shotsPerEpisode === n
+                                                targetDurationMinutes === mins
                                                     ? "bg-amber-500 text-white"
                                                     : "bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700")}>
-                                            {n}
+                                            {mins}m
                                         </button>
                                     ))}
                                 </div>
                             </div>
                             <p className="col-span-2 text-[9px] text-gray-600">
-                                {numEpisodes} episode{numEpisodes !== 1 ? "s" : ""} × {shotsPerEpisode} shots = {numEpisodes * shotsPerEpisode} total scenes to render.
+                                {numEpisodes} episode{numEpisodes !== 1 ? "s" : ""} × {targetDurationMinutes} min = {numEpisodes * targetDurationMinutes} total series minutes (~{Math.round((numEpisodes * targetDurationMinutes * 60) / 5)} total video scene shots).
                             </p>
                         </div>
                     )}
