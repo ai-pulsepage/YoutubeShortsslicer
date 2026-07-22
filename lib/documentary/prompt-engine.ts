@@ -70,6 +70,13 @@ export async function generateVideoClips(documentaryId: string): Promise<void> {
                 referenceImages.push(previousShotLastFrame);
             }
 
+            // Calculate optimized duration based on dialogue word count (fallback when shot.duration is not set)
+            let calculatedDuration = shot.duration || 5;
+            if (!shot.duration && shot.dialogue) {
+                const wordCount = shot.dialogue.split(/\s+/).filter(Boolean).length;
+                calculatedDuration = Math.min(10, Math.max(5, Math.ceil(wordCount / 2.5)));
+            }
+
             // Create GenJob
             const job = await prisma.genJob.create({
                 data: {
@@ -83,7 +90,7 @@ export async function generateVideoClips(documentaryId: string): Promise<void> {
                         width: 1280,
                         height: 720,
                         model: "wan2.1",
-                        duration: shot.duration || 5,
+                        duration: calculatedDuration,
                         sceneIndex: scene.sceneIndex,
                         shotIndex: shot.shotIndex,
                         shotType: shot.shotType,
@@ -109,7 +116,7 @@ export async function generateVideoClips(documentaryId: string): Promise<void> {
                 metadata: {
                     width: 1280,
                     height: 720,
-                    duration: shot.duration || 5,
+                    duration: calculatedDuration,
                     model: "wan2.1",
                     shotId: shot.id,
                     sourceApp: "Documentary Factory",
