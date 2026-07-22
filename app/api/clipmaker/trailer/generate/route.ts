@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { buildKinematicPrompt } from "@/lib/ai/prompt-builder";
+import { dispatchJob } from "@/lib/documentary/redis-client";
 
 // Helper to query API keys from DB
 async function getDbApiKey(service: string): Promise<string | null> {
@@ -175,7 +176,7 @@ Return ONLY a valid JSON array of 5 shot objects matching:
             title: `${title} (${trailerType})`,
             genre: "trailer",
             subStyle: trailerType.toLowerCase().replace(/[^a-z0-9]/g, "_"),
-            status: "SCENES_PLANNED",
+            status: "GENERATING",
             script: JSON.stringify({ title, concept, shots: processedShots }),
             scenes: {
                 create: processedShots.map((ps) => ({
@@ -188,10 +189,46 @@ Return ONLY a valid JSON array of 5 shot objects matching:
         }
     });
 
+    // Create GenJob records and dispatch onto Redis Queue for each shot
+    const dispatchedJobs = [];
+    for (const ps of processedShots) {
+        const r2Key = `trailers/projects/${project.id}/shots/shot_${ps.shotIndex}.mp4`;
+        const jobMetadata = {
+            docId: project.id,
+            shotIndex: ps.shotIndex,
+            sourceApp: "ClipMaker Trailer Studio",
+            model: selectedVideoModel,
+            hasNativeAudio: selectedVideoModel === "ltx2.3",
+            r2Key
+        };
+
+        const genJob = await prisma.genJob.create({
+            data: {
+                documentaryId: project.id,
+                jobType: "shot_video",
+                prompt: ps.kinematicPrompt,
+                status: "QUEUED",
+                metadata: jobMetadata as any
+            }
+        });
+
+        await dispatchJob({
+            jobId: genJob.id,
+            documentaryId: project.id,
+            type: "shot_video",
+            prompt: ps.kinematicPrompt,
+            referenceImages: [],
+            metadata: jobMetadata
+        });
+
+        dispatchedJobs.push(genJob.id);
+    }
+
     return NextResponse.json({
         success: true,
         projectId: project.id,
         title: project.title,
+        dispatchedJobsCount: dispatchedJobs.length,
         shots: processedShots
     });
 }
