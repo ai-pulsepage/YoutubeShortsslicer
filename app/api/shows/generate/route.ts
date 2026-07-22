@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generateCinematicShow } from "@/lib/film/film-script-engine";
+import { dispatchJob } from "@/lib/documentary/redis-client";
 
 export async function POST(req: NextRequest) {
     const session = await auth();
@@ -32,7 +33,8 @@ export async function POST(req: NextRequest) {
                 title: `${showResult.showTitle} (Mini-Series)`,
                 genre: showResult.genre,
                 subStyle: showResult.subStyle,
-                status: "SCENES_PLANNED",
+                visualMode: "full_ai_video",
+                status: "GENERATING",
                 script: JSON.stringify(showResult),
                 scenes: {
                     create: showResult.episodes.flatMap((ep) =>
@@ -52,10 +54,50 @@ export async function POST(req: NextRequest) {
             }
         });
 
+        // 3. Auto-dispatch shot_video jobs onto Redis Queue
+        const dispatchedJobs = [];
+        for (const ep of showResult.episodes) {
+            for (const shot of ep.shots) {
+                const r2Key = `shows/${parentDoc.id}/ep_${ep.episodeNumber}_shot_${shot.shotIndex}.mp4`;
+                const jobMetadata = {
+                    docId: parentDoc.id,
+                    title: parentDoc.title,
+                    episodeNumber: ep.episodeNumber,
+                    shotIndex: shot.shotIndex,
+                    sourceApp: "Film Factory Studio",
+                    model: videoModel || "wan2.3",
+                    voiceEngine: voiceEngine || "cosyvoice2",
+                    r2Key
+                };
+
+                const genJob = await prisma.genJob.create({
+                    data: {
+                        documentaryId: parentDoc.id,
+                        jobType: "shot_video",
+                        prompt: shot.kinematicPrompt,
+                        status: "QUEUED",
+                        metadata: jobMetadata as any
+                    }
+                });
+
+                await dispatchJob({
+                    jobId: genJob.id,
+                    documentaryId: parentDoc.id,
+                    type: "shot_video",
+                    prompt: shot.kinematicPrompt,
+                    referenceImages: [],
+                    metadata: jobMetadata
+                });
+
+                dispatchedJobs.push(genJob.id);
+            }
+        }
+
         return NextResponse.json({
             success: true,
             showId: parentDoc.id,
             title: parentDoc.title,
+            dispatchedJobsCount: dispatchedJobs.length,
             show: showResult
         });
     } catch (err: any) {

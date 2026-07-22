@@ -15,6 +15,7 @@ import { prisma } from "@/lib/prisma";
 import { scrapeArticles, researchTopic } from "@/lib/documentary/scraper";
 import { generateStoryScript, saveScriptToDocumentary, type GenreConfig } from "@/lib/documentary/story-writer";
 import { planScenes } from "@/lib/documentary/scene-planner";
+import { generateVideoClips } from "@/lib/documentary/prompt-engine";
 
 export async function POST(
     req: NextRequest,
@@ -175,6 +176,18 @@ async function runStoryPipeline(
         where: { id: documentaryId },
         data: { status: "SCENES_PLANNED" },
     });
+
+    // Auto-dispatch video clips if visualMode is full_ai_video
+    const docRec = await prisma.documentary.findUnique({
+        where: { id: documentaryId },
+        select: { visualMode: true }
+    });
+    if ((docRec?.visualMode || "full_ai_video") === "full_ai_video") {
+        console.log(`[StoryPipeline] 🚀 Auto-dispatching video clips for ${documentaryId}...`);
+        await generateVideoClips(documentaryId).catch((err) =>
+            console.error(`[StoryPipeline] Auto-dispatch video clips error: ${err.message}`)
+        );
+    }
 
     console.log(`[StoryPipeline] ✅ Complete for ${documentaryId}`);
 }

@@ -298,7 +298,7 @@ function CreateDocumentaryModal({
     const [musicMood, setMusicMood] = useState("ambient");
     const [useBRoll, setUseBRoll] = useState(true);
     const [useKenBurns, setUseKenBurns] = useState(true);
-    const [visualMode, setVisualMode] = useState("broll_only");
+    const [visualMode, setVisualMode] = useState("full_ai_video");
     const [imageModel, setImageModel] = useState("chroma");
     const [narratorStyle, setNarratorStyle] = useState("sleep");
 
@@ -367,8 +367,20 @@ function CreateDocumentaryModal({
             }),
         });
         const data = await res.json();
-        setCreating(false);
-        if (data.id) onCreated(data.id);
+        if (data.id) {
+            // Auto-trigger story generation & scene planning pipeline
+            fetch(`/api/documentary/${data.id}/generate-story`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ targetDurationMinutes })
+            }).catch((err) => console.error("Auto generate-story error:", err));
+
+            setCreating(false);
+            onCreated(data.id);
+        } else {
+            setCreating(false);
+            alert(`Error: ${data.error || "Failed to create project"}`);
+        }
     };
 
     const canProceedStep1 =
