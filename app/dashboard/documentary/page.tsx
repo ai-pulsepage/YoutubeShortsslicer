@@ -60,12 +60,18 @@ export default function DocumentaryPage() {
 
     const fetchDocumentaries = useCallback(async () => {
         setLoading(true);
-        const params = new URLSearchParams();
-        if (statusFilter) params.set("status", statusFilter);
-        const res = await fetch(`/api/documentary?${params}`);
-        const data = await res.json();
-        setDocumentaries(Array.isArray(data) ? data : []);
-        setLoading(false);
+        try {
+            const params = new URLSearchParams();
+            if (statusFilter) params.set("status", statusFilter);
+            const res = await fetch(`/api/documentary?${params}`);
+            const data = await res.json().catch(() => []);
+            setDocumentaries(Array.isArray(data) ? data : []);
+        } catch (err) {
+            console.error("Fetch documentaries error:", err);
+            setDocumentaries([]);
+        } finally {
+            setLoading(false);
+        }
     }, [statusFilter]);
 
     useEffect(() => {
