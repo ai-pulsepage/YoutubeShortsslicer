@@ -74,6 +74,16 @@ export function buildHighConvertingUGCPrompt(config: UGCPromptConfig): UGCPrompt
         visualMotion = `holding metal scraper angled at 45 degrees, scraping peeling old paint flakes off wooden door frame smoothly`;
     } else if (actionKey === "blender_use") {
         visualMotion = `pressing power button on stainless steel countertop blender, watching vibrant fruit smoothie swirl rapidly inside glass pitcher`;
+    } else if (actionKey === "clothing_stretch_buttons") {
+        visualMotion = `holding up ${product} garment between both hands, stretching fabric to show premium elasticity, close-up inspecting heavy-duty button stitching`;
+    } else if (actionKey === "athletic_basketball") {
+        visualMotion = `spinning official leather ${product} basketball on index finger, bouncing it rhythmically on court surface, gripping textured leather channels`;
+    } else if (actionKey === "athletic_jumprope") {
+        visualMotion = `holding ergonomic handles of ${product} speed jump rope, spinning cable overhead in fast fluid motion`;
+    } else if (actionKey === "athletic_yogamat") {
+        visualMotion = `unrolling premium non-slip ${product} yoga mat across wooden studio floor, pressing palm firmly into surface to demonstrate high-density memory cushion`;
+    } else if (actionKey === "athletic_weights") {
+        visualMotion = `lifting heavy cast-iron ${product} dumbbell off rack, gripping knurled steel handle, executing smooth controlled bicep curl`;
     }
 
     // 3. Build Clean Kinematic Visual Prompt (Strictly NO raw narration text pollution)

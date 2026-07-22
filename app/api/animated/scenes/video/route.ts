@@ -185,7 +185,7 @@ export async function POST(req: NextRequest) {
             });
         }
 
-        // Resolve motionPrompt if available
+        // Resolve combined cinematic prompt
         let activePrompt = visualPrompt;
         if (sceneId && shotId) {
             const sceneObj = await prisma.docScene.findUnique({ where: { id: sceneId } });
@@ -193,8 +193,14 @@ export async function POST(req: NextRequest) {
                 try {
                     const parsed = JSON.parse(sceneObj.searchQueries || "{}");
                     const targetShot = (parsed.visualShots || []).find((s: any) => s.id === shotId);
-                    if (targetShot && targetShot.motionPrompt) {
-                        activePrompt = targetShot.motionPrompt;
+                    if (targetShot) {
+                        const basePrompt = targetShot.visualPrompt || targetShot.imagePrompt || visualPrompt;
+                        const motion = targetShot.motionPrompt || "";
+                        if (motion) {
+                            activePrompt = `${basePrompt}. Motion: ${motion}`;
+                        } else {
+                            activePrompt = basePrompt;
+                        }
                     }
                 } catch {}
             }

@@ -1005,41 +1005,54 @@ export default function UGCStudioPage() {
                                              </select>
                                          </div>
                                          <div className="space-y-1">
-                                             <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">AI Voice Engine</label>
-                                             <select value={selectedVoiceEngine} onChange={e => setSelectedVoiceEngine(e.target.value)}
-                                                 className="w-full bg-gray-900 border border-gray-850 focus:border-violet-500 rounded-xl p-2.5 text-xs text-white focus:outline-none transition-all cursor-pointer">
-                                                 <option value="cosyvoice2">CosyVoice 2 (Alibaba - Emotion Tagged)</option>
-                                                 <option value="chatterbox">Chatterbox (Resemble AI - Zero-Shot Emotion)</option>
-                                                 <option value="elevenlabs">ElevenLabs (Premium API)</option>
-                                                 <option value="xtts">XTTS-v2 (Local/RunPod)</option>
-                                                 <option value="edge_tts">Edge TTS (Free)</option>
-                                                 <option value="gemini">Gemini TTS (Fast)</option>
-                                             </select>
-                                         </div>
-                                         <div className="space-y-1">
-                                             <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Ad High-Converting Format</label>
-                                             <select value={selectedAdFormat} onChange={e => setSelectedAdFormat(e.target.value)}
-                                                 className="w-full bg-gray-900 border border-gray-850 focus:border-violet-500 rounded-xl p-2.5 text-xs text-white focus:outline-none transition-all cursor-pointer">
-                                                 <option value="problem_solution">⚡ Problem & Solution Hook ("Stop Scrolling!")</option>
-                                                 <option value="product_demo">🧪 Live Product Demo & Texture Test</option>
-                                                 <option value="unboxing">📦 Package Unboxing & First Reaction</option>
-                                                 <option value="reasons_why">🔥 3 Reasons Why Everyone is Obsessed</option>
-                                             </select>
-                                         </div>
-                                         <div className="space-y-1">
-                                             <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Avatar Product Interaction</label>
-                                             <select value={selectedProductAction} onChange={e => setSelectedProductAction(e.target.value)}
-                                                 className="w-full bg-gray-900 border border-gray-850 focus:border-violet-500 rounded-xl p-2.5 text-xs text-white focus:outline-none transition-all cursor-pointer">
-                                                 <option value="holding_to_camera">📸 Holding Product directly to Camera Lens</option>
-                                                 <option value="applying_using">✨ Applying / Using Product on Camera</option>
-                                                 <option value="drinking_gasping">🥤 Drinking / Tasting Product with Gasp</option>
-                                                 <option value="unboxing_opening">🎁 Opening Package & Pulling Product Out</option>
-                                                 <option value="car_wash">🚗 Washing Car / Auto Detailing Action</option>
-                                                 <option value="power_tools">🛠 Using Power Tools / Drilling Action</option>
-                                                 <option value="paint_scraping">🎨 Scraping Paint / Restoration Action</option>
-                                                 <option value="blender_use">🍹 Blender / Kitchen Appliance Action</option>
-                                             </select>
-                                         </div>
+                                             <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">
+                                                  {selectedVideoModel === "ltx2.3" ? "🎙 Voice Engine (Bypassed)" : "AI Voice Engine"}
+                                              </label>
+                                              {selectedVideoModel === "ltx2.3" ? (
+                                                  <div className="w-full bg-gray-900 border border-violet-500/30 rounded-xl p-2.5 text-xs text-violet-300 font-medium">
+                                                      ⚡ Native Audio Bypass (LTX 2.3 generates native lip-synced audio)
+                                                  </div>
+                                              ) : (
+                                                  <select value={selectedVoiceEngine} onChange={e => setSelectedVoiceEngine(e.target.value)}
+                                                      className="w-full bg-gray-900 border border-gray-850 focus:border-violet-500 rounded-xl p-2.5 text-xs text-white focus:outline-none transition-all cursor-pointer">
+                                                      <option value="cosyvoice2">CosyVoice 2 (Alibaba - Emotion Tagged)</option>
+                                                      <option value="chatterbox">Chatterbox (Resemble AI - Zero-Shot Emotion)</option>
+                                                      <option value="elevenlabs">ElevenLabs (Premium API)</option>
+                                                      <option value="xtts">XTTS-v2 (Local/RunPod)</option>
+                                                      <option value="edge_tts">Edge TTS (Free)</option>
+                                                      <option value="gemini">Gemini TTS (Fast)</option>
+                                                  </select>
+                                              )}
+                                          </div>
+                                          <div className="space-y-1">
+                                              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Ad High-Converting Format</label>
+                                              <select value={selectedAdFormat} onChange={e => setSelectedAdFormat(e.target.value)}
+                                                  className="w-full bg-gray-900 border border-gray-850 focus:border-violet-500 rounded-xl p-2.5 text-xs text-white focus:outline-none transition-all cursor-pointer">
+                                                  <option value="problem_solution">⚡ Problem & Solution Hook ("Stop Scrolling!")</option>
+                                                  <option value="product_demo">🧪 Live Product Demo & Texture Test</option>
+                                                  <option value="unboxing">📦 Package Unboxing & First Reaction</option>
+                                                  <option value="reasons_why">🔥 3 Reasons Why Everyone is Obsessed</option>
+                                              </select>
+                                          </div>
+                                          <div className="space-y-1">
+                                              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Avatar Product Interaction</label>
+                                              <select value={selectedProductAction} onChange={e => setSelectedProductAction(e.target.value)}
+                                                  className="w-full bg-gray-900 border border-gray-850 focus:border-violet-500 rounded-xl p-2.5 text-xs text-white focus:outline-none transition-all cursor-pointer">
+                                                  <option value="holding_to_camera">📸 Holding Product directly to Camera Lens</option>
+                                                  <option value="applying_using">✨ Applying / Using Product on Camera</option>
+                                                  <option value="drinking_gasping">🥤 Drinking / Tasting Product with Gasp</option>
+                                                  <option value="unboxing_opening">🎁 Opening Package & Pulling Product Out</option>
+                                                  <option value="clothing_stretch_buttons">👕 Stretching Apparel Fabric & Checking Button Details</option>
+                                                  <option value="athletic_basketball">🏀 Basketball Dribble & Leather Grip Test</option>
+                                                  <option value="athletic_jumprope">⚡ Jump Rope Speed & Ergonomic Handle Test</option>
+                                                  <option value="athletic_yogamat">🧘 Unrolling Yoga Mat & Cushion Press</option>
+                                                  <option value="athletic_weights">🏋️ Dumbbell/Kettlebell Lift & Grip Showcase</option>
+                                                  <option value="car_wash">🚗 Washing Car / Auto Detailing Action</option>
+                                                  <option value="power_tools">🛠 Using Power Tools / Drilling Action</option>
+                                                  <option value="paint_scraping">🎨 Scraping Paint / Restoration Action</option>
+                                                  <option value="blender_use">🍹 Blender / Kitchen Appliance Action</option>
+                                              </select>
+                                          </div>
                                      </div>
 
                                     {/* Batch Ad Pack Templates */}

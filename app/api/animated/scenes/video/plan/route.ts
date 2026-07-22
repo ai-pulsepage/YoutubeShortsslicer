@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { repairAndParseJSON } from "@/lib/documentary/json-repair";
 
 export async function POST(req: NextRequest) {
     const session = await auth();
@@ -96,39 +97,53 @@ JSON Schema:
 ]`;
 
 
-        const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${apiKey}`
-            },
-            body: JSON.stringify({
-                model: "deepseek-chat",
-                messages: [
-                    {
-                        role: "system",
-                        content: systemPrompt
-                    },
-                    {
-                        role: "user",
-                        content: lyrics
-                    }
-                ],
-                temperature: 0.7,
-                max_tokens: 4000
-            })
-        });
+        let content = "";
+        try {
+            const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model: "deepseek-chat",
+                    messages: [
+                        {
+                            role: "system",
+                            content: systemPrompt
+                        },
+                        {
+                            role: "user",
+                            content: lyrics
+                        }
+                    ],
+                    temperature: 0.7,
+                    max_tokens: 4000
+                })
+            });
 
-        if (!res.ok) {
-            const errText = await res.text();
-            if (res.status === 402 || errText.toLowerCase().includes("insufficient_balance") || errText.toLowerCase().includes("balance") || errText.toLowerCase().includes("credit")) {
-                return NextResponse.json({ error: "DEEPSEEK_OUT_OF_FUNDS", details: "DeepSeek API: Insufficient Balance. Please check your funds at console.deepseek.com." }, { status: 402 });
+            if (!res.ok) {
+                const errText = await res.text();
+                if (res.status === 402 || errText.toLowerCase().includes("insufficient_balance") || errText.toLowerCase().includes("balance") || errText.toLowerCase().includes("credit")) {
+                    throw new Error("DEEPSEEK_OUT_OF_FUNDS");
+                }
+                throw new Error(`DeepSeek API returned ${res.status}: ${errText}`);
             }
-            throw new Error(`DeepSeek API returned ${res.status}: ${errText}`);
-        }
 
-        const data = await res.json();
-        let content = data.choices?.[0]?.message?.content?.trim() || "";
+            const data = await res.json();
+            content = data.choices?.[0]?.message?.content?.trim() || "";
+        } catch (deepSeekErr: any) {
+            console.warn("[Storyboard Plan] DeepSeek request failed, trying Gemini fallback:", deepSeekErr.message);
+            try {
+                content = await callGeminiFallback(systemPrompt, lyrics);
+            } catch (geminiErr: any) {
+                console.error("[Storyboard Plan] Gemini fallback also failed:", geminiErr.message);
+                return NextResponse.json({
+                    error: "AI_GENERATION_FAILED",
+                    details: `Both DeepSeek and Gemini fallback failed. DeepSeek error: ${deepSeekErr.message}. Gemini error: ${geminiErr.message}`
+                }, { status: 500 });
+            }
+        }
 
         // Bulletproof JSON block extractor: search for the first '[' and last ']'
         let jsonContent = content.trim();
@@ -141,7 +156,7 @@ JSON Schema:
         }
 
         try {
-            const parsedShots = JSON.parse(jsonContent);
+            const parsedShots = repairAndParseJSON(jsonContent);
             const shotsArray = Array.isArray(parsedShots) ? parsedShots : [parsedShots];
             const normalizedShots = shotsArray.map((s: any) => {
                 const imagePrompt = s.imagePrompt || s.visualPrompt || "";
@@ -168,4 +183,51 @@ JSON Schema:
         console.error("[Storyboard Plan] Error:", err.message);
         return NextResponse.json({ error: "Failed to plan storyboard", details: err.message }, { status: 500 });
     }
+}
+
+async function callGeminiFallback(systemPrompt: string, userPrompt: string): Promise<string> {
+    let apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+        const dbKey = await prisma.apiKey.findUnique({ where: { service: "gemini_api_key" } });
+        if (dbKey?.key) apiKey = Buffer.from(dbKey.key, "base64").toString("utf8");
+    }
+
+    if (!apiKey) {
+        throw new Error("GEMINI_API_KEY is not configured in environment or database.");
+    }
+
+    const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`,
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                systemInstruction: {
+                    parts: [{ text: systemPrompt }]
+                },
+                contents: [
+                    {
+                        role: "user",
+                        parts: [{ text: userPrompt }]
+                    }
+                ],
+                generationConfig: {
+                    temperature: 0.7,
+                    responseMimeType: "application/json"
+                }
+            })
+        }
+    );
+
+    if (!res.ok) {
+        throw new Error(`Gemini API returned status ${res.status}: ${await res.text()}`);
+    }
+
+    const json = await res.json();
+    const content = json.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    if (!content) {
+        throw new Error("Empty response from Gemini");
+    }
+
+    return content;
 }

@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { analyzeVideoVisually } from "@/lib/documentary/video-analyzer";
 import { buildTtsWritingGuide, type TtsProvider } from "@/lib/tts/text-formatter";
+import { repairAndParseJSON } from "@/lib/documentary/json-repair";
 
 const LANGUAGE_VOICES: Record<string, { childFemale: string; male: string; default: string }> = {
     spanish: {
@@ -300,7 +301,7 @@ ${ttsWritingGuide}`;
                         }
                     ],
                     temperature: 0.7,
-                    max_tokens: 3000
+                    max_tokens: 4096
                 })
             });
 
@@ -335,7 +336,7 @@ ${ttsWritingGuide}`;
         }
 
         try {
-            const scenes = JSON.parse(jsonContent);
+            const scenes = repairAndParseJSON(jsonContent);
             // Assign stable client-side IDs
             const mappedScenes = (Array.isArray(scenes) ? scenes : [scenes]).map((s: any, idx: number) => ({
                 id: `scene-${idx}-${Date.now()}`,

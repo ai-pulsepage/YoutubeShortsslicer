@@ -49,6 +49,7 @@ type Shot = {
     jobStatus?: "IDLE" | "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED" | "PENDING_AVATAR" | "PENDING_PREVIOUS" | "GENERATING_IMAGE";
     duration?: number;        // Optional custom duration in seconds
     chainFromPrevious?: boolean; // Optional flag to chain keyframe context
+    modelOverride?: string;   // Optional scene/shot video model override (e.g. wan_dance)
 };
 
 type TtsProvider = "edge_tts" | "gemini" | "elevenlabs" | "dia" | "cosyvoice2" | "chatterbox";
@@ -72,6 +73,7 @@ type Scene = {
     voiceStatus?: "IDLE" | "GENERATING" | "READY" | "FAILED";
     visualShots?: Shot[];       // Multi-shot sequence
     planningShots?: boolean;    // Loading state for AI planning
+    modelOverride?: string;     // Model override for musical scenes (e.g. wan_dance)
 };
 
 type Character = {
@@ -243,6 +245,7 @@ export default function KidsStoryBuilderPage() {
     const [includeMusicals, setIncludeMusicals] = useState<boolean>(true);
     const [visualStyle, setVisualStyle] = useState<string>("Pixar 3D");
     const [targetAge, setTargetAge] = useState<string>("Kids");
+    const [selectedVideoModel, setSelectedVideoModel] = useState<string>("wan2.3");
     const [genre, setGenre] = useState<string>("Adventure");
     const [rewritingShotId, setRewritingShotId] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
@@ -1218,7 +1221,8 @@ export default function KidsStoryBuilderPage() {
                     refImage: hasRefImage || undefined,
                     shotId: shotObj.id,
                     duration: shotObj.duration || 5,
-                    chainFromPrevious: shotObj.chainFromPrevious || false
+                    chainFromPrevious: shotObj.chainFromPrevious || false,
+                    videoModel: shotObj.modelOverride || scenes.find(s => s.id === sceneId)?.modelOverride || selectedVideoModel
                 })
             });
 
@@ -1972,10 +1976,19 @@ export default function KidsStoryBuilderPage() {
                                 <h3 className="text-lg font-bold text-white flex items-center gap-1.5"><FileText className="w-5 h-5 text-violet-400" /> Story Premise Details</h3>
                                 <div className="space-y-3">
                                     <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5">
-                                        <div className="md:col-span-8">
+                                        <div className="md:col-span-4">
                                             <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Story Project Title</label>
                                             <input type="text" placeholder="Busby Beaver's Big Dam Adventure..." value={projectTitle} onChange={e => setProjectTitle(e.target.value)}
                                                 className="w-full bg-gray-850 border border-gray-750 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-violet-500 font-semibold" />
+                                        </div>
+                                        <div className="md:col-span-4">
+                                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Video Model Generator</label>
+                                            <select value={selectedVideoModel} onChange={e => setSelectedVideoModel(e.target.value)}
+                                                className="w-full bg-gray-850 border border-gray-750 rounded-xl px-3 py-2.5 text-xs text-violet-300 focus:outline-none focus:border-violet-500 font-semibold cursor-pointer">
+                                                <option value="wan2.3" className="bg-gray-900 text-white">Wan 2.3 (Action & Speech)</option>
+                                                <option value="ltx2.3" className="bg-gray-900 text-white">LTX-Video 2.3 (Native Audio Bypass)</option>
+                                                <option value="wan_dance" className="bg-gray-900 text-white">Wan-Dance (Suno Musicals & Dance)</option>
+                                            </select>
                                         </div>
                                         <div className="md:col-span-2">
                                             <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Video Length</label>
@@ -2687,12 +2700,22 @@ export default function KidsStoryBuilderPage() {
                                                         </div>
                                                     </div>
                                                 ) : (
-                                                    // Suno tracks upload row
-                                                    <div className="grid grid-cols-2 gap-2">
+                                                    // Suno tracks upload row & Wan-Dance sub-selection
+                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                                                         <div>
                                                             <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">Suno Prompt Suggestion</label>
                                                             <input type="text" readOnly value={scene.sunoStylePrompt || "upbeat kids singalong, bells, 120bpm"} 
                                                                 className="w-full bg-gray-850 border border-gray-750 rounded-lg px-2.5 py-1.5 text-[10px] text-gray-450 focus:outline-none font-sans" />
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[9px] font-bold text-violet-400 uppercase tracking-wider block mb-0.5">Musical Video Model</label>
+                                                            <select value={scene.modelOverride || (selectedVideoModel === "wan2.3" ? "wan_dance" : selectedVideoModel)}
+                                                                onChange={e => updateScene(scene.id, { modelOverride: e.target.value })}
+                                                                className="w-full bg-gray-850 border border-violet-500/40 rounded-lg px-2 py-1 text-[10px] text-violet-300 font-semibold focus:outline-none focus:border-violet-500 cursor-pointer">
+                                                                <option value="wan_dance" className="bg-gray-900 text-violet-300 font-bold">🕺 Wan-Dance (Suno Choreography)</option>
+                                                                <option value="wan2.3" className="bg-gray-900 text-white">Wan 2.3 (Standard Action)</option>
+                                                                <option value="ltx2.3" className="bg-gray-900 text-white">LTX-Video 2.3 (Native Audio)</option>
+                                                            </select>
                                                         </div>
                                                         <div>
                                                             <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block mb-0.5">Suno MP3 Audio Upload</label>

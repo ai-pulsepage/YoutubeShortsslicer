@@ -465,7 +465,10 @@ def get_wan_pipeline(model_variant: str = "wan2.3"):
     if _wan_pipe is None:
         from diffusers import WanImageToVideoPipeline
 
-        if "2.1" in model_variant:
+        if "dance" in model_variant.lower():
+            model_id = "Wan-AI/Wan2.1-I2V-14B-480P"
+            print(f"💃 Loading Wan-Dance Rhythmic Choreography Pipeline ({model_id})...")
+        elif "2.1" in model_variant:
             model_id = "Wan-AI/Wan2.1-I2V-14B-480P"
         else:
             model_id = "Wan-AI/Wan2.2-TI2V-5B-Diffusers"
