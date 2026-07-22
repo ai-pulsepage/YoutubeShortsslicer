@@ -172,6 +172,8 @@ const TTS_PROVIDERS: { id: TtsProvider; label: string; icon: string; desc: strin
     { id: "gemini",     label: "Gemini TTS",  icon: "✨", desc: "Google Gemini 2.5 Flash" },
     { id: "elevenlabs", label: "ElevenLabs",  icon: "🎙", desc: "Premium natural voices" },
     { id: "dia",        label: "Dia (RunPod)", icon: "🖥", desc: "Self-hosted, voice cloning" },
+    { id: "cosyvoice2", label: "CosyVoice 2", icon: "🍃", desc: "Alibaba Emotion Tagged" },
+    { id: "chatterbox", label: "Chatterbox",  icon: "💬", desc: "Resemble Zero-Shot Voice" },
 ];
 
 function getVoicesForProvider(provider: TtsProvider) {
@@ -179,6 +181,8 @@ function getVoicesForProvider(provider: TtsProvider) {
         case "gemini":     return GEMINI_VOICES_UI;
         case "dia":        return DIA_VOICES_UI;
         case "elevenlabs": return []; // populated dynamically from API
+        case "cosyvoice2": return [];
+        case "chatterbox": return [];
         case "edge_tts":
         default:           return EDGE_TTS_VOICES;
     }
@@ -2261,6 +2265,26 @@ export default function KidsStoryBuilderPage() {
                                                         />
                                                     );
                                                 }
+                                                if (provider === "cosyvoice2") {
+                                                    return (
+                                                        <input
+                                                            value={char.ttsVoiceId || ""}
+                                                            onChange={e => updateCharacterProfile(char.id, { ttsVoiceId: e.target.value })}
+                                                            placeholder="CosyVoice 2 Voice ID (e.g. female_child, male_child)"
+                                                            className="w-full bg-gray-850 border border-gray-750 rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-violet-500 font-mono"
+                                                        />
+                                                    );
+                                                }
+                                                if (provider === "chatterbox") {
+                                                    return (
+                                                        <input
+                                                            value={char.ttsVoiceId || ""}
+                                                            onChange={e => updateCharacterProfile(char.id, { ttsVoiceId: e.target.value })}
+                                                            placeholder="Chatterbox Voice ID"
+                                                            className="w-full bg-gray-850 border border-gray-750 rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-violet-500 font-mono"
+                                                        />
+                                                    );
+                                                }
                                                 return voices.length > 0 ? (
                                                     <select
                                                         value={char.ttsVoiceId || ""}
@@ -2661,6 +2685,26 @@ export default function KidsStoryBuilderPage() {
                                                                                 value={scene.ttsVoiceId || ""}
                                                                                 onChange={e => updateScene(scene.id, { ttsVoiceId: e.target.value })}
                                                                                 placeholder="ElevenLabs Voice ID"
+                                                                                className="w-full bg-gray-850 border border-gray-750 rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-violet-500 font-mono"
+                                                                            />
+                                                                        );
+                                                                    }
+                                                                    if (effectiveProvider === "cosyvoice2") {
+                                                                        return (
+                                                                            <input
+                                                                                value={scene.ttsVoiceId || ""}
+                                                                                onChange={e => updateScene(scene.id, { ttsVoiceId: e.target.value })}
+                                                                                placeholder="CosyVoice 2 Voice ID (e.g. female_child, male_child)"
+                                                                                className="w-full bg-gray-850 border border-gray-750 rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-violet-500 font-mono"
+                                                                            />
+                                                                        );
+                                                                    }
+                                                                    if (effectiveProvider === "chatterbox") {
+                                                                        return (
+                                                                            <input
+                                                                                value={scene.ttsVoiceId || ""}
+                                                                                onChange={e => updateScene(scene.id, { ttsVoiceId: e.target.value })}
+                                                                                placeholder="Chatterbox Voice ID"
                                                                                 className="w-full bg-gray-850 border border-gray-750 rounded-lg px-2 py-1 text-[10px] text-white focus:outline-none focus:border-violet-500 font-mono"
                                                                             />
                                                                         );

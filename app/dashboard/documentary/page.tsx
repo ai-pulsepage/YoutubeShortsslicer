@@ -19,7 +19,7 @@ import {
     FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getSmartDefaults } from "@/lib/documentary/genre-presets";
+import { getSmartDefaults, GENRES } from "@/lib/documentary/genre-presets";
 
 type Documentary = {
     id: string;
@@ -263,49 +263,7 @@ function DocumentaryCard({
     );
 }
 
-/* ────── Genre Data (client-side subset) ────── */
-const GENRES = [
-    { id: "science", label: "Science & Education", icon: "🔬", subStyles: [
-        { id: "bbc_earth", label: "BBC Earth" }, { id: "cosmos", label: "Cosmos (Sagan)" },
-        { id: "kurzgesagt", label: "Kurzgesagt" }, { id: "ted_talk", label: "TED Talk" },
-        { id: "bill_nye", label: "Bill Nye" }, { id: "academic", label: "Academic Lecture" },
-    ]},
-    { id: "true_crime", label: "True Crime / Mystery", icon: "🔍", subStyles: [
-        { id: "serial", label: "Serial (Podcast)" }, { id: "forensic_files", label: "Forensic Files" },
-        { id: "unsolved_mysteries", label: "Unsolved Mysteries" }, { id: "making_murderer", label: "Making a Murderer" },
-        { id: "cold_case", label: "Cold Case Files" },
-    ]},
-    { id: "horror", label: "Horror / Creepy", icon: "👻", subStyles: [
-        { id: "campfire", label: "Campfire Story" }, { id: "cryptids", label: "Cryptids & Paranormal" },
-        { id: "urban_legend", label: "Urban Legends" }, { id: "psychological", label: "Psychological" },
-        { id: "scp", label: "SCP Foundation" },
-    ]},
-    { id: "history", label: "History", icon: "📜", subStyles: [
-        { id: "ken_burns", label: "Ken Burns" }, { id: "epic_cinematic", label: "Epic / Cinematic" },
-        { id: "ancient_civ", label: "Ancient Civilizations" }, { id: "war_doc", label: "War Documentary" },
-        { id: "biography", label: "Biography" },
-    ]},
-    { id: "children", label: "Children's", icon: "🧸", subStyles: [
-        { id: "dr_seuss", label: "Dr. Seuss Style" }, { id: "fairy_tale", label: "Fairy Tale" },
-        { id: "mr_rogers", label: "Mr. Rogers" }, { id: "aesop", label: "Aesop's Fables" },
-        { id: "bedtime_lullaby", label: "Bedtime Lullaby" },
-    ]},
-    { id: "sleep", label: "Sleep / Relaxation", icon: "🌙", subStyles: [
-        { id: "asmr_nature", label: "ASMR Nature" }, { id: "bedtime_science", label: "Bedtime Science" },
-        { id: "rain_ocean", label: "Rain & Ocean" }, { id: "meditation", label: "Guided Meditation" },
-        { id: "sleepy_history", label: "Sleepy History" },
-    ]},
-    { id: "comedy", label: "Comedy / Satire", icon: "😂", subStyles: [
-        { id: "mock_doc", label: "Mock Documentary" }, { id: "drunk_history", label: "Drunk History" },
-        { id: "absurdist", label: "Absurdist" }, { id: "deadpan_british", label: "Deadpan British" },
-        { id: "standup", label: "Stand-up Narrator" },
-    ]},
-    { id: "nature", label: "Nature / Wildlife", icon: "🌿", subStyles: [
-        { id: "planet_earth", label: "Planet Earth" }, { id: "ocean_deep", label: "Ocean Deep" },
-        { id: "rainforest", label: "Rainforest" }, { id: "migration", label: "Migration" },
-        { id: "micro_world", label: "Micro World" },
-    ]},
-];
+
 
 // Smart defaults are now sourced directly from genre-presets.ts via the GENRES array.
 // The creation modal imports getSmartDefaults() to apply them dynamically.
@@ -322,6 +280,11 @@ function CreateDocumentaryModal({
     const [urlsText, setUrlsText] = useState("");
     const [textStory, setTextStory] = useState("");
     const [creating, setCreating] = useState(false);
+
+    // Length controls
+    const [targetDurationMinutes, setTargetDurationMinutes] = useState(15);
+    const [numEpisodes, setNumEpisodes] = useState(3);
+    const [shotsPerEpisode, setShotsPerEpisode] = useState(5);
 
     // Genre settings
     const [genre, setGenre] = useState("science");
@@ -371,7 +334,8 @@ function CreateDocumentaryModal({
                         concept: textStory.trim() || title.trim() || "Dramatic multi-episode story arc",
                         genre,
                         subStyle,
-                        numEpisodes: 3,
+                        numEpisodes,
+                        shotsPerEpisode,
                     })
                 });
                 const data = await res.json();
@@ -394,7 +358,8 @@ function CreateDocumentaryModal({
             body: JSON.stringify({
                 title: title.trim() || undefined,
                 sourceUrls,
-                textStory: mode === "text" ? textStory.trim() : undefined,
+                textStory: (mode === "text" || mode === "topic") ? textStory.trim() : undefined,
+                targetDurationMinutes,
                 genre, subStyle, audience, perspective, pacing,
                 ending, endingNote: endingNote || undefined,
                 contentMode, musicMood,
@@ -406,7 +371,11 @@ function CreateDocumentaryModal({
         if (data.id) onCreated(data.id);
     };
 
-    const canProceedStep1 = mode === "topic" ? !!title.trim() : (mode === "text" ? !!textStory.trim() : !!urlsText.trim());
+    const canProceedStep1 =
+        mode === "topic" ? !!title.trim() :
+        mode === "shows" ? !!title.trim() :
+        mode === "text" ? !!textStory.trim() :
+        !!urlsText.trim();
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
@@ -477,7 +446,97 @@ function CreateDocumentaryModal({
                         </div>
                     )}
 
+                    {/* AI Movie Concept */}
+                    {mode === "topic" && (
+                        <div>
+                            <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                                Movie Premise / Detailed Concept
+                            </label>
+                            <textarea value={textStory} onChange={(e) => setTextStory(e.target.value)} rows={4}
+                                placeholder="Describe the documentary topic, research findings, specific events, or structural instructions for the AI scriptwriter..."
+                                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 transition-colors resize-none font-sans" />
+                        </div>
+                    )}
+
+                    {/* TV Mini-Series Concept */}
+                    {mode === "shows" && (
+                        <div>
+                            <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                                Series Plot Concept / Character Conflict Details
+                            </label>
+                            <textarea value={textStory} onChange={(e) => setTextStory(e.target.value)} rows={4}
+                                placeholder="Describe the story, conflict, protagonist vs antagonist, setting, tone, and multi-episode story beats..."
+                                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 transition-colors resize-none font-sans" />
+                        </div>
+                    )}
+
+                    {/* ── AI Movie: Duration picker ── */}
+                    {(mode === "topic" || mode === "text" || mode === "urls") && (
+                        <div>
+                            <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                                🎬 Target Movie Length
+                            </label>
+                            <div className="grid grid-cols-5 gap-1.5">
+                                {[5, 10, 15, 20, 30, 45, 60].map((mins) => (
+                                    <button key={mins}
+                                        onClick={() => setTargetDurationMinutes(mins)}
+                                        className={cn("py-1.5 rounded-lg text-xs font-medium transition-colors",
+                                            targetDurationMinutes === mins
+                                                ? "bg-violet-600 text-white"
+                                                : "bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700")}>
+                                        {mins}m
+                                    </button>
+                                ))}
+                            </div>
+                            <p className="text-[9px] text-gray-600 mt-1">Approximate narrated runtime. Longer = more scenes + rendering time.</p>
+                        </div>
+                    )}
+
+                    {/* ── TV Mini-Series: Episode + shot count ── */}
+                    {mode === "shows" && (
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                                    📺 Number of Episodes
+                                </label>
+                                <div className="flex gap-1.5">
+                                    {[1, 2, 3, 4, 5, 6].map((n) => (
+                                        <button key={n}
+                                            onClick={() => setNumEpisodes(n)}
+                                            className={cn("flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                                                numEpisodes === n
+                                                    ? "bg-amber-500 text-white"
+                                                    : "bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700")}>
+                                            {n}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-400 mb-1.5">
+                                    🎬 Shots per Episode
+                                </label>
+                                <div className="flex gap-1.5">
+                                    {[4, 5, 6, 7, 8].map((n) => (
+                                        <button key={n}
+                                            onClick={() => setShotsPerEpisode(n)}
+                                            className={cn("flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                                                shotsPerEpisode === n
+                                                    ? "bg-amber-500 text-white"
+                                                    : "bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700")}>
+                                            {n}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <p className="col-span-2 text-[9px] text-gray-600">
+                                {numEpisodes} episode{numEpisodes !== 1 ? "s" : ""} × {shotsPerEpisode} shots = {numEpisodes * shotsPerEpisode} total scenes to render.
+                            </p>
+                        </div>
+                    )}
+
                     <div className="border-t border-gray-800 my-4 pt-4" />
+
 
                     {/* Genre Selection */}
                     <div>

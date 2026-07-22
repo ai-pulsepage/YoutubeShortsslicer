@@ -71,17 +71,42 @@ export async function generateCinematicShow(params: {
         apiKey = (await getDbApiKey("deepseek_api_key")) || "";
     }
 
+    // Build a narrative arc blueprint so the AI knows each episode's role in the full series
+    const buildArcBlueprint = (n: number): string => {
+        if (n === 1) return `Episode 1 (FULL FEATURE FILM): Setup → Rising Action → Climax → Resolution. Self-contained, epic finale.`;
+        if (n === 2) return [
+            `Episode 1 (PREMIERE): Introduce world, cast, central conflict. End on shocking hook.`,
+            `Episode 2 (SERIES FINALE): Escalate to maximum tension. Resolve all major arcs. Deliver a powerful, emotionally satisfying or devastatingly tragic ending.`
+        ].join("\n");
+
+        const lines: string[] = [];
+        for (let i = 1; i <= n; i++) {
+            if (i === 1) lines.push(`Episode 1 (SERIES PREMIERE): Establish the world, introduce every major character, plant the central conflict. End with a compelling hook that demands the next episode.`);
+            else if (i === 2) lines.push(`Episode 2 (RISING ACTION): Deepen relationships, reveal a secondary threat or betrayal. Escalate stakes. End with a mid-point twist.`);
+            else if (i === n - 1 && n >= 4) lines.push(`Episode ${i} (PENULTIMATE): Maximum tension. Every character's loyalty is tested. The villain seems to have won. End on a devastating cliffhanger.`);
+            else if (i === n) lines.push(`Episode ${n} (SERIES FINALE): All threads converge. Deliver an emotionally resonant or shocking conclusion. Resolve protagonist arc. Optional: season-ending twist for potential renewal.`);
+            else lines.push(`Episode ${i} (ACT ${i} — ESCALATION): Push conflict forward. Reveal a new secret or betrayal. Each episode must raise the stakes from the last.`);
+        }
+        return lines.join("\n");
+    };
+
+    const arcBlueprint = buildArcBlueprint(numEp);
+
     const systemPrompt = `You are a Hollywood showrunner and master cinematic director.
 Write a high-concept ${numEp}-episode TV Mini-Series script for the following concept:
 Title: ${title}
 Genre: ${genre}
 Concept: ${concept}
 
+SERIES ARC BLUEPRINT — You MUST follow this narrative plan episode-by-episode:
+${arcBlueprint}
+
 CRITICAL RULES:
 1. NO NARRATOR VOICEOVER. The story is driven 100% by character dialogue, character action beats, and emotional conflict.
 2. Define a Cast Roster of 2 to 4 vivid characters with physical profiles.
 3. Write ${numEp} episodes. Each episode must have EXACTLY ${shotsPerEp} consecutive visual shots.
-4. Each shot must specify:
+4. The final episode MUST resolve the central conflict. Do NOT leave the main story open-ended.
+5. Each shot must specify:
    - "shotType": e.g. "close-up", "medium shot", "over-the-shoulder", "action cut"
    - "speakerName": Character speaking (if dialogue beat)
    - "dialogueLine": Character spoken line (with emotional tag like [excited], [angry], [whispering])
@@ -95,6 +120,7 @@ Return ONLY valid JSON matching this schema:
   "genre": "${genre}",
   "subStyle": "${params.subStyle || "default"}",
   "premise": "${concept}",
+  "seriesArc": "One sentence describing the full arc from premiere to finale",
   "cast": [
     {
       "name": "Character Name",
@@ -105,6 +131,7 @@ Return ONLY valid JSON matching this schema:
   "episodes": [
     {
       "episodeNumber": 1,
+      "episodeRole": "PREMIERE",
       "title": "Episode 1: Title",
       "logline": "Episode summary",
       "cliffhanger": "Dramatic cliffhanger ending",
@@ -137,10 +164,10 @@ Return ONLY valid JSON matching this schema:
                     model: "deepseek-chat",
                     messages: [
                         { role: "system", content: systemPrompt },
-                        { role: "user", content: `Generate ${numEp}-episode series for: ${title}` },
+                        { role: "user", content: `Generate the complete ${numEp}-episode series for: "${title}". Follow the arc blueprint exactly. Return only valid JSON.` },
                     ],
                     temperature: 0.8,
-                    max_tokens: 2500,
+                    max_tokens: 8000,
                 }),
             });
 
@@ -150,7 +177,12 @@ Return ONLY valid JSON matching this schema:
                 if (text.startsWith("```")) {
                     text = text.replace(/^```json\s*/, "").replace(/^```\s*/, "").replace(/\s*```$/, "");
                 }
-                rawOutput = JSON.parse(text);
+                try {
+                    rawOutput = JSON.parse(text);
+                } catch {
+                    // Attempt light repair for common truncation issues
+                    try { rawOutput = JSON.parse(text + "}]}"); } catch { /* fall through to template */ }
+                }
             }
         } catch (err: any) {
             console.warn("[Film Script Engine] DeepSeek generation error, using fallback template:", err.message);

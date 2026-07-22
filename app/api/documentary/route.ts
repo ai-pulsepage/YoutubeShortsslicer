@@ -52,7 +52,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { sourceUrls, voiceId, title, genre, subStyle, audience, perspective,
         pacing, ending, endingNote, contentMode, musicMood,
-        useBRoll, useKenBurns, visualMode, imageModel, narratorStyle, ttsEngine, textStory } = body;
+        useBRoll, useKenBurns, visualMode, imageModel, narratorStyle, ttsEngine, textStory,
+        targetDurationMinutes } = body;
 
     // In topic mode, sourceUrls can be empty if title is provided.
     // In textStory mode, sourceUrls can also be empty.
@@ -98,6 +99,7 @@ export async function POST(req: NextRequest) {
             voiceId: voiceId || "Rachel",
             narratorStyle: narratorStyle || "sleep",
             ttsEngine: ttsEngine || "elevenlabs",
+            targetDurationMinutes: parseInt(targetDurationMinutes) || 15,
             status: "DRAFT",
         },
     });

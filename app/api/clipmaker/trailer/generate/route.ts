@@ -31,7 +31,9 @@ export async function POST(req: NextRequest) {
     }
 
     const selectedVideoModel = videoModel || "wan2.3";
-    const selectedVoiceEngine = voiceEngine || "cosyvoice2";
+    const isLtxModel = selectedVideoModel === "ltx2.3";
+    // LTX-Video generates native audio — bypass voice engine
+    const selectedVoiceEngine = isLtxModel ? null : (voiceEngine || "cosyvoice2");
     const trailerType = genre || "Game Trailer";
 
     const systemPrompt = `You are an elite Hollywood and AAA video game trailer director. Write a high-octane 5-shot trailer storyboard for the following ${trailerType}:
@@ -196,9 +198,11 @@ Return ONLY a valid JSON array of 5 shot objects matching:
         const jobMetadata = {
             docId: project.id,
             shotIndex: ps.shotIndex,
+            title: project.title,
             sourceApp: "ClipMaker Trailer Studio",
             model: selectedVideoModel,
-            hasNativeAudio: selectedVideoModel === "ltx2.3",
+            hasNativeAudio: isLtxModel,
+            skipVoice: isLtxModel,
             r2Key
         };
 
@@ -224,11 +228,16 @@ Return ONLY a valid JSON array of 5 shot objects matching:
         dispatchedJobs.push(genJob.id);
     }
 
+    const audioNote = isLtxModel
+        ? "LTX-Video 2.3: Native audio generation (voice bypass active)"
+        : `Voice engine: ${selectedVoiceEngine}`;
+
     return NextResponse.json({
         success: true,
         projectId: project.id,
         title: project.title,
         dispatchedJobsCount: dispatchedJobs.length,
+        audioNote,
         shots: processedShots
     });
 }

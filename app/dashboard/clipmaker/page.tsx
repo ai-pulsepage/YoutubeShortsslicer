@@ -548,7 +548,7 @@ export default function ClipStudioPage() {
             if (!res.ok) throw new Error(data.error || "Trailer generation failed");
 
             setGeneratedTrailerShots(data.shots || []);
-            alert(`✅ Viral Trailer Storyboard generated for "${data.title}"! Dispatched to ${trailerVideoModel} and ${trailerVoiceEngine}.`);
+            alert(`✅ Viral Trailer Storyboard generated for "${data.title}"! Dispatched to ${trailerVideoModel}. ${data.audioNote || ""}`);
         } catch (err: any) {
             console.error("Trailer generation error:", err);
             alert(`Error: ${err.message}`);

@@ -22,8 +22,11 @@ Environment Variables Required:
 """
 
 import os
-# Force Hugging Face cache to live on the persistent storage drive
+# Force Hugging Face & Torch caches to live on the persistent storage drive (/workspace)
 os.environ["HF_HOME"] = "/workspace/hf_cache"
+os.environ["TORCH_HOME"] = "/workspace/torch_cache"
+os.environ["TMPDIR"] = "/workspace/tmp"
+os.makedirs("/workspace/tmp", exist_ok=True)
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 # Monkey patch torch.distributed.tensor for PyTorch 2.4.0 compatibility

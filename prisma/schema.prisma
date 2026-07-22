@@ -475,6 +475,7 @@ model Documentary {
   ttsVoiceId     String?                            // Engine-specific voice ID
   narratorStyle  String    @default("sleep")        // sleep | documentary | dramatic | energetic | conversational
   fillerMode     String    @default("kenburns") // kenburns, procedural, stock, kenburns+stock
+  targetDurationMinutes Int @default(15)          // Desired narrated runtime in minutes
   status         DocStatus @default(DRAFT)
   totalDuration  Float?
   finalVideoPath String?

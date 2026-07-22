@@ -156,6 +156,20 @@ export async function POST(req: NextRequest) {
                 break;
             }
 
+            case "cosyvoice2": {
+                const { generateCosyVoice } = await import("@/lib/tts/cosyvoice");
+                audioBuffer = await generateCosyVoice({ text: synthesisText, emotion: "neutral" });
+                ext = "mp3";
+                break;
+            }
+
+            case "chatterbox": {
+                const { generateChatterbox } = await import("@/lib/tts/chatterbox");
+                audioBuffer = await generateChatterbox({ text: synthesisText, exaggeration: 1.0 });
+                ext = "mp3";
+                break;
+            }
+
             default:
                 throw new Error(`Unknown TTS provider: ${activeProvider}`);
         }
