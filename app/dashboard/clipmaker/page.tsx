@@ -544,8 +544,14 @@ export default function ClipStudioPage() {
                     voiceEngine: trailerVoiceEngine
                 })
             });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || "Trailer generation failed");
+            const text = await res.text();
+            let data: any = {};
+            try {
+                data = text ? JSON.parse(text) : {};
+            } catch {
+                throw new Error(`Server response error (${res.status} ${res.statusText})`);
+            }
+            if (!res.ok) throw new Error(data.error || `Trailer generation failed (${res.status})`);
 
             setGeneratedTrailerShots(data.shots || []);
             alert(`✅ Viral Trailer Storyboard generated for "${data.title}"! Dispatched to ${trailerVideoModel}. ${data.audioNote || ""}`);
