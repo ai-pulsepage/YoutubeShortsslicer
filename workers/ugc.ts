@@ -406,11 +406,6 @@ export const ugcWorker = new Worker(
                 avatarImagePath = path.join(tempDir, "avatar.png");
                 console.log("[UGC Worker] Downloading reference image from S3/R2...");
                 await downloadFileFromR2(ugcJob.avatar.referenceImageUrl, avatarImagePath);
-            } else {
-                avatarImagePath = path.join(tempDir, "avatar.png");
-                console.log("[UGC Worker] No avatar image provided. Generating placeholder...");
-                // Create a basic gray placeholder image
-                execSync(`ffmpeg -f lavfi -i color=c=gray:s=1080x1080:d=1 -vframes 1 "${avatarImagePath}" -y`);
             }
 
             // 5. Generate Native Video Ad Clip from RunPod GPU Worker
@@ -471,7 +466,7 @@ export const ugcWorker = new Worker(
                 }
             }
             if (!ltxSuccess) {
-                throw new Error("RunPod GPU video generation timed out after 15 minutes");
+                throw new Error(`LTX 2.3 Video generation failed on GPU worker for job ${jobId}. Static image fallbacks are disabled.`);
             }
 
             // Set state to compositing
@@ -480,21 +475,22 @@ export const ugcWorker = new Worker(
                 data: { status: "COMPOSITING" },
             });
 
-            // 6. Native Video Ad Output Assembly (Mux ElevenLabs Audio Track + Video Clip)
+            // 6. Output Assembly (LTX 2.3 Video Clip + Optional TTS Audio Muxing)
             const finalVideoPath = path.join(tempDir, "final.mp4");
             
-            console.log("[UGC Worker] Muxing ElevenLabs speech audio track into 9:16 vertical video...");
-            if (fs.existsSync(audioPath) && fs.statSync(audioPath).size > 100) {
+            if (isNativeAudioVideoModel || !fs.existsSync(audioPath) || fs.statSync(audioPath).size < 100) {
+                console.log("[UGC Worker] Processing LTX 2.3 video clip with native integrated audio...");
+                execSync(
+                    `ffmpeg -i "${talkingHeadLocalPath}" -vf ` +
+                    `"scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black" ` +
+                    `-c:v libx264 -preset fast -crf 23 -c:a copy "${finalVideoPath}" -y`
+                );
+            } else {
+                console.log("[UGC Worker] Muxing speech audio track into LTX 2.3 video clip...");
                 execSync(
                     `ffmpeg -i "${talkingHeadLocalPath}" -i "${audioPath}" -filter_complex ` +
                     `"[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black[v]" ` +
                     `-map "[v]" -map 1:a -c:v libx264 -preset fast -crf 23 -c:a aac -shortest "${finalVideoPath}" -y`
-                );
-            } else {
-                execSync(
-                    `ffmpeg -i "${talkingHeadLocalPath}" -vf ` +
-                    `"scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black" ` +
-                    `-c:v libx264 -preset fast -crf 23 -an "${finalVideoPath}" -y`
                 );
             }
 
