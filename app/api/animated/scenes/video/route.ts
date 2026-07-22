@@ -201,6 +201,11 @@ export async function POST(req: NextRequest) {
                         } else {
                             activePrompt = basePrompt;
                         }
+                        // Clean up repetitive style tags to prevent prompt bloat
+                        activePrompt = activePrompt
+                            .replace(/(in Pixar 3D style,?\s*){2,}/gi, "in Pixar 3D style, ")
+                            .replace(/(plain neutral studio background,?\s*){2,}/gi, "plain neutral studio background, ")
+                            .trim();
                     }
                 } catch {}
             }

@@ -375,13 +375,15 @@ def generate_image(prompt: str, output_path: str, width: int = 768, height: int 
             guidance_scale=6.0,
         ).images[0]
     else:
-        # Flux and Chroma share the same API
+        # Flux and Chroma use FLUX.1-dev with dual text encoders (CLIP-L + T5-XXL)
+        # Pass max_sequence_length=512 so T5 uses full 512-token context window
         image = pipe(
             prompt=prompt,
             width=width,
             height=height,
             num_inference_steps=25,  # Reduced from 30 to save VRAM
             guidance_scale=3.5,  # FLUX.1-dev works best with lower guidance
+            max_sequence_length=512,
         ).images[0]
     
     image.save(output_path, format="WEBP", quality=90)
