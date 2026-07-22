@@ -99,7 +99,6 @@ export async function POST(req: NextRequest) {
             voiceId: voiceId || "Rachel",
             narratorStyle: narratorStyle || "sleep",
             ttsEngine: ttsEngine || "elevenlabs",
-            targetDurationMinutes: parseInt(targetDurationMinutes) || 15,
             status: "DRAFT",
         },
     });

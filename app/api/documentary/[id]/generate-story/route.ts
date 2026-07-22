@@ -36,9 +36,9 @@ export async function POST(
         return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    // Optional body params — body override takes precedence, then fall back to the value saved at creation time
+    // Optional body params — body override takes precedence, default to 15m
     const body = await req.json().catch(() => ({}));
-    const targetDuration = body.targetDurationMinutes || documentary.targetDurationMinutes || 15;
+    const targetDuration = body.targetDurationMinutes || 15;
 
     // Set status to GENERATING immediately so the UI shows progress
     await prisma.documentary.update({
