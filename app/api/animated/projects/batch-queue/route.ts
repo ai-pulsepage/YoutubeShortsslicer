@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { projectId } = await req.json();
+    const { projectId, forceReRender } = await req.json();
     if (!projectId) return NextResponse.json({ error: "projectId is required" }, { status: 400 });
 
     try {
@@ -100,7 +100,12 @@ export async function POST(req: NextRequest) {
             const updatedVisualShots = [];
             for (let sIdx = 0; sIdx < visualShots.length; sIdx++) {
                 const shot = visualShots[sIdx];
-                // Queue shot if it's IDLE, FAILED, PENDING_PREVIOUS, or missing videoPath
+                // Queue shot if forceReRender is requested, or if missing videoPath / in pending status
+                if (forceReRender) {
+                    delete shot.visualPath;
+                    delete shot.lastFramePath;
+                    shot.jobStatus = "IDLE";
+                }
                 if (!shot.visualPath && (shot.jobStatus === "IDLE" || shot.jobStatus === "FAILED" || !shot.jobStatus || shot.jobStatus === "PENDING_PREVIOUS" || shot.jobStatus === "PENDING_AVATAR" || shot.jobStatus === "GENERATING_IMAGE")) {
                     
                     // Check if there is already an active job for this shot (either image generation or video animation)

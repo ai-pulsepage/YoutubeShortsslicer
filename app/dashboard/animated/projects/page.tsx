@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import {
-    Loader2, Trash2, FolderOpen, Play, Calendar, Film, Users, ArrowLeft,
+    Loader2, Trash2, FolderOpen, Play, Calendar, Film, Users, ArrowLeft, RefreshCw
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -65,7 +65,7 @@ export default function AnimatedProjectsManagerPage() {
         }
     };
 
-    const handleBatchQueue = async (id: string, title: string) => {
+    const handleBatchQueue = async (id: string, title: string, forceReRender = false) => {
         setQueuingId(id);
         setError("");
         setSuccessMessage("");
@@ -73,7 +73,7 @@ export default function AnimatedProjectsManagerPage() {
             const res = await fetch("/api/animated/projects/batch-queue", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ projectId: id })
+                body: JSON.stringify({ projectId: id, forceReRender })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to queue batch");
@@ -179,13 +179,24 @@ export default function AnimatedProjectsManagerPage() {
                                  </div>
                              </div>
 
-                            <div className="flex gap-2 pt-3 border-t border-gray-850/60 justify-end">
+                            <div className="flex gap-2 pt-3 border-t border-gray-850/60 justify-end flex-wrap">
                                 <button 
-                                    onClick={() => handleBatchQueue(proj.id, proj.title)}
+                                    onClick={() => handleBatchQueue(proj.id, proj.title, false)}
                                     disabled={queuingId === proj.id}
                                     className="flex items-center gap-1.5 px-3 py-2 bg-violet-600/10 border border-violet-500/20 hover:bg-violet-600/20 text-violet-400 text-xs font-bold rounded-xl transition-all disabled:opacity-55 font-sans">
                                     {queuingId === proj.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-                                    Queue All Visuals
+                                    Queue Pending
+                                </button>
+                                <button 
+                                    onClick={() => {
+                                        if (confirm(`Re-render ALL scenes for "${proj.title}"? This will clear old defective video clips and queue fresh clean video renders for every scene.`)) {
+                                            handleBatchQueue(proj.id, proj.title, true);
+                                        }
+                                    }}
+                                    disabled={queuingId === proj.id}
+                                    className="flex items-center gap-1.5 px-3 py-2 bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 text-amber-400 text-xs font-bold rounded-xl transition-all disabled:opacity-55 font-sans cursor-pointer">
+                                    <RefreshCw className="w-3.5 h-3.5" />
+                                    Re-render All Scenes
                                 </button>
                                 <button 
                                     onClick={() => router.push(`/dashboard/animated?project=${proj.id}`)}
