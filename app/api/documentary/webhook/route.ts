@@ -284,9 +284,10 @@ export async function POST(req: NextRequest) {
                     });
 
                     // Trigger next chained shot if any is waiting for this last frame!
-                    if (lastFramePath && (shotId || job.shotId)) {
+                    const frameRef = lastFramePath || updatedPath || finalPath;
+                    if (frameRef && (shotId || job.shotId)) {
                         try {
-                            await dispatchNextChainedShotIfNeeded(job.documentaryId, shotId || job.shotId || "", lastFramePath);
+                            await dispatchNextChainedShotIfNeeded(job.documentaryId, shotId || job.shotId || "", frameRef);
                         } catch (chainErr: any) {
                             console.error("[Webhook Auto-Chain] Failed to check/dispatch chained shot:", chainErr.message);
                         }

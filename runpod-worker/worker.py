@@ -688,10 +688,16 @@ def process_job(job: dict, r: redis.Redis):
                     import subprocess
                     last_frame_file = os.path.join(tmpdir, "last_frame.png")
                     subprocess.run([
-                        "ffmpeg", "-sseof", "-0.1", "-i", output_file,
+                        "ffmpeg", "-sseof", "-0.5", "-i", output_file,
                         "-frames:v", "1", "-q:v", "2", last_frame_file, "-y"
                     ], capture_output=True, timeout=30)
-                    if os.path.exists(last_frame_file):
+                    if not os.path.exists(last_frame_file) or os.path.getsize(last_frame_file) == 0:
+                        subprocess.run([
+                            "ffmpeg", "-i", output_file,
+                            "-vf", "select='eq(n,0)'", "-vframes", "1", "-q:v", "2", last_frame_file, "-y"
+                        ], capture_output=True, timeout=30)
+
+                    if os.path.exists(last_frame_file) and os.path.getsize(last_frame_file) > 0:
                         last_frame_key = metadata.get("r2KeyLastFrame") or f"documentaries/clips/{job_id}_last_frame.png"
                         upload_to_r2(last_frame_file, last_frame_key, "image/png")
                 except Exception as lfe:

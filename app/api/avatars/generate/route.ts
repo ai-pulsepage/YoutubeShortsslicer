@@ -41,11 +41,11 @@ export async function POST(req: NextRequest) {
 Return ONLY a valid JSON object matching this schema:
 {
   "name": "Sarah - Skincare Expert",
-  "prompt": "Highly realistic professional headshot photo of a real woman skincare expert, warm friendly smile, clear skin, simple elegant attire, soft solid color studio background, natural skin texture, detailed eyes, shot on 85mm lens, photorealistic...",
+  "prompt": "Photorealistic medium-shot photo from waist up of a real woman skincare expert with visible hands, warm friendly smile, clear skin, simple elegant attire, soft solid studio background, natural skin texture, 35mm lens...",
   "persona": "An expert skincare aesthetician who speaks softly and offers practical advice.",
   "gender": "female"
 }
-Ensure the prompt describes the character details, outfit, backdrop, and photorealistic human appearance. Avoid any reference to Pixar, 3D, animation, digital art, cartoon, drawing, illustration. Make it under 40 words.`;
+Ensure the prompt describes a waist-up medium shot with visible hands, outfit, backdrop, and photorealistic human appearance. Avoid any reference to headshot, Pixar, 3D, animation, digital art, cartoon, drawing, illustration. Make it under 40 words.`;
 
                 const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
                     method: "POST",

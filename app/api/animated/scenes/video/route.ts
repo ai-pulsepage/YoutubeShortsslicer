@@ -63,9 +63,9 @@ export async function POST(req: NextRequest) {
 
                 if (chainFromPrevious && shotIdx !== -1) {
                     const prevShot = getPreviousShot(scene.documentary, scene, shotIdx);
-                    if (prevShot && prevShot.lastFramePath) {
-                        finalRefImage = prevShot.lastFramePath;
-                        console.log(`[Scene Video Gen] Chaining shot ${shotId} from previous lastFramePath: ${prevShot.lastFramePath}`);
+                    if (prevShot && (prevShot.lastFramePath || prevShot.visualPath)) {
+                        finalRefImage = prevShot.lastFramePath || prevShot.visualPath;
+                        console.log(`[Scene Video Gen] Chaining shot ${shotId} from previous shot reference: ${finalRefImage}`);
                     } else {
                         isPendingPrevious = true;
                     }
