@@ -659,16 +659,9 @@ export default function UGCStudioPage() {
 
                                         {/* Character Profile Info */}
                                         <div className="flex-1 min-w-0 flex flex-col justify-between">
-                                            <div className="min-w-0 flex items-start justify-between gap-1">
-                                                <div className="min-w-0">
-                                                    <h4 className="text-xs font-bold text-white truncate">{avatar.name}</h4>
-                                                    <p className="text-[10px] text-gray-550 line-clamp-2 mt-0.5 leading-snug font-sans">{avatar.persona || "No persona details defined yet."}</p>
-                                                </div>
-                                                <button onClick={() => handleDeleteAvatar(avatar.id, avatar.name)}
-                                                    title="Delete Avatar Character"
-                                                    className="p-1 bg-gray-900 border border-gray-800 hover:border-red-500/50 hover:bg-red-500/10 text-gray-600 hover:text-red-400 rounded-lg transition-all cursor-pointer flex-shrink-0">
-                                                    <Trash2 className="w-3 h-3" />
-                                                </button>
+                                            <div className="min-w-0">
+                                                <h4 className="text-xs font-bold text-white truncate">{avatar.name}</h4>
+                                                <p className="text-[10px] text-gray-550 line-clamp-2 mt-0.5 leading-snug font-sans">{avatar.persona || "No persona details defined yet."}</p>
                                             </div>
                                             <div className="flex flex-col gap-2 mt-2 pt-2 border-t border-gray-850/40">
                                                 
@@ -708,7 +701,7 @@ export default function UGCStudioPage() {
                                                         }
                                                     }}
                                                         className="px-1.5 py-0.5 bg-violet-650 hover:bg-violet-600 text-white rounded border border-violet-500/30 text-[8px] font-bold font-sans cursor-pointer transition-all flex items-center gap-0.5">
-                                                        <Sparkles className="w-2 h-2" /> AI Image
+                                                        <Sparkles className="w-2 h-2" /> Regenerate Image
                                                     </button>
                                                     <button onClick={() => setSelectedAvatarId(avatar.id)}
                                                         className={cn("px-2 py-0.5 rounded text-[8px] font-bold font-sans transition-all cursor-pointer",

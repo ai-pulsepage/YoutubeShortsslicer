@@ -402,6 +402,8 @@ def unload_video_pipelines():
     if _ltx_pipe is not None:
         del _ltx_pipe
         _ltx_pipe = None
+    import gc
+    gc.collect()
     torch.cuda.empty_cache()
 
 def get_ltx_pipeline(model_variant: str = "ltx2.3"):
@@ -531,7 +533,15 @@ def generate_video(
     torch.cuda.empty_cache()
     gc.collect()
 
-    ref_image = Image.open(reference_image_path).convert("RGB").resize((width, height))
+    raw_img = Image.open(reference_image_path)
+    if raw_img.mode in ("RGBA", "LA") or (raw_img.mode == "P" and "transparency" in raw_img.info):
+        bg = Image.new("RGB", raw_img.size, (255, 255, 255))
+        if raw_img.mode != "RGBA":
+            raw_img = raw_img.convert("RGBA")
+        bg.paste(raw_img, mask=raw_img.split()[3])
+        ref_image = bg.resize((width, height))
+    else:
+        ref_image = raw_img.convert("RGB").resize((width, height))
 
     result = pipe(
         prompt=prompt,
