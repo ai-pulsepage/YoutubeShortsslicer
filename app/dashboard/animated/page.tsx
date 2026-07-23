@@ -2903,18 +2903,16 @@ export default function KidsStoryBuilderPage() {
                                                     {scene.visualShots?.map((shot, sIdx) => (
                                                         <div key={shot.id} className="bg-black/30 border border-gray-850/80 rounded-xl p-3 flex flex-col md:flex-row gap-3 relative group/shot">
                                                             
-                                                            {/* Remove shot */}
-                                                            <button onClick={() => deleteShotFromScene(scene.id, shot.id)}
-                                                                title="Delete Shot Prompt from Timeline"
-                                                                className="absolute top-1 right-1 p-1 bg-gray-850 hover:bg-red-955/20 border border-gray-800 hover:border-red-900/30 text-gray-500 hover:text-red-400 rounded-lg opacity-0 group-hover/shot:opacity-100 transition-all cursor-pointer">
-                                                                <XCircle className="w-3.5 h-3.5" />
-                                                            </button>
-
                                                             {/* left side prompt inputs */}
                                                             <div className="flex-1 space-y-2">
                                                                 <div className="flex items-center justify-between">
                                                                     <div className="flex flex-wrap items-center gap-2">
                                                                         <span className="text-[10px] font-bold text-gray-400">Shot {sIdx + 1}</span>
+                                                                        <button onClick={() => deleteShotFromScene(scene.id, shot.id)}
+                                                                            title="Delete Shot Prompt from Timeline"
+                                                                            className="p-0.5 bg-gray-900 border border-gray-800 hover:border-red-500/50 hover:bg-red-500/10 text-gray-650 hover:text-red-400 rounded transition-all cursor-pointer">
+                                                                            <XCircle className="w-3.5 h-3.5" />
+                                                                        </button>
                                                                         
                                                                         <select value={shot.primaryCharacter} onChange={e => updateShot(scene.id, shot.id, { primaryCharacter: e.target.value })}
                                                                             className="bg-gray-850 border border-gray-750 text-[10px] text-white px-2 py-0.5 rounded focus:outline-none cursor-pointer">
