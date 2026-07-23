@@ -50,6 +50,7 @@ type Shot = {
     duration?: number;        // Optional custom duration in seconds
     chainFromPrevious?: boolean; // Optional flag to chain keyframe context
     modelOverride?: string;   // Optional scene/shot video model override (e.g. wan_dance)
+    lastFramePath?: string;   // R2 key of generated video's last frame
 };
 
 type TtsProvider = "edge_tts" | "gemini" | "elevenlabs" | "dia" | "cosyvoice2" | "chatterbox";
@@ -1257,7 +1258,7 @@ export default function KidsStoryBuilderPage() {
     };
 
     // Assembly Line concurrent visual queuing (shot-level)
-    const handleQueueAllVisuals = async () => {
+    const handleQueueAllVisuals = async (forceReRender = false) => {
         if (!docId) {
             setError("Please save the project first before batch queuing visuals.");
             return;
@@ -1272,7 +1273,7 @@ export default function KidsStoryBuilderPage() {
             const res = await fetch("/api/animated/projects/batch-queue", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ projectId: docId })
+                body: JSON.stringify({ projectId: docId, forceReRender })
             });
 
             const data = await res.json();
@@ -1395,7 +1396,7 @@ export default function KidsStoryBuilderPage() {
     };
 
     const deleteScene = (id: string) => {
-        if (typeof window !== "undefined" && !window.confirm("Are you sure you want to delete this entire scene? This will remove all associated dialogue and visual shots.")) {
+        if (typeof window !== "undefined" && !window.confirm("WARNING: Are you sure you want to delete this ENTIRE scene card from your timeline? This will permanently erase the scene dialogue text, characters, and all associated visual shot prompts!")) {
             return;
         }
         setScenes(prev => prev.filter(s => s.id !== id));
@@ -1663,7 +1664,7 @@ export default function KidsStoryBuilderPage() {
 
     // Delete shot from scene
     const deleteShotFromScene = (sceneId: string, shotId: string) => {
-        if (typeof window !== "undefined" && !window.confirm("Are you sure you want to delete this visual shot from the scene?")) {
+        if (typeof window !== "undefined" && !window.confirm("WARNING: Are you sure you want to delete this visual shot prompt from the scene timeline? This will permanently erase the prompt description, primary character choice, and any custom settings!")) {
             return;
         }
         setScenes(prev =>
@@ -2479,12 +2480,20 @@ export default function KidsStoryBuilderPage() {
                                         {generatingAllVoices ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Volume2 className="w-3.5 h-3.5" />} 
                                         {generatingAllVoices ? "Generating Audio..." : "Queue All Dialogue Audio"}
                                     </button>
-                                    <button onClick={handleQueueAllVisuals}
+                                    <button onClick={() => handleQueueAllVisuals(false)}
                                         className="flex items-center gap-1 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold rounded-lg transition-all shadow font-sans cursor-pointer">
-                                        <Wand2 className="w-3.5 h-3.5" /> Queue All Visuals (Assembly Line)
+                                        <Wand2 className="w-3.5 h-3.5" /> Queue Pending Visuals
+                                    </button>
+                                    <button onClick={() => {
+                                        if (confirm("Re-render ALL scenes/shots for this project? This will clear all old defective video clips and queue fresh clean video renders for every scene.")) {
+                                            handleQueueAllVisuals(true);
+                                        }
+                                    }}
+                                        className="flex items-center gap-1 px-3 py-1 bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-bold rounded-lg transition-all shadow font-sans cursor-pointer">
+                                        <RefreshCw className="w-3.5 h-3.5" /> Re-render All Scenes
                                     </button>
                                     <button onClick={resetAllVisualShotsStatus}
-                                        className="flex items-center gap-1 px-3 py-1 bg-gray-850 hover:bg-gray-800 border border-gray-750 text-gray-400 hover:text-white text-[11px] font-bold rounded-lg transition-all font-sans cursor-pointer">
+                                        className="flex items-center gap-1 px-3 py-1 bg-gray-850 hover:bg-gray-800 border border-gray-750 text-gray-400 hover:text-white text-[11px] font-bold rounded-lg transition-all font-sans cursor-pointer font-sans">
                                         Reset All Stuck Queue
                                     </button>
                                     <button onClick={addScene} className="flex items-center gap-1 px-2.5 py-1 bg-violet-600/15 hover:bg-violet-600/30 border border-violet-500/20 text-violet-400 text-[11px] font-semibold rounded-lg transition-all font-sans cursor-pointer">
@@ -2582,8 +2591,8 @@ export default function KidsStoryBuilderPage() {
                                     <div key={scene.id} className="bg-gray-955/20 border border-gray-850 p-6 rounded-2xl relative group">
                                         
                                         {/* Delete Card trigger */}
-                                        <button onClick={() => deleteScene(scene.id)}
-                                            className="absolute top-2 right-2 p-1.5 bg-gray-850 hover:bg-red-950/30 border border-gray-800 text-gray-500 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-10">
+                                        <button onClick={() => deleteScene(scene.id)} title="Delete Scene Card from Storyboard"
+                                            className="absolute top-2 right-2 p-1.5 bg-gray-850 hover:bg-red-950/30 border border-gray-800 text-gray-500 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-10 cursor-pointer">
                                             <Trash className="w-3.5 h-3.5" />
                                         </button>
 
@@ -2896,8 +2905,9 @@ export default function KidsStoryBuilderPage() {
                                                             
                                                             {/* Remove shot */}
                                                             <button onClick={() => deleteShotFromScene(scene.id, shot.id)}
-                                                                className="absolute top-1 right-1 p-1 bg-gray-850 hover:bg-red-955/20 border border-gray-800 hover:border-red-900/30 text-gray-500 hover:text-red-400 rounded-lg opacity-0 group-hover/shot:opacity-100 transition-all">
-                                                                <Trash className="w-3 h-3" />
+                                                                title="Delete Shot Prompt from Timeline"
+                                                                className="absolute top-1 right-1 p-1 bg-gray-850 hover:bg-red-955/20 border border-gray-800 hover:border-red-900/30 text-gray-500 hover:text-red-400 rounded-lg opacity-0 group-hover/shot:opacity-100 transition-all cursor-pointer">
+                                                                <XCircle className="w-3.5 h-3.5" />
                                                             </button>
 
                                                             {/* left side prompt inputs */}
@@ -2998,9 +3008,24 @@ export default function KidsStoryBuilderPage() {
                                                             </div>
 
                                                              {/* right side visual preview */}
-                                                             <div className="w-28 aspect-video bg-black/40 border border-gray-850 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center">
+                                                             <div className="w-28 aspect-video bg-black/40 border border-gray-850 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center relative group/video">
                                                                  {shot.visualPath ? (
-                                                                     <video src={`/api/storage/signed?key=${shot.visualPath}`} controls className="w-full h-full object-cover" />
+                                                                     <>
+                                                                         <video src={`/api/storage/signed?key=${shot.visualPath}`} controls className="w-full h-full object-cover" />
+                                                                         <button onClick={() => {
+                                                                             if (confirm("Reset this video render? This will clear the generated video so you can regenerate it, but will keep your prompts intact.")) {
+                                                                                 updateShot(scene.id, shot.id, {
+                                                                                     visualPath: undefined,
+                                                                                     lastFramePath: undefined,
+                                                                                     jobStatus: "IDLE",
+                                                                                     jobId: undefined
+                                                                                 });
+                                                                             }
+                                                                         }} title="Reset Video Render"
+                                                                             className="absolute top-1 right-1 p-1 bg-red-955/80 hover:bg-red-900 border border-red-800 text-red-200 hover:text-white rounded transition-all cursor-pointer opacity-0 group-hover/video:opacity-100 z-10">
+                                                                             <Trash className="w-2.5 h-2.5" />
+                                                                         </button>
+                                                                     </>
                                                                  ) : (
                                                                      <Film className="w-5 h-5 text-gray-800" />
                                                                  )}
