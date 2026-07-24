@@ -229,6 +229,8 @@ Return ONLY valid JSON matching this schema:
 
     // Step 2: Generate Episode Screenplay in Chunks per Episode (4096 max_tokens per Episode)
     const fullEpisodes: FilmEpisode[] = [];
+    const targetEpisodeMins = params.targetEpisodeMinutes || 3;
+    const targetShots = Math.max(18, Math.round((targetEpisodeMins * 60) / 5));
 
     for (const epOutline of masterBlueprint.episodes || []) {
         const epPrompt = `You are a master cinematic director. Write the complete camera shot screenplay for Episode ${epOutline.episodeNumber}: "${epOutline.title}".
@@ -248,13 +250,14 @@ CRITICAL DRAMATIC SCENE RULES:
     ? `Episode 1 MUST focus ONLY on its logline: "${epOutline.logline}". End Episode 1 with the cliffhanger: "${epOutline.cliffhanger}". Do NOT include private study confrontations or accusations that belong to Episode 2!`
     : `Episode ${epOutline.episodeNumber} MUST start at its own UNIQUE location matching its logline: "${epOutline.logline}". Do NOT repeat establishing shots, scenes, or dialogue from Episode ${epOutline.episodeNumber - 1}!`
 }
-5. Write 12 to 18 visual shots for this episode.
+5. You MUST write EXACTLY ${targetShots} visual shots for this episode to fill the ${targetEpisodeMins}-minute runtime target.
+6. For extended episodes (${targetShots} shots), divide the episode across 3 to 4 distinct sub-locations (e.g. Sub-Scene A, Sub-Scene B, Sub-Scene C) that advance the narrative. Every spoken exchange MUST reveal new information or escalate conflict without repeating arguments.
 
 For each shot specify:
 - "shotIndex": 1, 2, 3...
 - "shotType": e.g. "wide shot", "medium shot", "close-up", "over-the-shoulder", "action cut"
 - "speakerName": Character speaking (leave null/empty if non-dialogue establishing beat)
-- "dialogueLine": Character spoken line (with emotional tag like [determined], [shocked], [whispering])
+- "dialogueLine": Character spoken line (with emotional tag like [determined], [low, measured], [whispering])
 - "actionDescription": Physical character action, facial expression, and movement
 - "environment": Lighting, background setting, and visual mood matching this episode's location
 - "cameraMovement": Dynamic motion (e.g. "slow crane push-in", "whip pan", "static tight lens")
@@ -333,15 +336,23 @@ Return ONLY valid JSON matching this schema:
         cliffhanger: ep.cliffhanger,
         shots: (ep.shots || []).map((s: any, sIdx: number) => {
             const charDesc = castMap.get(s.speakerName || "") || s.speakerName || "Character";
+            const rawDialogue = s.dialogueLine || "";
+            const emotionTag = rawDialogue.match(/\[(.*?)\]/)?.[1] || "";
+            const cleanSpokenText = rawDialogue.replace(/\[.*?\]/g, "").trim();
+
+            const dialoguePromptPart = cleanSpokenText
+                ? ` speaking ${emotionTag ? 'in a ' + emotionTag + ' tone: ' : ''}"${cleanSpokenText}"`
+                : "";
+
             const kinematicPrompt = buildKinematicPrompt({
                 aspectRatio: "16:9",
                 shotType: s.shotType || "medium shot",
-                subject: `${s.speakerName ? s.speakerName + ' (' + charDesc + ')' : 'Cinematic Scene'}`,
+                subject: `${s.speakerName ? s.speakerName + ' (' + charDesc + ')' + dialoguePromptPart : 'Cinematic Scene'}`,
                 action: s.actionDescription || "moving dynamically in frame",
                 environment: `${s.environment || "cinematic scene"} with soft cinematic lighting`,
                 cameraMovement: s.cameraMovement || "slow push-in",
                 lighting: "cinematic lighting",
-                modelType: "wan2.3"
+                modelType: (targetVideoModel as any) || "wan2.3"
             });
 
             return {

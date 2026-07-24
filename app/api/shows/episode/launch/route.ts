@@ -49,6 +49,10 @@ export async function POST(req: NextRequest) {
         }
 
         // Launch / Relaunch: Queue ALL shots for this episode directly into Redis
+        const prodMeta = (doc.rawArticles && typeof doc.rawArticles === "object") ? (doc.rawArticles as any) : {};
+        const videoModel = prodMeta.videoModel || "wan2.3";
+        const voiceEngine = prodMeta.voiceEngine || "cosyvoice2";
+
         const dispatchedJobs = [];
         for (const shot of targetScene.shots) {
             const r2Key = `shows/${doc.id}/scene_${targetScene.id}_shot_${shot.id}.mp4`;
@@ -60,8 +64,8 @@ export async function POST(req: NextRequest) {
                 episodeNumber,
                 shotIndex: shot.shotIndex,
                 sourceApp: "Film Factory Studio",
-                model: "wan2.3",
-                voiceEngine: "cosyvoice2",
+                model: videoModel,
+                voiceEngine: voiceEngine,
                 r2Key
             };
 
