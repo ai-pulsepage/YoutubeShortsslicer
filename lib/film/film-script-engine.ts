@@ -98,7 +98,7 @@ export async function generateCinematicShow(params: {
             if (i === 1) lines.push(`Episode 1 (SERIES PREMIERE): Establish the world, introduce every major character, plant the central conflict. End with a compelling hook that demands the next episode.`);
             else if (i === 2) lines.push(`Episode 2 (RISING ACTION): Deepen relationships, reveal a secondary threat or betrayal. Escalate stakes. End with a mid-point twist.`);
             else if (i === n - 1 && n >= 4) lines.push(`Episode ${i} (PENULTIMATE): Maximum tension. Every character's loyalty is tested. The villain seems to have won. End on a devastating cliffhanger.`);
-            else if (i === n) lines.push(`Episode ${n} (SERIES FINALE): All threads converge. Deliver an emotionally resonant or shocking conclusion. Resolve protagonist arc. Optional: season-ending twist for potential renewal.`);
+            else if (i === n) lines.push(`Episode ${n} (COMPLETE FINALE): All threads converge. Deliver an emotionally resonant conclusion. Resolve all secrets, paternity reveals, and main character arcs across all ${n} episodes in one complete continuous story.`);
             else lines.push(`Episode ${i} (ACT ${i} — ESCALATION): Push conflict forward. Reveal a new secret or betrayal. Each episode must raise the stakes from the last.`);
         }
         return lines.join("\n");

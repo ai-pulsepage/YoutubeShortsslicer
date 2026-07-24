@@ -517,15 +517,15 @@ function CreateDocumentaryModal({
                                 <label className="block text-xs font-medium text-gray-400 mb-1.5">
                                     📺 Number of Episodes
                                 </label>
-                                <div className="flex gap-1.5">
-                                    {[1, 2, 3, 4, 5, 6].map((n) => (
+                                <div className="flex gap-1 overflow-x-auto pb-1">
+                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12].map((n) => (
                                         <button key={n}
                                             onClick={() => setNumEpisodes(n)}
-                                            className={cn("flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                                            className={cn("px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors flex-shrink-0 cursor-pointer",
                                                 numEpisodes === n
-                                                    ? "bg-amber-500 text-white"
+                                                    ? "bg-amber-500 text-white font-bold"
                                                     : "bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700")}>
-                                            {n}
+                                            {n} {n === 1 ? "Ep" : "Eps"}
                                         </button>
                                     ))}
                                 </div>
