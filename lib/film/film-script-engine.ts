@@ -16,6 +16,17 @@ export interface FilmShot {
     dialogueLine?: string;
     actionDescription: string;
     kinematicPrompt: string;
+    cameraAngle?: string;
+    cameraMovement?: string;
+    mood?: string;
+    lighting?: string;
+}
+
+export interface FilmScene {
+    sceneNumber: number;
+    location: string;
+    description: string;
+    shots: FilmShot[];
 }
 
 export interface FilmEpisode {
@@ -23,6 +34,7 @@ export interface FilmEpisode {
     title: string;
     logline: string;
     cliffhanger: string;
+    scenes?: FilmScene[];
     shots: FilmShot[];
 }
 

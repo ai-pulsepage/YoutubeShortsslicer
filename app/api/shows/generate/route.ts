@@ -38,60 +38,97 @@ export async function POST(req: NextRequest) {
                 status: "GENERATING",
                 script: JSON.stringify(showResult),
                 scenes: {
-                    create: showResult.episodes.flatMap((ep) =>
-                        ep.shots.map((shot) => ({
-                            sceneIndex: (ep.episodeNumber - 1) * 10 + shot.shotIndex,
-                            title: `Ep ${ep.episodeNumber} - Shot ${shot.shotIndex}`,
-                            narrationText: shot.dialogueLine || shot.actionDescription,
-                            searchQueries: JSON.stringify({
-                                kinematicPrompt: shot.kinematicPrompt,
+                    create: showResult.episodes.map((ep) => ({
+                        sceneIndex: ep.episodeNumber,
+                        title: ep.title,
+                        narrationText: ep.logline,
+                        searchQueries: JSON.stringify({ isEpisode: true, logline: ep.logline, cliffhanger: ep.cliffhanger }),
+                        shots: {
+                            create: ep.shots.map((shot) => ({
+                                shotIndex: shot.shotIndex,
                                 shotType: shot.shotType,
-                                speakerName: shot.speakerName,
-                                dialogueLine: shot.dialogueLine
-                            })
-                        }))
-                    )
+                                cameraAngle: shot.cameraAngle || "eye level",
+                                cameraMovement: shot.cameraMovement || "gentle push-in",
+                                action: shot.actionDescription,
+                                dialogue: shot.dialogueLine || null,
+                                compositePrompt: shot.kinematicPrompt,
+                                duration: 5
+                            }))
+                        }
+                    }))
+                },
+                assets: {
+                    create: (showResult.cast || []).map((char) => ({
+                        type: "CHARACTER",
+                        label: char.name,
+                        description: char.physicalProfile,
+                        prompt: char.physicalProfile
+                    }))
                 }
             }
         });
 
-        // 3. Auto-dispatch shot_video jobs onto Redis Queue
+        // Query database to resolve created Scenes and Shots
+        const createdDoc = await prisma.documentary.findUnique({
+            where: { id: parentDoc.id },
+            include: {
+                scenes: {
+                    include: { shots: { orderBy: { shotIndex: "asc" } } }
+                }
+            }
+        });
+        if (!createdDoc) {
+            throw new Error("Failed to retrieve created documentary project.");
+        }
+
+        // 3. Auto-dispatch ONLY the first shot of each episode to start the show.
+        // Subsequent shots are chained automatically by the webhook.
         const dispatchedJobs = [];
         for (const ep of showResult.episodes) {
-            for (const shot of ep.shots) {
-                const r2Key = `shows/${parentDoc.id}/ep_${ep.episodeNumber}_shot_${shot.shotIndex}.mp4`;
-                const jobMetadata = {
-                    docId: parentDoc.id,
-                    title: parentDoc.title,
-                    episodeNumber: ep.episodeNumber,
-                    shotIndex: shot.shotIndex,
-                    sourceApp: "Film Factory Studio",
-                    model: videoModel || "wan2.3",
-                    voiceEngine: voiceEngine || "cosyvoice2",
-                    r2Key
-                };
+            const dbScene = createdDoc.scenes.find(s => s.sceneIndex === ep.episodeNumber);
+            if (!dbScene) continue;
 
-                const genJob = await prisma.genJob.create({
-                    data: {
-                        documentaryId: parentDoc.id,
-                        jobType: "shot_video",
-                        prompt: shot.kinematicPrompt,
-                        status: "QUEUED",
-                        metadata: jobMetadata as any
-                    }
-                });
+            const firstShot = ep.shots.find(s => s.shotIndex === 1);
+            if (!firstShot) continue;
 
-                await dispatchJob({
-                    jobId: genJob.id,
+            const dbShot = dbScene.shots.find(s => s.shotIndex === 1);
+            if (!dbShot) continue;
+
+            const r2Key = `shows/${parentDoc.id}/scene_${dbScene.id}_shot_${dbShot.id}.mp4`;
+            const jobMetadata = {
+                docId: parentDoc.id,
+                sceneId: dbScene.id,
+                shotId: dbShot.id,
+                title: parentDoc.title,
+                episodeNumber: ep.episodeNumber,
+                shotIndex: 1,
+                sourceApp: "Film Factory Studio",
+                model: videoModel || "wan2.3",
+                voiceEngine: voiceEngine || "cosyvoice2",
+                r2Key
+            };
+
+            const genJob = await prisma.genJob.create({
+                data: {
                     documentaryId: parentDoc.id,
-                    type: "shot_video",
-                    prompt: shot.kinematicPrompt,
-                    referenceImages: [],
-                    metadata: jobMetadata
-                });
+                    jobType: "shot_video",
+                    prompt: firstShot.kinematicPrompt,
+                    status: "QUEUED",
+                    shotId: dbShot.id,
+                    metadata: jobMetadata as any
+                }
+            });
 
-                dispatchedJobs.push(genJob.id);
-            }
+            await dispatchJob({
+                jobId: genJob.id,
+                documentaryId: parentDoc.id,
+                type: "shot_video",
+                prompt: firstShot.kinematicPrompt,
+                referenceImages: [],
+                metadata: jobMetadata
+            });
+
+            dispatchedJobs.push(genJob.id);
         }
 
         return NextResponse.json({

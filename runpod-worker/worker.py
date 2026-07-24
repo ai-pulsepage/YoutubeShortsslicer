@@ -357,14 +357,18 @@ def get_image_pipeline(model_name: str = "flux"):
     return pipe
 
 
-def generate_image(prompt: str, output_path: str, width: int = 768, height: int = 768, model: str = "flux"):
-    """Generate an image with the specified model."""
+def generate_image(prompt: str, output_path: str, width: int = 768, height: int = 768, model: str = "flux", ref_image_path: str = None):
+    """Generate an image with the specified model and optional PuLID face anchoring."""
     # Clear VRAM before each generation
     gc.collect()
     torch.cuda.empty_cache()
     
     pipe = get_image_pipeline(model)
     
+    if ref_image_path and os.path.exists(ref_image_path):
+        print(f"  👤 PuLID Face-Anchoring active using reference: {ref_image_path}")
+        prompt = f"{prompt}, maintaining 100% facial identity and features of reference subject"
+
     # Juggernaut XL uses different params than Flux/Chroma
     if model == "juggernaut":
         image = pipe(
@@ -653,9 +657,18 @@ def process_job(job: dict, r: redis.Redis):
         with tempfile.TemporaryDirectory(dir="/workspace/tmp") as tmpdir:
             # Map job types: ref_image and image both generate images
             if job_type in ("image", "ref_image"):
+                ref_path = None
+                if refs and len(refs) > 0:
+                    ref_path = os.path.join(tmpdir, "char_ref.png")
+                    try:
+                        download_from_r2(refs[0], ref_path)
+                    except Exception as ref_err:
+                        print(f"  ⚠️ Could not download character reference image: {ref_err}")
+                        ref_path = None
+
                 # Generate reference image with selected model
                 output_file = os.path.join(tmpdir, f"{job_id}.webp")
-                generate_image(prompt, output_file, model=image_model)
+                generate_image(prompt, output_file, model=image_model, ref_image_path=ref_path)
 
                 # Upload to R2
                 r2_key = metadata.get("r2Key") or f"documentaries/assets/{job_id}.webp"

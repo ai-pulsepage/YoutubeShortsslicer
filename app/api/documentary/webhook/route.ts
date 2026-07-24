@@ -550,7 +550,83 @@ async function dispatchNextChainedShotIfNeeded(documentaryId: string, completedS
     });
     if (!project) return;
 
-    // Build a flat list of all shots in the project
+    // Check if we have actual database DocShot records
+    const dbScenes = await prisma.docScene.findMany({
+        where: { documentaryId },
+        include: { shots: { orderBy: { shotIndex: "asc" } } },
+        orderBy: { sceneIndex: "asc" }
+    });
+
+    const hasDbShots = dbScenes.some(s => s.shots.length > 0);
+
+    if (hasDbShots) {
+        // Flatten all DB shots
+        const allDbShots = dbScenes.flatMap(s => s.shots.map(shot => ({
+            id: shot.id,
+            sceneId: s.id,
+            shotIndex: shot.shotIndex,
+            compositePrompt: shot.compositePrompt,
+            duration: shot.duration || 5,
+            clipPath: shot.clipPath,
+            lastFramePath: shot.lastFramePath
+        })));
+
+        const compIdx = allDbShots.findIndex(s => s.id === completedShotId);
+        if (compIdx === -1 || compIdx === allDbShots.length - 1) return;
+
+        const nextShot = allDbShots[compIdx + 1];
+        
+        // In TV Shows, we auto-chain all shots within the same episode (sceneId)
+        const isSameScene = nextShot.sceneId === allDbShots[compIdx].sceneId;
+        
+        if (isSameScene && !nextShot.clipPath) {
+            // Check if there is already an active job for this shot to prevent double dispatches
+            const existingJob = await prisma.genJob.findFirst({
+                where: { shotId: nextShot.id, status: { in: ["QUEUED", "PROCESSING"] } }
+            });
+            if (existingJob) {
+                console.log(`[Webhook Auto-Chain DB] Job already exists for next shot ${nextShot.id}, skipping dispatch`);
+                return;
+            }
+
+            console.log(`[Webhook Auto-Chain DB] Dispatching next database chained shot ${nextShot.id} using lastFramePath: ${completedLastFramePath}`);
+
+            const r2Key = `shows/${documentaryId}/scene_${nextShot.sceneId}_shot_${nextShot.id}.mp4`;
+            const jobMetadata = {
+                docId: documentaryId,
+                sceneId: nextShot.sceneId,
+                shotId: nextShot.id,
+                title: project.title,
+                episodeNumber: dbScenes.findIndex(s => s.id === nextShot.sceneId) + 1,
+                shotIndex: nextShot.shotIndex,
+                sourceApp: "Film Factory Studio",
+                r2Key
+            };
+
+            const job = await prisma.genJob.create({
+                data: {
+                    documentaryId,
+                    jobType: "shot_video",
+                    prompt: nextShot.compositePrompt || "",
+                    status: "QUEUED",
+                    shotId: nextShot.id,
+                    metadata: jobMetadata as any
+                }
+            });
+
+            await dispatchJob({
+                jobId: job.id,
+                documentaryId,
+                type: "shot_video",
+                prompt: nextShot.compositePrompt || "",
+                referenceImages: [completedLastFramePath],
+                metadata: jobMetadata
+            });
+        }
+        return;
+    }
+
+    // Build a flat list of all shots in the project (JSON-based fallback)
     let allShots: any[] = [];
     let shotSceneMap: Record<string, string> = {}; // shotId -> sceneId
     for (const scene of project.scenes) {

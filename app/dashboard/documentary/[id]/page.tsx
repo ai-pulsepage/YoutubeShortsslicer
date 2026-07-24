@@ -199,6 +199,28 @@ export default function DocumentaryDetailPage({ params }: { params: Promise<{ id
                 ))}
             </div>
 
+            {/* Episode Selector for Multi-Episode TV Mini-Series */}
+            {doc.title?.includes("(Mini-Series)") && doc.scenes && doc.scenes.length > 0 && (
+                <div className="flex items-center gap-2 bg-black/40 border border-violet-500/20 rounded-xl p-2.5 mb-2">
+                    <span className="text-xs font-bold text-violet-400 uppercase tracking-wider px-2 flex-shrink-0">TV Episodes:</span>
+                    <div className="flex items-center gap-1.5 overflow-x-auto pr-1">
+                        {doc.scenes.map((epScene: any, epIdx: number) => (
+                            <button
+                                key={epScene.id}
+                                onClick={() => {
+                                    const element = document.getElementById(`scene-${epScene.id}`);
+                                    if (element) element.scrollIntoView({ behavior: "smooth" });
+                                }}
+                                className="px-3 py-1 bg-violet-600/10 hover:bg-violet-600/25 border border-violet-500/30 text-violet-300 hover:text-white rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 flex-shrink-0"
+                            >
+                                <Film className="w-3 h-3 text-violet-400" />
+                                Episode {epScene.sceneIndex || epIdx + 1}: {epScene.title || `Episode ${epIdx + 1}`}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {/* Tab Content */}
             <div className="min-h-[500px]">
                 {activeTab === "script" && <ScriptTab doc={doc} onRefresh={fetchDoc} />}
@@ -979,7 +1001,7 @@ function ShotMatrixTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) 
     return (
         <div className="space-y-4">
             {doc.scenes.map((scene: any) => (
-                <div key={scene.id} className="bg-gray-900/50 border border-gray-800 rounded-2xl overflow-hidden">
+                <div key={scene.id} id={`scene-${scene.id}`} className="bg-gray-900/50 border border-gray-800 rounded-2xl overflow-hidden scroll-mt-6">
                     {/* Scene header — clickable accordion */}
                     <button
                         onClick={() => toggleScene(scene.id)}
