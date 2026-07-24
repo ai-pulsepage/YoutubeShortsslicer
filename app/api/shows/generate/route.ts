@@ -31,7 +31,7 @@ async function processShowGenerationInBackground(params: {
         });
 
         // 2. Save script, scenes, shots, and cast assets in database
-        const updatedDoc = await prisma.documentary.update({
+        await prisma.documentary.update({
             where: { id: docId },
             data: {
                 title: `${showResult.showTitle} (Mini-Series)`,
@@ -66,12 +66,18 @@ async function processShowGenerationInBackground(params: {
                         prompt: char.physicalProfile
                     }))
                 }
-            },
+            }
+        });
+
+        // Query updated documentary with relations
+        const updatedDoc = await prisma.documentary.findUnique({
+            where: { id: docId },
             include: {
                 scenes: { include: { shots: { orderBy: { shotIndex: "asc" } } } },
                 assets: true
             }
         });
+        if (!updatedDoc) return;
 
         // 3. Dispatch character reference image jobs
         for (const asset of updatedDoc.assets) {
@@ -106,11 +112,11 @@ async function processShowGenerationInBackground(params: {
 
         // 4. Dispatch ALL 30+ shots for each episode
         for (const ep of showResult.episodes) {
-            const dbScene = updatedDoc.scenes.find(s => s.sceneIndex === ep.episodeNumber);
+            const dbScene: any = updatedDoc.scenes.find((s: any) => s.sceneIndex === ep.episodeNumber);
             if (!dbScene) continue;
 
             for (const shot of ep.shots) {
-                const dbShot = dbScene.shots.find(s => s.shotIndex === shot.shotIndex);
+                const dbShot: any = dbScene.shots.find((s: any) => s.shotIndex === shot.shotIndex);
                 if (!dbShot) continue;
 
                 const r2Key = `shows/${updatedDoc.id}/scene_${dbScene.id}_shot_${dbShot.id}.mp4`;
@@ -182,7 +188,13 @@ export async function POST(req: NextRequest) {
                 genre: genre || "romance_telenovela",
                 subStyle: subStyle || "default",
                 visualMode: "full_ai_video",
-                status: "GENERATING"
+                status: "GENERATING",
+                rawArticles: {
+                    videoModel: videoModel || "wan2.3",
+                    voiceEngine: voiceEngine || "cosyvoice2",
+                    numEpisodes: parseInt(numEpisodes) || 3,
+                    targetEpisodeMinutes: parseInt(targetEpisodeMinutes) || 3
+                }
             }
         });
 

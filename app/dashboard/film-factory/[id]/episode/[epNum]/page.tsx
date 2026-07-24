@@ -294,13 +294,30 @@ export default function EpisodeWorkspacePage({ params }: { params: Promise<{ id:
                                                     <p className="text-[10px] text-gray-500 font-mono truncate">🎬 {shot.compositePrompt}</p>
                                                 )}
                                             </td>
-                                            <td className="px-4 py-3 font-mono text-gray-400">{shot.duration || 5}s</td>
                                             <td className="px-4 py-3">
-                                                {shot.clipPath ? (
-                                                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                                                ) : (
-                                                    <Clock className="w-4 h-4 text-gray-600" />
-                                                )}
+                                                <div className="flex items-center gap-2">
+                                                    {shot.clipPath ? (
+                                                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                                                    ) : (
+                                                        <Clock className="w-4 h-4 text-gray-600" />
+                                                    )}
+                                                    <button
+                                                        onClick={async (e) => {
+                                                            e.stopPropagation();
+                                                            try {
+                                                                await fetch(`/api/documentary/shots/${shot.id}/regenerate`, { method: "POST" });
+                                                                alert(`⚡ Shot #${shot.shotIndex} dispatched to GPU Worker!`);
+                                                                fetchDoc();
+                                                            } catch (err: any) {
+                                                                alert(`Dispatch error: ${err.message}`);
+                                                            }
+                                                        }}
+                                                        className="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 text-[10px] font-bold rounded transition-colors"
+                                                        title="Dispatch single shot to GPU Worker"
+                                                    >
+                                                        ⚡ GPU
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     )

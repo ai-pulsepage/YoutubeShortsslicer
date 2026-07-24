@@ -71,6 +71,16 @@ export default function MasterShowHubPage({ params }: { params: Promise<{ id: st
     const episodes = doc.scenes || [];
     const assets = doc.assets || [];
 
+    // Parse production metadata settings from rawArticles object
+    let prodMeta = { videoModel: "wan2.3", voiceEngine: "cosyvoice2", targetEpisodeMinutes: 3, numEpisodes: episodes.length };
+    if (doc.rawArticles && typeof doc.rawArticles === "object") {
+        prodMeta = { ...prodMeta, ...(doc.rawArticles as any) };
+    }
+
+    const cleanLogline = doc.narrationText && !doc.narrationText.startsWith("{") && !doc.narrationText.startsWith("Premise:")
+        ? doc.narrationText
+        : "A character-driven multi-episode series built around hidden secrets and dramatic inter-character conflict.";
+
     return (
         <div className="space-y-6">
             {/* Top Navigation */}
@@ -95,7 +105,7 @@ export default function MasterShowHubPage({ params }: { params: Promise<{ id: st
             </div>
 
             {/* Show Master Header */}
-            <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-6 relative overflow-hidden">
+            <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-6 relative overflow-hidden space-y-4">
                 <div className="flex items-start justify-between flex-wrap gap-4 relative z-10">
                     <div className="space-y-2 max-w-3xl">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -117,8 +127,8 @@ export default function MasterShowHubPage({ params }: { params: Promise<{ id: st
                             {doc.title.replace(/\(Mini-Series\)/g, "").trim()}
                         </h1>
 
-                        <p className="text-xs text-gray-400 leading-relaxed">
-                            {doc.narrationText || doc.script || "Character-driven story series"}
+                        <p className="text-xs text-gray-300 leading-relaxed max-w-2xl">
+                            {cleanLogline}
                         </p>
                     </div>
 
@@ -133,6 +143,39 @@ export default function MasterShowHubPage({ params }: { params: Promise<{ id: st
                             <span className="text-base font-bold text-white">{assets.length}</span>
                         </div>
                     </div>
+                </div>
+
+                {/* Production Settings Metadata Bar */}
+                <div className="pt-3 border-t border-gray-800 flex items-center justify-between flex-wrap gap-2 text-xs">
+                    <div className="flex items-center gap-3 flex-wrap text-gray-300 font-medium">
+                        <span className="bg-black/50 border border-gray-750 px-2.5 py-1 rounded-lg">
+                            🎥 <strong>Video Generator:</strong> {prodMeta.videoModel === "ltx2.3" ? "LTX 2.3 (Native SFX)" : "Wan 2.3 (5s)"}
+                        </span>
+                        <span className="bg-black/50 border border-gray-750 px-2.5 py-1 rounded-lg">
+                            🎙️ <strong>Voice Engine:</strong> {prodMeta.videoModel === "ltx2.3" ? "Bypassed (Native LTX)" : prodMeta.voiceEngine}
+                        </span>
+                        <span className="bg-black/50 border border-gray-750 px-2.5 py-1 rounded-lg">
+                            ⏱️ <strong>Runtime:</strong> {prodMeta.targetEpisodeMinutes}m / ep ({episodes.length * prodMeta.targetEpisodeMinutes}m total series)
+                        </span>
+                    </div>
+
+                    <button
+                        onClick={async () => {
+                            if (!confirm(`Dispatch ALL 30+ shots across ALL ${episodes.length} episodes to the GPU Worker?`)) return;
+                            for (let i = 1; i <= episodes.length; i++) {
+                                await fetch(`/api/shows/episode/launch`, {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ docId: doc.id, episodeNumber: i, action: "launch" })
+                                }).catch(() => {});
+                            }
+                            alert(`🚀 All episode shots dispatched to GPU worker queue!`);
+                            fetchDoc();
+                        }}
+                        className="px-3.5 py-1.5 bg-gradient-to-r from-emerald-600 to-violet-600 hover:from-emerald-500 hover:to-violet-500 text-white font-bold text-xs rounded-xl transition-all cursor-pointer shadow-md"
+                    >
+                        🚀 Dispatch All Series Jobs to GPU Worker
+                    </button>
                 </div>
             </div>
 

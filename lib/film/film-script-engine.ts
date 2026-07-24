@@ -146,35 +146,36 @@ export async function generateCinematicShow(params: {
         throw new Error("DeepSeek API key is missing. Please configure your DeepSeek API key in Admin Settings.");
     }
 
-    // Step 1: Generate Master Show Blueprint + Full Cast Roster (Lightweight: 2048 max_tokens)
+    // Step 1: Generate Master Show Blueprint + Full Cast Roster (Lightweight & Precise)
     const masterPrompt = `You are a Hollywood showrunner. Write a high-concept ${numEp}-episode TV series blueprint for:
 Title: "${title}"
 Genre: "${genre}"
 SubStyle: "${params.subStyle || "default"}"
-Premise: "${concept}"
+Premise & Context: "${concept}"
 
 CRITICAL RULES:
-1. Define a Cast Roster containing ALL characters mentioned or implied in the premise (up to 10 characters). Include every protagonist, antagonist, family member, and key figure with vivid physical profiles.
-2. Outline ${numEp} episodes with titles, loglines, and dramatic cliffhangers.
+1. Summarize the series premise into a clean 1 to 2 sentence summary in "premise".
+2. Define a Cast Roster containing ALL characters mentioned or implied (up to 10 characters). Include every protagonist, antagonist, family member, and key figure with concise physical profiles.
+3. You MUST outline ALL ${numEp} episodes with titles, loglines, and dramatic cliffhangers.
 
 Return ONLY valid JSON matching this schema:
 {
   "showTitle": "${title}",
   "genre": "${genre}",
   "subStyle": "${params.subStyle || "default"}",
-  "premise": "${concept}",
+  "premise": "Clean 1-sentence overview of the series arc",
   "cast": [
     {
       "name": "Character Name",
       "role": "PROTAGONIST",
-      "physicalProfile": "Vivid description"
+      "physicalProfile": "Vivid physical description"
     }
   ],
   "episodes": [
     {
       "episodeNumber": 1,
       "title": "Episode 1: Title",
-      "logline": "Episode summary",
+      "logline": "1-sentence episode summary",
       "cliffhanger": "Dramatic cliffhanger ending"
     }
   ]
@@ -200,7 +201,7 @@ Return ONLY valid JSON matching this schema:
                 { role: "user", content: masterPrompt },
             ],
             temperature: 0.7,
-            max_tokens: 2048,
+            max_tokens: 4096,
         }),
     });
 
@@ -237,7 +238,7 @@ CRITICAL DRAMATIC SCENE RULES:
 1. NO NARRATOR VOICEOVER. Story is driven 100% by character interaction, scene setup, action, and dialogue beats.
 2. At least 30% of shots MUST be non-dialogue beats (wide environmental establishing shots, camera movement cuts, facial reactions, atmospheric mood).
 3. Scenes MUST follow a 5-beat dramatic arc: Atmosphere ➔ Baseline Entrance ➔ Inciting Tension ➔ Escalation/Climax ➔ Reaction/Transition.
-4. If this is Episode 1, you MUST establish the world, setting, and baseline character state before any conflict or suspicion begins.
+4. Episode ${epOutline.episodeNumber} MUST start at its own UNIQUE location and setting matching its logline: "${epOutline.logline}". Do NOT repeat establishing shots or ballroom scenes from Episode 1!
 5. Write 12 to 18 visual shots for this episode.
 
 For each shot specify:
@@ -246,7 +247,7 @@ For each shot specify:
 - "speakerName": Character speaking (leave null/empty if non-dialogue establishing beat)
 - "dialogueLine": Character spoken line (with emotional tag like [determined], [shocked], [whispering])
 - "actionDescription": Physical character action, facial expression, and movement
-- "environment": Lighting, background setting, and visual mood
+- "environment": Lighting, background setting, and visual mood matching this episode's location
 - "cameraMovement": Dynamic motion (e.g. "slow crane push-in", "whip pan", "static tight lens")
 
 Return ONLY valid JSON matching this schema:
@@ -255,17 +256,7 @@ Return ONLY valid JSON matching this schema:
   "title": "${epOutline.title}",
   "logline": "${epOutline.logline}",
   "cliffhanger": "${epOutline.cliffhanger}",
-  "shots": [
-    {
-      "shotIndex": 1,
-      "shotType": "wide shot",
-      "speakerName": null,
-      "dialogueLine": null,
-      "actionDescription": "Camera gliding past ornate chandeliers, guests mingling in formal attire",
-      "environment": "Grand estate ballroom at sunset, warm amber lighting",
-      "cameraMovement": "slow crane tracking push-in"
-    }
-  ]
+  "shots": []
 }`;
 
         logAiActivity(`EPISODE_${epOutline.episodeNumber}_REQUEST`, {
