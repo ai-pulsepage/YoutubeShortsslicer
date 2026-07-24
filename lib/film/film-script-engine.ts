@@ -227,11 +227,11 @@ Return ONLY valid JSON matching this schema:
         logAiActivity("MASTER_BLUEPRINT_REPAIRED", { promptTitle: title, repaired: true });
     }
 
-    // Step 2: Generate Episode Screenplay in deliberate Sub-Scene Passes (max 15 shots per pass to ensure generous 2000+ token headroom)
+    // Step 2: Generate Episode Screenplay in deliberate Sub-Scene Passes (max 10 shots per pass to ensure massive 3000+ token headroom)
     const fullEpisodes: FilmEpisode[] = [];
     const targetEpisodeMins = params.targetEpisodeMinutes || 3;
     const totalShotsNeeded = Math.max(18, Math.round((targetEpisodeMins * 60) / 5));
-    const maxShotsPerPass = 15;
+    const maxShotsPerPass = 10;
     const totalPasses = Math.ceil(totalShotsNeeded / maxShotsPerPass);
 
     for (const epOutline of masterBlueprint.episodes || []) {
@@ -287,52 +287,78 @@ Return ONLY valid JSON matching this schema:
   ]
 }`;
 
-            logAiActivity(`EPISODE_${epOutline.episodeNumber}_PASS_${passIdx}_REQUEST`, {
-                promptTitle: `${masterBlueprint.showTitle} - Ep ${epOutline.episodeNumber} (Pass ${passIdx}/${totalPasses})`,
-                systemPrompt: "You are a master cinematic director. Return valid JSON only.",
-                userPrompt: epPassPrompt
-            });
+            let passResultShots: any[] = [];
+            let lastAttemptError = "";
 
-            const passRes = await fetch("https://api.deepseek.com/v1/chat/completions", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${apiKey}`,
-                },
-                body: JSON.stringify({
-                    model: deepseekModel,
-                    response_format: { type: "json_object" },
-                    messages: [
-                        { role: "system", content: "You are a master cinematic director. Return valid JSON only." },
-                        { role: "user", content: epPassPrompt },
-                    ],
-                    temperature: 0.7,
-                    max_tokens: 4096,
-                }),
-            });
+            // Retry loop up to 3 attempts with a 1s delay to absorb transient API glitches or 0-char responses
+            for (let attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    logAiActivity(`EPISODE_${epOutline.episodeNumber}_PASS_${passIdx}_REQUEST`, {
+                        promptTitle: `${masterBlueprint.showTitle} - Ep ${epOutline.episodeNumber} (Pass ${passIdx}/${totalPasses}) [Attempt ${attempt}]`,
+                        systemPrompt: "You are a master cinematic director. Return valid JSON only.",
+                        userPrompt: epPassPrompt
+                    });
 
-            if (!passRes.ok) {
-                const errText = await passRes.text();
-                logAiActivity(`EPISODE_${epOutline.episodeNumber}_PASS_${passIdx}_ERROR`, {
-                    promptTitle: `${masterBlueprint.showTitle} - Ep ${epOutline.episodeNumber} (Pass ${passIdx})`,
-                    error: errText
-                });
-                throw new Error(`DeepSeek API Episode ${epOutline.episodeNumber} Pass ${passIdx} Error (HTTP ${passRes.status}): ${errText}`);
+                    const passRes = await fetch("https://api.deepseek.com/v1/chat/completions", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${apiKey}`,
+                        },
+                        body: JSON.stringify({
+                            model: deepseekModel,
+                            response_format: { type: "json_object" },
+                            messages: [
+                                { role: "system", content: "You are a master cinematic director. Return valid JSON only." },
+                                { role: "user", content: epPassPrompt },
+                            ],
+                            temperature: 0.6,
+                            max_tokens: 4096,
+                        }),
+                    });
+
+                    if (!passRes.ok) {
+                        const errText = await passRes.text();
+                        lastAttemptError = `HTTP ${passRes.status}: ${errText}`;
+                        logAiActivity(`EPISODE_${epOutline.episodeNumber}_PASS_${passIdx}_ERROR`, {
+                            promptTitle: `${masterBlueprint.showTitle} - Ep ${epOutline.episodeNumber} (Pass ${passIdx}) [Attempt ${attempt}]`,
+                            error: lastAttemptError
+                        });
+                        await new Promise(r => setTimeout(r, 1000));
+                        continue;
+                    }
+
+                    const passData = await passRes.json();
+                    const passText = passData.choices?.[0]?.message?.content?.trim() || "";
+
+                    logAiActivity(`EPISODE_${epOutline.episodeNumber}_PASS_${passIdx}_RESPONSE`, {
+                        promptTitle: `${masterBlueprint.showTitle} - Ep ${epOutline.episodeNumber} (Pass ${passIdx}) [Attempt ${attempt}]`,
+                        rawResponse: passText
+                    });
+
+                    if (!passText) {
+                        lastAttemptError = "AI returned empty (0 chars) text payload.";
+                        await new Promise(r => setTimeout(r, 1000));
+                        continue;
+                    }
+
+                    const { data: passResult } = repairTruncatedJson<{ shots: any[] }>(passText);
+                    if (passResult && Array.isArray(passResult.shots) && passResult.shots.length > 0) {
+                        passResultShots = passResult.shots;
+                        break; // Success! Exit retry loop
+                    } else {
+                        lastAttemptError = `Invalid or empty shots array. Raw output: "${passText.substring(0, 200)}"`;
+                    }
+                } catch (attemptErr: any) {
+                    lastAttemptError = attemptErr.message || "Unknown error during pass request";
+                    await new Promise(r => setTimeout(r, 1000));
+                }
             }
 
-            const passData = await passRes.json();
-            const passText = passData.choices?.[0]?.message?.content?.trim() || "";
-
-            logAiActivity(`EPISODE_${epOutline.episodeNumber}_PASS_${passIdx}_RESPONSE`, {
-                promptTitle: `${masterBlueprint.showTitle} - Ep ${epOutline.episodeNumber} (Pass ${passIdx})`,
-                rawResponse: passText
-            });
-
-            const { data: passResult } = repairTruncatedJson<{ shots: any[] }>(passText);
-            if (passResult && Array.isArray(passResult.shots) && passResult.shots.length > 0) {
-                episodeShots.push(...passResult.shots);
+            if (passResultShots.length > 0) {
+                episodeShots.push(...passResultShots);
             } else {
-                throw new Error(`DeepSeek Episode ${epOutline.episodeNumber} Pass ${passIdx} failed: AI returned invalid or empty shots payload. Raw output: "${passText.substring(0, 200)}"`);
+                throw new Error(`DeepSeek Episode ${epOutline.episodeNumber} Pass ${passIdx} failed after 3 attempts. Last error: ${lastAttemptError}`);
             }
         }
 
