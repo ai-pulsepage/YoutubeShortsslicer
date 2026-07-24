@@ -188,6 +188,8 @@ Return ONLY valid JSON matching this schema:
         userPrompt: masterPrompt
     });
 
+    const deepseekModel = process.env.DEEPSEEK_MODEL || "deepseek-v4-pro";
+
     const masterRes = await fetch("https://api.deepseek.com/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -195,7 +197,7 @@ Return ONLY valid JSON matching this schema:
             Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-            model: "deepseek-chat",
+            model: deepseekModel,
             response_format: { type: "json_object" },
             messages: [
                 { role: "system", content: "You are a master cinematic showrunner. Return valid JSON only." },
@@ -238,7 +240,10 @@ Cast Roster: ${JSON.stringify(masterBlueprint.cast)}
 CRITICAL DRAMATIC SCENE RULES:
 1. NO NARRATOR VOICEOVER. Story is driven 100% by character interaction, scene setup, action, and dialogue beats.
 2. At least 30% of shots MUST be non-dialogue beats (wide environmental establishing shots, camera movement cuts, facial reactions, atmospheric mood).
-3. Scenes MUST follow a 5-beat dramatic arc: Atmosphere ➔ Baseline Entrance ➔ Inciting Tension ➔ Escalation/Climax ➔ Reaction/Transition.
+3. ${epOutline.episodeNumber === 1
+    ? "Follow a Pilot Arc: Estate Atmosphere ➔ Character Baseline ➔ Inciting Tension ➔ Escalation ➔ Cliffhanger."
+    : `Follow a Continuance Arc: Cold Open at Logline Location ➔ Immediate Inciting Action/Confrontation ➔ Escalation ➔ Climax ➔ Cliffhanger. STRICT RULE: Do NOT include party re-introductions, guest mingling, or baseline entrances. Jump IMMEDIATELY into the specific location and conflict of Episode ${epOutline.episodeNumber}'s logline.`
+}
 4. ${epOutline.episodeNumber === 1
     ? `Episode 1 MUST focus ONLY on its logline: "${epOutline.logline}". End Episode 1 with the cliffhanger: "${epOutline.cliffhanger}". Do NOT include private study confrontations or accusations that belong to Episode 2!`
     : `Episode ${epOutline.episodeNumber} MUST start at its own UNIQUE location matching its logline: "${epOutline.logline}". Do NOT repeat establishing shots, scenes, or dialogue from Episode ${epOutline.episodeNumber - 1}!`
@@ -276,7 +281,7 @@ Return ONLY valid JSON matching this schema:
                 Authorization: `Bearer ${apiKey}`,
             },
             body: JSON.stringify({
-                model: "deepseek-chat",
+                model: deepseekModel,
                 response_format: { type: "json_object" },
                 messages: [
                     { role: "system", content: "You are a master cinematic director. Return valid JSON only." },

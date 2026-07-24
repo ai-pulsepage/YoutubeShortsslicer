@@ -165,7 +165,7 @@ Novelty Score: ${a.noveltyScore}/10
                     Authorization: `Bearer ${apiKey}`,
                 },
                 body: JSON.stringify({
-                    model: "deepseek-chat",
+                    model: process.env.DEEPSEEK_MODEL || "deepseek-v4-pro",
                     messages: [
                         { role: "system", content: systemPrompt },
                         { role: "user", content: prompt },
