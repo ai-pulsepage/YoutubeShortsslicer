@@ -367,7 +367,10 @@ Return ONLY valid JSON matching this schema:
             title: epOutline.title,
             logline: epOutline.logline,
             cliffhanger: epOutline.cliffhanger,
-            shots: episodeShots
+            shots: episodeShots.map((s, idx) => ({
+                ...s,
+                shotIndex: idx + 1
+            }))
         });
     }
 

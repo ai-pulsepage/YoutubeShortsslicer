@@ -45,8 +45,8 @@ async function processShowGenerationInBackground(params: {
                         narrationText: ep.logline,
                         searchQueries: JSON.stringify({ isEpisode: true, logline: ep.logline, cliffhanger: ep.cliffhanger }),
                         shots: {
-                            create: ep.shots.map((shot) => ({
-                                shotIndex: shot.shotIndex,
+                            create: ep.shots.map((shot, sIdx) => ({
+                                shotIndex: sIdx + 1,
                                 shotType: shot.shotType,
                                 cameraAngle: shot.cameraAngle || "eye level",
                                 cameraMovement: shot.cameraMovement || "gentle push-in",
