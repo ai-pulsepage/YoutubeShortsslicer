@@ -227,100 +227,120 @@ Return ONLY valid JSON matching this schema:
         logAiActivity("MASTER_BLUEPRINT_REPAIRED", { promptTitle: title, repaired: true });
     }
 
-    // Step 2: Generate Episode Screenplay in Chunks per Episode (4096 max_tokens per Episode)
+    // Step 2: Generate Episode Screenplay in deliberate Sub-Scene Passes (max 15 shots per pass to ensure generous 2000+ token headroom)
     const fullEpisodes: FilmEpisode[] = [];
     const targetEpisodeMins = params.targetEpisodeMinutes || 3;
-    const targetShots = Math.max(18, Math.round((targetEpisodeMins * 60) / 5));
+    const totalShotsNeeded = Math.max(18, Math.round((targetEpisodeMins * 60) / 5));
+    const maxShotsPerPass = 15;
+    const totalPasses = Math.ceil(totalShotsNeeded / maxShotsPerPass);
 
     for (const epOutline of masterBlueprint.episodes || []) {
-        const epPrompt = `You are a master cinematic director. Write the complete camera shot screenplay for Episode ${epOutline.episodeNumber}: "${epOutline.title}".
+        const episodeShots: any[] = [];
+
+        for (let passIdx = 1; passIdx <= totalPasses; passIdx++) {
+            const startShotIdx = (passIdx - 1) * maxShotsPerPass + 1;
+            const endShotIdx = Math.min(passIdx * maxShotsPerPass, totalShotsNeeded);
+            const shotsToGenerate = endShotIdx - startShotIdx + 1;
+
+            const previousContext = episodeShots.length > 0
+                ? `PREVIOUS SHOTS CONTEXT: The scene left off at Shot ${episodeShots.length}: Character '${episodeShots[episodeShots.length - 1].speakerName || "N/A"}' performed '${episodeShots[episodeShots.length - 1].actionDescription}' in environment '${episodeShots[episodeShots.length - 1].environment}'.`
+                : "";
+
+            const epPassPrompt = `You are a master cinematic director. Write Part ${passIdx} of ${totalPasses} (Shots ${startShotIdx} to ${endShotIdx}) for Episode ${epOutline.episodeNumber}: "${epOutline.title}".
 Show Title: "${masterBlueprint.showTitle}"
 Genre: "${genre}"
 Episode Logline: "${epOutline.logline}"
 Cast Roster: ${JSON.stringify(masterBlueprint.cast)}
+${previousContext}
 
 CRITICAL DRAMATIC SCENE RULES:
 1. NO NARRATOR VOICEOVER. Story is driven 100% by character interaction, scene setup, action, and dialogue beats.
 2. At least 30% of shots MUST be non-dialogue beats (wide environmental establishing shots, camera movement cuts, facial reactions, atmospheric mood).
-3. ${epOutline.episodeNumber === 1
-    ? "Follow a Pilot Arc: Estate Atmosphere ➔ Character Baseline ➔ Inciting Tension ➔ Escalation ➔ Cliffhanger."
-    : `Follow a Continuance Arc: Cold Open at Logline Location ➔ Immediate Inciting Action/Confrontation ➔ Escalation ➔ Climax ➔ Cliffhanger. STRICT RULE: Do NOT include party re-introductions, guest mingling, or baseline entrances. Jump IMMEDIATELY into the specific location and conflict of Episode ${epOutline.episodeNumber}'s logline.`
+3. ${epOutline.episodeNumber === 1 && passIdx === 1
+    ? "Follow a Pilot Arc: Estate Atmosphere ➔ Character Baseline ➔ Inciting Tension."
+    : `Follow a Continuance Arc: Jump IMMEDIATELY into the specific location and conflict of Episode ${epOutline.episodeNumber}'s logline. Do NOT include party re-introductions, guest mingling, or baseline entrances.`
 }
-4. ${epOutline.episodeNumber === 1
-    ? `Episode 1 MUST focus ONLY on its logline: "${epOutline.logline}". End Episode 1 with the cliffhanger: "${epOutline.cliffhanger}". Do NOT include private study confrontations or accusations that belong to Episode 2!`
-    : `Episode ${epOutline.episodeNumber} MUST start at its own UNIQUE location matching its logline: "${epOutline.logline}". Do NOT repeat establishing shots, scenes, or dialogue from Episode ${epOutline.episodeNumber - 1}!`
-}
-5. You MUST write EXACTLY ${targetShots} visual shots for this episode to fill the ${targetEpisodeMins}-minute runtime target.
-6. For extended episodes (${targetShots} shots), divide the episode across 3 to 4 distinct sub-locations (e.g. Sub-Scene A, Sub-Scene B, Sub-Scene C) that advance the narrative. Every spoken exchange MUST reveal new information or escalate conflict without repeating arguments.
+4. Write EXACTLY ${shotsToGenerate} visual shots numbered from shotIndex ${startShotIdx} to ${endShotIdx}.
+5. Every spoken exchange MUST reveal new information or escalate conflict without repeating arguments.
 
 For each shot specify:
-- "shotIndex": 1, 2, 3...
+- "shotIndex": ${startShotIdx}, ${startShotIdx + 1}...
 - "shotType": e.g. "wide shot", "medium shot", "close-up", "over-the-shoulder", "action cut"
 - "speakerName": Character speaking (leave null/empty if non-dialogue establishing beat)
 - "dialogueLine": Character spoken line (with emotional tag like [determined], [low, measured], [whispering])
 - "actionDescription": Physical character action, facial expression, and movement
-- "environment": Lighting, background setting, and visual mood matching this episode's location
+- "environment": Lighting, background setting, and visual mood matching this location
 - "cameraMovement": Dynamic motion (e.g. "slow crane push-in", "whip pan", "static tight lens")
 
 Return ONLY valid JSON matching this schema:
 {
-  "episodeNumber": ${epOutline.episodeNumber},
-  "title": "${epOutline.title}",
-  "logline": "${epOutline.logline}",
-  "cliffhanger": "${epOutline.cliffhanger}",
-  "shots": []
+  "shots": [
+    {
+      "shotIndex": ${startShotIdx},
+      "shotType": "medium shot",
+      "speakerName": "Character Name",
+      "dialogueLine": "[emotional tag] Spoken line",
+      "actionDescription": "Detailed action description",
+      "environment": "Visual environment setting",
+      "cameraMovement": "Camera motion"
+    }
+  ]
 }`;
 
-        logAiActivity(`EPISODE_${epOutline.episodeNumber}_REQUEST`, {
-            promptTitle: `${masterBlueprint.showTitle} - Episode ${epOutline.episodeNumber}`,
-            systemPrompt: "You are a master cinematic director. Return valid JSON only.",
-            userPrompt: epPrompt
-        });
-
-        const epRes = await fetch("https://api.deepseek.com/v1/chat/completions", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${apiKey}`,
-            },
-            body: JSON.stringify({
-                model: deepseekModel,
-                response_format: { type: "json_object" },
-                messages: [
-                    { role: "system", content: "You are a master cinematic director. Return valid JSON only." },
-                    { role: "user", content: epPrompt },
-                ],
-                temperature: 0.7,
-                max_tokens: 4096,
-            }),
-        });
-
-        if (!epRes.ok) {
-            const errText = await epRes.text();
-            logAiActivity(`EPISODE_${epOutline.episodeNumber}_ERROR`, {
-                promptTitle: `${masterBlueprint.showTitle} - Episode ${epOutline.episodeNumber}`,
-                error: errText
+            logAiActivity(`EPISODE_${epOutline.episodeNumber}_PASS_${passIdx}_REQUEST`, {
+                promptTitle: `${masterBlueprint.showTitle} - Ep ${epOutline.episodeNumber} (Pass ${passIdx}/${totalPasses})`,
+                systemPrompt: "You are a master cinematic director. Return valid JSON only.",
+                userPrompt: epPassPrompt
             });
-            throw new Error(`DeepSeek API Episode ${epOutline.episodeNumber} Generation Error (HTTP ${epRes.status}): ${errText}`);
+
+            const passRes = await fetch("https://api.deepseek.com/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${apiKey}`,
+                },
+                body: JSON.stringify({
+                    model: deepseekModel,
+                    response_format: { type: "json_object" },
+                    messages: [
+                        { role: "system", content: "You are a master cinematic director. Return valid JSON only." },
+                        { role: "user", content: epPassPrompt },
+                    ],
+                    temperature: 0.7,
+                    max_tokens: 4096,
+                }),
+            });
+
+            if (!passRes.ok) {
+                const errText = await passRes.text();
+                logAiActivity(`EPISODE_${epOutline.episodeNumber}_PASS_${passIdx}_ERROR`, {
+                    promptTitle: `${masterBlueprint.showTitle} - Ep ${epOutline.episodeNumber} (Pass ${passIdx})`,
+                    error: errText
+                });
+                throw new Error(`DeepSeek API Episode ${epOutline.episodeNumber} Pass ${passIdx} Error (HTTP ${passRes.status}): ${errText}`);
+            }
+
+            const passData = await passRes.json();
+            const passText = passData.choices?.[0]?.message?.content?.trim() || "";
+
+            logAiActivity(`EPISODE_${epOutline.episodeNumber}_PASS_${passIdx}_RESPONSE`, {
+                promptTitle: `${masterBlueprint.showTitle} - Ep ${epOutline.episodeNumber} (Pass ${passIdx})`,
+                rawResponse: passText
+            });
+
+            const { data: passResult } = repairTruncatedJson<{ shots: any[] }>(passText);
+            if (passResult && Array.isArray(passResult.shots)) {
+                episodeShots.push(...passResult.shots);
+            }
         }
 
-        const epData = await epRes.json();
-        const epText = epData.choices?.[0]?.message?.content?.trim() || "";
-
-        logAiActivity(`EPISODE_${epOutline.episodeNumber}_RESPONSE`, {
-            promptTitle: `${masterBlueprint.showTitle} - Episode ${epOutline.episodeNumber}`,
-            rawResponse: epText
+        fullEpisodes.push({
+            episodeNumber: epOutline.episodeNumber,
+            title: epOutline.title,
+            logline: epOutline.logline,
+            cliffhanger: epOutline.cliffhanger,
+            shots: episodeShots
         });
-
-        const { data: epResult, repaired: epRepaired } = repairTruncatedJson<FilmEpisode>(epText);
-        if (epRepaired) {
-            logAiActivity(`EPISODE_${epOutline.episodeNumber}_REPAIRED`, {
-                promptTitle: `${masterBlueprint.showTitle} - Episode ${epOutline.episodeNumber}`,
-                repaired: true
-            });
-        }
-
-        fullEpisodes.push(epResult);
     }
 
     masterBlueprint.episodes = fullEpisodes;
