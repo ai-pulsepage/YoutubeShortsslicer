@@ -56,6 +56,7 @@ export default function DocumentaryDetailPage({ params }: { params: Promise<{ id
     const [doc, setDoc] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<TabId>("script");
+    const [selectedEpisode, setSelectedEpisode] = useState<number | "all">(1);
 
     const fetchDoc = useCallback(async () => {
         const res = await fetch(`/api/documentary/${id}`);
@@ -162,23 +163,45 @@ export default function DocumentaryDetailPage({ params }: { params: Promise<{ id
                 </div>
             )}
 
-            {/* Assembly Progress Banner */}
-            {doc.status === "ASSEMBLING" && doc.errorMsg && (
-                <div className="flex items-center gap-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
-                    <Loader2 className="w-4 h-4 animate-spin text-amber-400 flex-shrink-0" />
-                    <p className="text-sm text-amber-300 flex-1">
-                        {doc.errorMsg}
-                    </p>
-                </div>
-            )}
-
-            {/* Generating indicator with stuck detection */}
-            {doc.status === "GENERATING" && (
-                <GeneratingBanner doc={doc} onRefresh={fetchDoc} />
-            )}
-
             {/* Pipeline Overview */}
             <PipelineOverview doc={doc} />
+
+            {/* Episode Selector Filter for Multi-Episode TV Mini-Series */}
+            {doc.title?.includes("(Mini-Series)") && doc.scenes && doc.scenes.length > 0 && (
+                <div className="flex items-center gap-2 bg-black/40 border border-violet-500/20 rounded-xl p-2.5 mb-2">
+                    <span className="text-xs font-bold text-violet-400 uppercase tracking-wider px-2 flex-shrink-0">Filter Episode View:</span>
+                    <div className="flex items-center gap-1.5 overflow-x-auto pr-1">
+                        <button
+                            onClick={() => setSelectedEpisode("all")}
+                            className={cn("px-3 py-1 border rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 flex-shrink-0",
+                                selectedEpisode === "all"
+                                    ? "bg-violet-600 border-violet-500 text-white font-bold"
+                                    : "bg-gray-900 border-gray-800 text-gray-400 hover:text-white"
+                            )}
+                        >
+                            All Episodes ({doc.scenes.length})
+                        </button>
+                        {doc.scenes.map((epScene: any, epIdx: number) => {
+                            const epNum = epScene.sceneIndex || epIdx + 1;
+                            const isSelected = selectedEpisode === epNum;
+                            return (
+                                <button
+                                    key={epScene.id}
+                                    onClick={() => setSelectedEpisode(epNum)}
+                                    className={cn("px-3 py-1 border rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 flex-shrink-0",
+                                        isSelected
+                                            ? "bg-violet-600 border-violet-500 text-white font-bold shadow-lg"
+                                            : "bg-violet-955/20 border-violet-900/30 text-violet-300 hover:text-white hover:bg-violet-900/40"
+                                    )}
+                                >
+                                    <Film className="w-3 h-3 text-violet-400" />
+                                    {epScene.title?.startsWith("Episode") ? epScene.title : `Episode ${epNum}: ${epScene.title}`}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
 
             {/* Tabs */}
             <div className="flex items-center gap-1 bg-gray-900/50 border border-gray-800 rounded-xl p-1">
@@ -187,7 +210,7 @@ export default function DocumentaryDetailPage({ params }: { params: Promise<{ id
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
                         className={cn(
-                            "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                            "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer",
                             activeTab === tab.id
                                 ? "bg-violet-500/15 text-violet-400 shadow-sm"
                                 : "text-gray-500 hover:text-white hover:bg-gray-800/60"
@@ -199,32 +222,10 @@ export default function DocumentaryDetailPage({ params }: { params: Promise<{ id
                 ))}
             </div>
 
-            {/* Episode Selector for Multi-Episode TV Mini-Series */}
-            {doc.title?.includes("(Mini-Series)") && doc.scenes && doc.scenes.length > 0 && (
-                <div className="flex items-center gap-2 bg-black/40 border border-violet-500/20 rounded-xl p-2.5 mb-2">
-                    <span className="text-xs font-bold text-violet-400 uppercase tracking-wider px-2 flex-shrink-0">TV Episodes:</span>
-                    <div className="flex items-center gap-1.5 overflow-x-auto pr-1">
-                        {doc.scenes.map((epScene: any, epIdx: number) => (
-                            <button
-                                key={epScene.id}
-                                onClick={() => {
-                                    const element = document.getElementById(`scene-${epScene.id}`);
-                                    if (element) element.scrollIntoView({ behavior: "smooth" });
-                                }}
-                                className="px-3 py-1 bg-violet-600/10 hover:bg-violet-600/25 border border-violet-500/30 text-violet-300 hover:text-white rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 flex-shrink-0"
-                            >
-                                <Film className="w-3 h-3 text-violet-400" />
-                                {epScene.title?.startsWith("Episode") ? epScene.title : `Episode ${epScene.sceneIndex || epIdx + 1}: ${epScene.title}`}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            )}
-
             {/* Tab Content */}
             <div className="min-h-[500px]">
                 {activeTab === "script" && <ScriptTab doc={doc} onRefresh={fetchDoc} />}
-                {activeTab === "shots" && <ShotMatrixTab doc={doc} onRefresh={fetchDoc} />}
+                {activeTab === "shots" && <ShotMatrixTab doc={doc} selectedEpisode={selectedEpisode} onRefresh={fetchDoc} />}
                 {activeTab === "assets" && <AssetsTab doc={doc} onRefresh={fetchDoc} />}
                 {activeTab === "progress" && <ProgressTab doc={doc} onRefresh={fetchDoc} />}
                 {activeTab === "preview" && <PreviewTab doc={doc} onRefresh={fetchDoc} />}
@@ -400,9 +401,9 @@ function PipelineOverview({ doc }: { doc: any }) {
                                     <span className={cn("flex-1 text-left break-words pr-2",
                                         job.status === "COMPLETED" ? "text-gray-400" :
                                             job.status === "FAILED" ? "text-red-400 font-medium" :
-                                                job.status === "PROCESSING" ? "text-violet-300" : "text-gray-500"
+                                                job.status === "PROCESSING" ? "text-violet-300 font-semibold" : "text-gray-500"
                                     )} title={job.prompt || ""}>
-                                        {job.jobType === "ref_image" ? "🖼️" : "🎬"} {job.prompt || "Job"}
+                                        {job.jobType === "ref_image" ? "🖼️ Asset" : "🎬"} {job.metadata?.episodeNumber ? `Ep ${job.metadata.episodeNumber} Shot ${job.metadata.shotIndex || 1}: ` : ""}{job.prompt || "Job"}
                                     </span>
                                     
                                     <span className={cn("text-[10px] font-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded flex-shrink-0",
@@ -946,7 +947,7 @@ function VoiceAudition({ doc, scriptText }: { doc: any; scriptText: string }) {
 }
 
 /* ────── Tab 2: Shot Matrix ────── */
-function ShotMatrixTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
+function ShotMatrixTab({ doc, selectedEpisode = "all", onRefresh }: { doc: any; selectedEpisode?: number | "all"; onRefresh: () => void }) {
     const [editingShot, setEditingShot] = useState<string | null>(null);
     const [editForm, setEditForm] = useState<any>({});
     const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -961,6 +962,12 @@ function ShotMatrixTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) 
             </div>
         );
     }
+
+    const filteredScenes = (doc.scenes || []).filter((scene: any, idx: number) => {
+        if (!selectedEpisode || selectedEpisode === "all") return true;
+        const epNum = scene.sceneIndex || idx + 1;
+        return epNum === selectedEpisode;
+    });
 
     const startEdit = (shot: any) => {
         setEditingShot(shot.id);
@@ -1000,7 +1007,7 @@ function ShotMatrixTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) 
 
     return (
         <div className="space-y-4">
-            {doc.scenes.map((scene: any) => (
+            {filteredScenes.map((scene: any) => (
                 <div key={scene.id} id={`scene-${scene.id}`} className="bg-gray-900/50 border border-gray-800 rounded-2xl overflow-hidden scroll-mt-6">
                     {/* Scene header — clickable accordion */}
                     <button

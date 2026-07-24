@@ -308,6 +308,10 @@ function CreateDocumentaryModal({
     const [imageModel, setImageModel] = useState("chroma");
     const [narratorStyle, setNarratorStyle] = useState("sleep");
 
+    // Video Generator & Voice settings
+    const [videoModel, setVideoModel] = useState("wan2.3");
+    const [voiceEngine, setVoiceEngine] = useState("cosyvoice2");
+
     const selectedGenre = GENRES.find((g) => g.id === genre);
 
     const applyDefaults = (g: string, s: string) => {
@@ -338,11 +342,13 @@ function CreateDocumentaryModal({
                     body: JSON.stringify({
                         title: title.trim() || "Untitled TV Mini-Series",
                         concept: textStory.trim() || title.trim() || "Dramatic multi-episode story arc",
-                        genre,
+                        genre: genre || "romance_telenovela",
                         subStyle,
                         numEpisodes,
                         targetEpisodeMinutes: targetDurationMinutes,
-                    })
+                        videoModel,
+                        voiceEngine,
+                    }),
                 });
                 const data = await res.json();
                 setCreating(false);
@@ -547,6 +553,55 @@ function CreateDocumentaryModal({
                                     ))}
                                 </div>
                             </div>
+                            <div className="col-span-2 grid grid-cols-2 gap-3 bg-black/40 border border-gray-800 rounded-xl p-3 mt-1">
+                                <div>
+                                    <label className="block text-[11px] font-bold text-gray-400 mb-1">
+                                        🎥 Video Generator Model
+                                    </label>
+                                    <div className="flex gap-1.5">
+                                        <button onClick={() => setVideoModel("wan2.3")}
+                                            className={cn("flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold border transition cursor-pointer text-center",
+                                                videoModel === "wan2.3"
+                                                    ? "bg-violet-600 border-violet-500 text-white"
+                                                    : "bg-gray-900 border-gray-800 text-gray-400 hover:text-white"
+                                            )}>
+                                            Wan 2.3 (5s)
+                                        </button>
+                                        <button onClick={() => setVideoModel("ltx2.3")}
+                                            className={cn("flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold border transition cursor-pointer text-center",
+                                                videoModel === "ltx2.3"
+                                                    ? "bg-amber-600 border-amber-500 text-white"
+                                                    : "bg-gray-900 border-gray-800 text-gray-400 hover:text-white"
+                                            )}>
+                                            LTX 2.3 (SFX)
+                                        </button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-bold text-gray-400 mb-1">
+                                        🎙️ Character Voice Engine
+                                    </label>
+                                    <div className="flex gap-1.5">
+                                        <button onClick={() => setVoiceEngine("cosyvoice2")}
+                                            className={cn("flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold border transition cursor-pointer text-center",
+                                                voiceEngine === "cosyvoice2"
+                                                    ? "bg-violet-600 border-violet-500 text-white"
+                                                    : "bg-gray-900 border-gray-800 text-gray-400 hover:text-white"
+                                            )}>
+                                            CosyVoice 2
+                                        </button>
+                                        <button onClick={() => setVoiceEngine("elevenlabs")}
+                                            className={cn("flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold border transition cursor-pointer text-center",
+                                                voiceEngine === "elevenlabs"
+                                                    ? "bg-emerald-600 border-emerald-500 text-white"
+                                                    : "bg-gray-900 border-gray-800 text-gray-400 hover:text-white"
+                                            )}>
+                                            ElevenLabs
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
                             <p className="col-span-2 text-[9px] text-gray-600">
                                 {numEpisodes} episode{numEpisodes !== 1 ? "s" : ""} × {targetDurationMinutes} min = {numEpisodes * targetDurationMinutes} total series minutes (~{Math.round((numEpisodes * targetDurationMinutes * 60) / 5)} total video scene shots).
                             </p>
