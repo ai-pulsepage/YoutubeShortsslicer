@@ -102,7 +102,7 @@ function repairTruncatedJson<T = any>(rawText: string): { data: T; repaired: boo
                     repaired: true
                 };
             }
-            throw new Error(`Unrepairable JSON output from AI (truncated at char ${cleanText.length})`);
+            throw new Error(`DeepSeek returned invalid JSON (${cleanText.length} chars): "${cleanText.substring(0, 200)}"`);
         }
     }
 }
@@ -329,8 +329,10 @@ Return ONLY valid JSON matching this schema:
             });
 
             const { data: passResult } = repairTruncatedJson<{ shots: any[] }>(passText);
-            if (passResult && Array.isArray(passResult.shots)) {
+            if (passResult && Array.isArray(passResult.shots) && passResult.shots.length > 0) {
                 episodeShots.push(...passResult.shots);
+            } else {
+                throw new Error(`DeepSeek Episode ${epOutline.episodeNumber} Pass ${passIdx} failed: AI returned invalid or empty shots payload. Raw output: "${passText.substring(0, 200)}"`);
             }
         }
 
