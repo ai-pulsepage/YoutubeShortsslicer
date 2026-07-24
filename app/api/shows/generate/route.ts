@@ -86,6 +86,7 @@ async function processShowGenerationInBackground(params: {
                 docId: updatedDoc.id,
                 assetId: asset.id,
                 characterName: asset.label,
+                title: updatedDoc.title,
                 sourceApp: "Film Factory Studio",
                 model: "flux_pro"
             };

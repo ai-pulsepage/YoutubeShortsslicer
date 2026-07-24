@@ -26,8 +26,8 @@ export async function GET(req: NextRequest) {
                     type: parsed.type, // "ref_image" | "shot_video"
                     prompt: parsed.prompt,
                     queueName: "documentary_jobs",
-                    sourceApp: parsed.metadata?.sourceApp || "Animated Shorts",
-                    projectTitle: parsed.metadata?.title || "Kids Story Project",
+                    sourceApp: parsed.metadata?.sourceApp || "Film Factory Studio",
+                    projectTitle: parsed.metadata?.title || (parsed.metadata?.characterName ? `${parsed.metadata.characterName} (Cast Portrait)` : "Film Factory Project"),
                     status: "QUEUED",
                     rawString: item
                 });
@@ -83,8 +83,8 @@ export async function GET(req: NextRequest) {
                     type: dbJob.jobType,
                     prompt: dbJob.prompt || "N/A",
                     queueName: "documentary_jobs",
-                    sourceApp: meta?.sourceApp || "Animated Shorts",
-                    projectTitle: meta?.title || "Kids Story Project",
+                    sourceApp: meta?.sourceApp || "Film Factory Studio",
+                    projectTitle: meta?.title || (meta?.characterName ? `${meta.characterName} (Cast Portrait)` : "Film Factory Project"),
                     status: dbJob.status, // "QUEUED" or "PROCESSING"
                 });
             }

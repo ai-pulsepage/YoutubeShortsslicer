@@ -157,6 +157,7 @@ CRITICAL RULES:
 1. Summarize the series premise into a clean 1 to 2 sentence summary in "premise".
 2. Define a Cast Roster containing ALL characters mentioned or implied (up to 10 characters). Include every protagonist, antagonist, family member, and key figure with concise physical profiles.
 3. You MUST outline ALL ${numEp} episodes with titles, loglines, and dramatic cliffhangers.
+4. IF THE USER PROMPT SPECIFIES AN EPISODE ARC (e.g., Ep. 1, Ep. 2, Ep. 3...), YOU MUST STRICTLY KEEP EACH EPISODE'S EVENTS SEPARATED EXACTLY AS DEFINED BY THE USER! Episode 1 MUST contain ONLY Episode 1's events (e.g. engagement party & lingering look). Do NOT pull forward plot events or private confrontations from Episode 2 into Episode 1's logline!
 
 Return ONLY valid JSON matching this schema:
 {
@@ -238,7 +239,10 @@ CRITICAL DRAMATIC SCENE RULES:
 1. NO NARRATOR VOICEOVER. Story is driven 100% by character interaction, scene setup, action, and dialogue beats.
 2. At least 30% of shots MUST be non-dialogue beats (wide environmental establishing shots, camera movement cuts, facial reactions, atmospheric mood).
 3. Scenes MUST follow a 5-beat dramatic arc: Atmosphere ➔ Baseline Entrance ➔ Inciting Tension ➔ Escalation/Climax ➔ Reaction/Transition.
-4. Episode ${epOutline.episodeNumber} MUST start at its own UNIQUE location and setting matching its logline: "${epOutline.logline}". Do NOT repeat establishing shots or ballroom scenes from Episode 1!
+4. ${epOutline.episodeNumber === 1
+    ? `Episode 1 MUST focus ONLY on its logline: "${epOutline.logline}". End Episode 1 with the cliffhanger: "${epOutline.cliffhanger}". Do NOT include private study confrontations or accusations that belong to Episode 2!`
+    : `Episode ${epOutline.episodeNumber} MUST start at its own UNIQUE location matching its logline: "${epOutline.logline}". Do NOT repeat establishing shots, scenes, or dialogue from Episode ${epOutline.episodeNumber - 1}!`
+}
 5. Write 12 to 18 visual shots for this episode.
 
 For each shot specify:
