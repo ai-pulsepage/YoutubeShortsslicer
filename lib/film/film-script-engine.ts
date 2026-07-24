@@ -117,10 +117,11 @@ ${arcBlueprint}
 
 CRITICAL RULES:
 1. NO NARRATOR VOICEOVER. The story is driven 100% by character dialogue, character action beats, and emotional conflict.
-2. Define a Cast Roster of 2 to 4 vivid characters with physical profiles.
-3. Write ${numEp} episodes. Each episode must have EXACTLY ${shotsPerEp} consecutive visual shots.
-4. The final episode MUST resolve the central conflict. Do NOT leave the main story open-ended.
-5. Each shot must specify:
+2. Define a Cast Roster containing ALL characters mentioned in the concept (up to 10 characters). Include every protagonist, antagonist, family member, and secret keeper with vivid physical profiles.
+3. Write ${numEp} episodes. Each episode MUST contain 5 to 8 distinct Scenes across 2 to 3 distinct location changes (e.g. Ballroom, Study, Balcony, Dressing Room, Vault).
+4. Each episode must contain 12 to 18 visual shots.
+5. The final episode MUST resolve the central conflict completely across all storylines.
+6. Each shot must specify:
    - "shotType": e.g. "close-up", "medium shot", "over-the-shoulder", "action cut"
    - "speakerName": Character speaking (if dialogue beat)
    - "dialogueLine": Character spoken line (with emotional tag like [excited], [angry], [whispering])
@@ -230,13 +231,25 @@ Return ONLY valid JSON matching this schema:
         const hasAndres = concept.includes("Andrés") || concept.includes("Andres");
 
         const dynamicCast = hasDanilo ? [
-            { name: "Danilo Aguirre", role: "PROTAGONIST", physicalProfile: "58yo silver-haired patriarch, tailored charcoal suit, stern mustache, cold dark eyes" },
-            { name: "Maria Teresa", role: "PROTAGONIST", physicalProfile: "54yo elegant matriarch, pearls, hair pinned up, composed guarded expression" },
-            { name: "Camila", role: "PROTAGONIST", physicalProfile: "25yo bride, sharp features, wearing an elaborate white silk gown" },
-            { name: "Andrés", role: "ANTAGONIST", physicalProfile: "28yo ambitious fiancé, slicked dark hair, navy tuxedo, subtle smirk" }
+            { name: "Danilo Aguirre", role: "PROTAGONIST", physicalProfile: "58yo silver-haired patriarch, self-made wealth, tailored charcoal suit, stern mustache, cold dark eyes" },
+            { name: "Maria Teresa Aguirre", role: "PROTAGONIST", physicalProfile: "54yo elegant matriarch, pearls, hair pinned up, composed guarded expression" },
+            { name: "Camila", role: "PROTAGONIST", physicalProfile: "25yo elder daughter, bride-to-be, sharp features, wearing an elaborate white silk gown" },
+            { name: "Valentina", role: "PROTAGONIST", physicalProfile: "21yo younger daughter, sharp suspicious gaze, wearing dark velvet dress" },
+            { name: "Andrés", role: "ANTAGONIST", physicalProfile: "28yo ambitious fiancé, slicked dark hair, navy tuxedo, subtle smirk" },
+            { name: "Renata", role: "ANTAGONIST", physicalProfile: "50yo former lover, sharp red lipstick, dark trench coat, calculating eyes" },
+            { name: "Ignacio", role: "SUPPORTING", physicalProfile: "56yo Maria Teresa's brother, weary face, tailored tweed vest, holding vintage leather pocketbook" }
         ] : [
             { name: "Protagonist", role: "PROTAGONIST", physicalProfile: "Intense eyes, dark leather jacket, determined expression" },
             { name: "Antagonist", role: "ANTAGONIST", physicalProfile: "Sharp suit, cold calculating gaze, metallic cybernetic eye" }
+        ];
+
+        const sceneLocations = [
+            { name: "Mansion Grand Ballroom", env: "extravagant Aguirre estate ballroom, crystal chandeliers, moonlight glowing through stained glass" },
+            { name: "Patriarch's Study", env: "dimly lit study with mahogany bookshelves and glowing marble fireplace" },
+            { name: "Outdoor Veranda", env: "night garden balcony overlooking misty estate grounds, soft accent lamps" },
+            { name: "Camila's Dressing Room", env: "private dressing suite, ornate vanity mirrors reflecting emotional tension" },
+            { name: "Estate Library Vault", env: "secret basement library vault, antique iron safes and stacks of vintage ledgers" },
+            { name: "Courtyard Fountain", env: "secluded stone courtyard with trickling fountain, shadows under cypress trees" }
         ];
 
         rawOutput = {
@@ -248,34 +261,42 @@ Return ONLY valid JSON matching this schema:
             episodes: Array.from({ length: numEp }).map((_, epIdx) => {
                 const rawTitle = parsedEpTitles[epIdx] || defaultTitles[epIdx % defaultTitles.length];
                 const epTitle = rawTitle.startsWith("Episode") ? rawTitle : `Episode ${epIdx + 1}: ${rawTitle}`;
-                const char1 = dynamicCast[0].name;
-                const char2 = dynamicCast[dynamicCast.length > 1 ? 1 : 0].name;
+
+                // Generate 6 distinct scenes (12 shots) per episode
+                const episodeShots: any[] = [];
+                let currentShotIndex = 1;
+
+                sceneLocations.forEach((loc, locIdx) => {
+                    const speaker1 = dynamicCast[locIdx % dynamicCast.length].name;
+                    const speaker2 = dynamicCast[(locIdx + 1) % dynamicCast.length].name;
+
+                    episodeShots.push({
+                        shotIndex: currentShotIndex++,
+                        shotType: locIdx % 2 === 0 ? "wide shot" : "medium shot",
+                        speakerName: speaker1,
+                        dialogueLine: locIdx % 2 === 0 ? `[determined] This family's honor will not be destroyed by hidden truths.` : `[shocked] How long have you kept this secret from us?`,
+                        actionDescription: locIdx % 2 === 0 ? `stepping forward in the ${loc.name}, clutching cognac glass` : "gasps in disbelief, stepping back towards the window",
+                        environment: loc.env,
+                        cameraMovement: "slow crane push-in"
+                    });
+
+                    episodeShots.push({
+                        shotIndex: currentShotIndex++,
+                        shotType: "close-up",
+                        speakerName: speaker2,
+                        dialogueLine: locIdx % 2 === 0 ? `[smirking] You don't know half of what occurred 20 years ago.` : `[whispering] Keep your voice down. The walls have ears in this house.`,
+                        actionDescription: locIdx % 2 === 0 ? "adjusting dark silk tie with a calm confident posture" : "stepping out from shadow, holding an unsealed vintage letter",
+                        environment: loc.env,
+                        cameraMovement: "static intense character shot"
+                    });
+                });
 
                 return {
                     episodeNumber: epIdx + 1,
                     title: epTitle,
                     logline: `Episode ${epIdx + 1} of ${title}: High stakes and dramatic secrets unfold regarding ${rawTitle}.`,
-                    cliffhanger: `A shocking revelation regarding ${rawTitle} leaves everyone stunned.`,
-                    shots: [
-                        {
-                            shotIndex: 1,
-                            shotType: epIdx % 2 === 0 ? "wide shot" : "medium shot",
-                            speakerName: char1,
-                            dialogueLine: epIdx % 2 === 0 ? `[determined] This family's legacy will not be destroyed by secrets.` : `[shocked] How long have you known about this?`,
-                            actionDescription: epIdx % 2 === 0 ? "stepping forward into the estate grand hall, clutching champagne glass" : "gasps in disbelief, stepping back towards the balcony rail",
-                            environment: epIdx % 2 === 0 ? "extravagant estate ballroom, moonlight glowing through stained glass" : "private dressing room, vanity mirrors reflecting emotional tension",
-                            cameraMovement: "slow crane push-in"
-                        },
-                        {
-                            shotIndex: 2,
-                            shotType: "close-up",
-                            speakerName: char2,
-                            dialogueLine: epIdx % 2 === 0 ? `[smirking] You don't know half of what happened 20 years ago.` : `[whispering] Keep your voice down. Someone is watching us.`,
-                            actionDescription: epIdx % 2 === 0 ? "adjusting dark silk tie with a calm confident posture" : "stepping out from shadow, clutching a locked velvet envelope",
-                            environment: "dimly lit study with mahogany bookshelves and glowing fireplace",
-                            cameraMovement: "static intense hero shot"
-                        }
-                    ]
+                    cliffhanger: `A shocking revelation regarding ${rawTitle} leaves the Aguirre family stunned.`,
+                    shots: episodeShots
                 };
             })
         };
