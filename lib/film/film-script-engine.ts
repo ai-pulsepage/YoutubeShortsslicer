@@ -262,7 +262,7 @@ Return ONLY valid JSON matching this schema:
                 const rawTitle = parsedEpTitles[epIdx] || defaultTitles[epIdx % defaultTitles.length];
                 const epTitle = rawTitle.startsWith("Episode") ? rawTitle : `Episode ${epIdx + 1}: ${rawTitle}`;
 
-                // Generate 6 distinct scenes (12 shots) per episode
+                // Generate 6 distinct scenes with 6 shots per scene (36 shots = 180s = 3 minutes total per episode)
                 const episodeShots: any[] = [];
                 let currentShotIndex = 1;
 
@@ -270,24 +270,70 @@ Return ONLY valid JSON matching this schema:
                     const speaker1 = dynamicCast[locIdx % dynamicCast.length].name;
                     const speaker2 = dynamicCast[(locIdx + 1) % dynamicCast.length].name;
 
+                    // Shot 1: Wide establishing shot
                     episodeShots.push({
                         shotIndex: currentShotIndex++,
-                        shotType: locIdx % 2 === 0 ? "wide shot" : "medium shot",
+                        shotType: "wide shot",
                         speakerName: speaker1,
-                        dialogueLine: locIdx % 2 === 0 ? `[determined] This family's honor will not be destroyed by hidden truths.` : `[shocked] How long have you kept this secret from us?`,
-                        actionDescription: locIdx % 2 === 0 ? `stepping forward in the ${loc.name}, clutching cognac glass` : "gasps in disbelief, stepping back towards the window",
+                        dialogueLine: `[determined] Welcome to the ${loc.name}. Secrets don't stay hidden forever.`,
+                        actionDescription: `stepping forward into the ${loc.name}, clutching glass`,
                         environment: loc.env,
                         cameraMovement: "slow crane push-in"
                     });
 
+                    // Shot 2: Medium dialogue beat
+                    episodeShots.push({
+                        shotIndex: currentShotIndex++,
+                        shotType: "medium shot",
+                        speakerName: speaker2,
+                        dialogueLine: `[shocked] You shouldn't have come here. Someone is watching us.`,
+                        actionDescription: "turning around quickly, looking over shoulder with wide eyes",
+                        environment: loc.env,
+                        cameraMovement: "gentle tracking pan"
+                    });
+
+                    // Shot 3: Close-up intense moment
                     episodeShots.push({
                         shotIndex: currentShotIndex++,
                         shotType: "close-up",
-                        speakerName: speaker2,
-                        dialogueLine: locIdx % 2 === 0 ? `[smirking] You don't know half of what occurred 20 years ago.` : `[whispering] Keep your voice down. The walls have ears in this house.`,
-                        actionDescription: locIdx % 2 === 0 ? "adjusting dark silk tie with a calm confident posture" : "stepping out from shadow, holding an unsealed vintage letter",
+                        speakerName: speaker1,
+                        dialogueLine: `[whispering] Tell me what happened 20 years ago, or I reveal everything.`,
+                        actionDescription: "gasping in emotional confrontation, eyes narrowing in anger",
                         environment: loc.env,
-                        cameraMovement: "static intense character shot"
+                        cameraMovement: "static tight lens focus"
+                    });
+
+                    // Shot 4: Over-the-shoulder confrontation
+                    episodeShots.push({
+                        shotIndex: currentShotIndex++,
+                        shotType: "over-the-shoulder",
+                        speakerName: speaker2,
+                        dialogueLine: `[angry] You don't know half of what this family sacrificed for you!`,
+                        actionDescription: "stepping forward aggressively, pointing finger",
+                        environment: loc.env,
+                        cameraMovement: "whip pan to speaker"
+                    });
+
+                    // Shot 5: Reaction beat
+                    episodeShots.push({
+                        shotIndex: currentShotIndex++,
+                        shotType: "close-up",
+                        speakerName: speaker1,
+                        dialogueLine: `[crying] I knew it... the whole marriage was built on a lie.`,
+                        actionDescription: "holding face in hands, tear glistening on cheek",
+                        environment: loc.env,
+                        cameraMovement: "slow zoom-in"
+                    });
+
+                    // Shot 6: Transition / Exit cut
+                    episodeShots.push({
+                        shotIndex: currentShotIndex++,
+                        shotType: "tracking shot",
+                        speakerName: speaker2,
+                        dialogueLine: `[cold] This discussion is over.`,
+                        actionDescription: "turning around and walking away into the shadows",
+                        environment: loc.env,
+                        cameraMovement: "fast exit tracking pan"
                     });
                 });
 
