@@ -4,38 +4,39 @@ import { prisma } from "@/lib/prisma";
 import { generateCinematicShow } from "@/lib/film/film-script-engine";
 import { dispatchJob } from "@/lib/documentary/redis-client";
 
-export async function POST(req: NextRequest) {
-    const session = await auth();
-    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const { title, concept, genre, subStyle, numEpisodes, targetEpisodeMinutes, videoModel, voiceEngine } = await req.json();
-
-    if (!title || !concept) {
-        return NextResponse.json({ error: "title and concept are required" }, { status: 400 });
-    }
-
+async function processShowGenerationInBackground(params: {
+    docId: string;
+    title: string;
+    concept: string;
+    genre: any;
+    subStyle: any;
+    numEpisodes: number;
+    targetEpisodeMinutes: number;
+    videoModel: string;
+    voiceEngine: string;
+}) {
     try {
+        const { docId, title, concept, genre, subStyle, numEpisodes, targetEpisodeMinutes, videoModel, voiceEngine } = params;
+
         // 1. Generate full Multi-Episode Series using Cinematic Film Script Engine
         const showResult = await generateCinematicShow({
             title,
             concept,
             genre: genre || "dystopian_scifi",
             subStyle: subStyle || "default",
-            numEpisodes: parseInt(numEpisodes) || 3,
-            targetEpisodeMinutes: parseInt(targetEpisodeMinutes) || 3,
+            numEpisodes: numEpisodes || 3,
+            targetEpisodeMinutes: targetEpisodeMinutes || 3,
             videoModel: videoModel || "wan2.3",
             voiceEngine: voiceEngine || "cosyvoice2",
         });
 
-        // 2. Save parent Show / Project in database
-        const parentDoc = await prisma.documentary.create({
+        // 2. Save script, scenes, shots, and cast assets in database
+        const updatedDoc = await prisma.documentary.update({
+            where: { id: docId },
             data: {
-                userId: session.user.id,
                 title: `${showResult.showTitle} (Mini-Series)`,
                 genre: showResult.genre,
                 subStyle: showResult.subStyle,
-                visualMode: "full_ai_video",
-                status: "GENERATING",
                 script: JSON.stringify(showResult),
                 scenes: {
                     create: showResult.episodes.map((ep) => ({
@@ -65,30 +66,18 @@ export async function POST(req: NextRequest) {
                         prompt: char.physicalProfile
                     }))
                 }
-            }
-        });
-
-        // Query database to resolve created Scenes, Shots, and Assets
-        const createdDoc = await prisma.documentary.findUnique({
-            where: { id: parentDoc.id },
+            },
             include: {
-                scenes: {
-                    include: { shots: { orderBy: { shotIndex: "asc" } } }
-                },
+                scenes: { include: { shots: { orderBy: { shotIndex: "asc" } } } },
                 assets: true
             }
         });
-        if (!createdDoc) {
-            throw new Error("Failed to retrieve created documentary project.");
-        }
 
-        const dispatchedJobs = [];
-
-        // 3. Dispatch character reference image jobs (FLUX 1.1 Pro + PuLID) for all cast assets
-        for (const asset of createdDoc.assets || []) {
-            const assetPrompt = `High-resolution studio portrait photo of ${asset.label} (${asset.description}), cinematic lighting, 8k, detailed facial features, professional photography`;
+        // 3. Dispatch character reference image jobs
+        for (const asset of updatedDoc.assets) {
+            const assetPrompt = `Master character portrait, close-up face shot of ${asset.label}: ${asset.description}. 8k resolution, crisp facial details, cinematic lighting.`;
             const imageMetadata = {
-                docId: parentDoc.id,
+                docId: updatedDoc.id,
                 assetId: asset.id,
                 characterName: asset.label,
                 sourceApp: "Film Factory Studio",
@@ -97,7 +86,7 @@ export async function POST(req: NextRequest) {
 
             const assetJob = await prisma.genJob.create({
                 data: {
-                    documentaryId: parentDoc.id,
+                    documentaryId: updatedDoc.id,
                     jobType: "ref_image",
                     prompt: assetPrompt,
                     status: "QUEUED",
@@ -107,30 +96,29 @@ export async function POST(req: NextRequest) {
 
             await dispatchJob({
                 jobId: assetJob.id,
-                documentaryId: parentDoc.id,
+                documentaryId: updatedDoc.id,
                 type: "ref_image",
                 prompt: assetPrompt,
                 referenceImages: [],
                 metadata: imageMetadata
             });
-            dispatchedJobs.push(assetJob);
         }
 
-        // 4. Dispatch ALL 30+ shots for each episode so the Queue Monitor shows the true full queue
+        // 4. Dispatch ALL 30+ shots for each episode
         for (const ep of showResult.episodes) {
-            const dbScene = createdDoc.scenes.find(s => s.sceneIndex === ep.episodeNumber);
+            const dbScene = updatedDoc.scenes.find(s => s.sceneIndex === ep.episodeNumber);
             if (!dbScene) continue;
 
             for (const shot of ep.shots) {
                 const dbShot = dbScene.shots.find(s => s.shotIndex === shot.shotIndex);
                 if (!dbShot) continue;
 
-                const r2Key = `shows/${parentDoc.id}/scene_${dbScene.id}_shot_${dbShot.id}.mp4`;
+                const r2Key = `shows/${updatedDoc.id}/scene_${dbScene.id}_shot_${dbShot.id}.mp4`;
                 const jobMetadata = {
-                    docId: parentDoc.id,
+                    docId: updatedDoc.id,
                     sceneId: dbScene.id,
                     shotId: dbShot.id,
-                    title: parentDoc.title,
+                    title: updatedDoc.title,
                     episodeNumber: ep.episodeNumber,
                     shotIndex: shot.shotIndex,
                     sourceApp: "Film Factory Studio",
@@ -141,7 +129,7 @@ export async function POST(req: NextRequest) {
 
                 const genJob = await prisma.genJob.create({
                     data: {
-                        documentaryId: parentDoc.id,
+                        documentaryId: updatedDoc.id,
                         jobType: "shot_video",
                         prompt: shot.kinematicPrompt || shot.actionDescription,
                         status: "QUEUED",
@@ -152,25 +140,73 @@ export async function POST(req: NextRequest) {
 
                 await dispatchJob({
                     jobId: genJob.id,
-                    documentaryId: parentDoc.id,
+                    documentaryId: updatedDoc.id,
                     type: "shot_video",
                     prompt: shot.kinematicPrompt || shot.actionDescription,
                     referenceImages: [],
                     metadata: jobMetadata
                 });
-                dispatchedJobs.push(genJob);
             }
         }
 
-        return NextResponse.json({
-            success: true,
-            showId: parentDoc.id,
-            title: parentDoc.title,
-            dispatchedJobsCount: dispatchedJobs.length,
-            show: showResult
+        // Update project status to SCENES_PLANNED
+        await prisma.documentary.update({
+            where: { id: docId },
+            data: { status: "SCENES_PLANNED" }
         });
     } catch (err: any) {
-        console.error("[Shows API] Failed to generate show:", err);
-        return NextResponse.json({ error: "Failed to generate show", details: err.message }, { status: 500 });
+        console.error("[Shows API] Background generation failed:", err);
+        await prisma.documentary.update({
+            where: { id: params.docId },
+            data: { status: "FAILED" }
+        }).catch(() => {});
+    }
+}
+
+export async function POST(req: NextRequest) {
+    const session = await auth();
+    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const { title, concept, genre, subStyle, numEpisodes, targetEpisodeMinutes, videoModel, voiceEngine } = await req.json();
+
+    if (!title || !concept) {
+        return NextResponse.json({ error: "title and concept are required" }, { status: 400 });
+    }
+
+    try {
+        // Create initial placeholder project immediately
+        const initialDoc = await prisma.documentary.create({
+            data: {
+                userId: session.user.id,
+                title: `${title} (Mini-Series)`,
+                genre: genre || "romance_telenovela",
+                subStyle: subStyle || "default",
+                visualMode: "full_ai_video",
+                status: "GENERATING"
+            }
+        });
+
+        // Trigger background processing asynchronously (non-blocking)
+        processShowGenerationInBackground({
+            docId: initialDoc.id,
+            title,
+            concept,
+            genre: genre || "romance_telenovela",
+            subStyle: subStyle || "default",
+            numEpisodes: parseInt(numEpisodes) || 3,
+            targetEpisodeMinutes: parseInt(targetEpisodeMinutes) || 3,
+            videoModel: videoModel || "wan2.3",
+            voiceEngine: voiceEngine || "cosyvoice2"
+        }).catch(err => console.error("Background task launch error:", err));
+
+        // Return showId immediately so the frontend navigates without waiting
+        return NextResponse.json({
+            success: true,
+            showId: initialDoc.id,
+            message: "Show creation launched in background"
+        });
+    } catch (error: any) {
+        console.error("[Shows API] Failed to initiate show:", error);
+        return NextResponse.json({ error: error.message || "Failed to create show" }, { status: 500 });
     }
 }

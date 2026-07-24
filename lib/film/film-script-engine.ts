@@ -1,5 +1,6 @@
 import { buildKinematicPrompt } from "@/lib/ai/prompt-builder";
 import { prisma } from "@/lib/prisma";
+import { logAiActivity } from "@/lib/logging/ai-logger";
 
 export interface CharacterActor {
     name: string;
@@ -45,6 +46,65 @@ export interface MiniSeriesOutput {
     premise: string;
     cast: CharacterActor[];
     episodes: FilmEpisode[];
+}
+
+// Robust repair for truncated JSON outputs from AI models
+function repairTruncatedJson<T = any>(rawText: string): { data: T; repaired: boolean } {
+    let cleanText = rawText.trim();
+    if (cleanText.startsWith("```")) {
+        cleanText = cleanText.replace(/^```json\s*/, "").replace(/^```\s*/, "").replace(/\s*```$/, "").trim();
+    }
+
+    try {
+        const data = JSON.parse(cleanText);
+        return { data, repaired: false };
+    } catch {
+        let fixed = cleanText;
+        const lastObjectEnd = fixed.lastIndexOf("}");
+        if (lastObjectEnd > 0) {
+            fixed = fixed.substring(0, lastObjectEnd + 1);
+        }
+
+        let openBrackets = 0;
+        let openBraces = 0;
+        let inString = false;
+        let escapeNext = false;
+
+        for (let i = 0; i < fixed.length; i++) {
+            const char = fixed[i];
+            if (escapeNext) { escapeNext = false; continue; }
+            if (char === "\\") { escapeNext = true; continue; }
+            if (char === '"') { inString = !inString; continue; }
+            if (!inString) {
+                if (char === "{") openBraces++;
+                else if (char === "}") openBraces = Math.max(0, openBraces - 1);
+                else if (char === "[") openBrackets++;
+                else if (char === "]") openBrackets = Math.max(0, openBrackets - 1);
+            }
+        }
+
+        if (inString) fixed += '"';
+        while (openBrackets > 0) { fixed += "]"; openBrackets--; }
+        while (openBraces > 0) { fixed += "}"; openBraces--; }
+
+        try {
+            const data = JSON.parse(fixed);
+            return { data, repaired: true };
+        } catch {
+            const shotsMatch = [...cleanText.matchAll(/\{[^{}]*"shotIndex"[^{}]*\}/g)];
+            if (shotsMatch.length > 0) {
+                const recoveredShots = shotsMatch.map(m => {
+                    try { return JSON.parse(m[0]); } catch { return null; }
+                }).filter(Boolean);
+                
+                return {
+                    data: { shots: recoveredShots } as any,
+                    repaired: true
+                };
+            }
+            throw new Error(`Unrepairable JSON output from AI (truncated at char ${cleanText.length})`);
+        }
+    }
 }
 
 // Helper to query DB API keys
@@ -120,6 +180,12 @@ Return ONLY valid JSON matching this schema:
   ]
 }`;
 
+    logAiActivity("MASTER_BLUEPRINT_REQUEST", {
+        promptTitle: title,
+        systemPrompt: "You are a master cinematic showrunner. Return valid JSON only.",
+        userPrompt: masterPrompt
+    });
+
     const masterRes = await fetch("https://api.deepseek.com/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -140,18 +206,24 @@ Return ONLY valid JSON matching this schema:
 
     if (!masterRes.ok) {
         const errText = await masterRes.text();
+        logAiActivity("MASTER_BLUEPRINT_ERROR", { promptTitle: title, error: errText });
         throw new Error(`DeepSeek API Blueprint Generation Error (HTTP ${masterRes.status}): ${errText}`);
     }
 
     const masterData = await masterRes.json();
-    let masterText = masterData.choices?.[0]?.message?.content?.trim() || "";
-    if (masterText.startsWith("```")) {
-        masterText = masterText.replace(/^```json\s*/, "").replace(/^```\s*/, "").replace(/\s*```$/, "");
+    const masterText = masterData.choices?.[0]?.message?.content?.trim() || "";
+
+    logAiActivity("MASTER_BLUEPRINT_RESPONSE", {
+        promptTitle: title,
+        rawResponse: masterText
+    });
+
+    const { data: masterBlueprint, repaired: blueprintRepaired } = repairTruncatedJson<MiniSeriesOutput>(masterText);
+    if (blueprintRepaired) {
+        logAiActivity("MASTER_BLUEPRINT_REPAIRED", { promptTitle: title, repaired: true });
     }
 
-    const masterBlueprint: MiniSeriesOutput = JSON.parse(masterText);
-
-    // Step 2: Generate Episode Screenplay in Chunks per Episode (Lightweight: 2048 max_tokens per Episode)
+    // Step 2: Generate Episode Screenplay in Chunks per Episode (4096 max_tokens per Episode)
     const fullEpisodes: FilmEpisode[] = [];
 
     for (const epOutline of masterBlueprint.episodes || []) {
@@ -196,6 +268,12 @@ Return ONLY valid JSON matching this schema:
   ]
 }`;
 
+        logAiActivity(`EPISODE_${epOutline.episodeNumber}_REQUEST`, {
+            promptTitle: `${masterBlueprint.showTitle} - Episode ${epOutline.episodeNumber}`,
+            systemPrompt: "You are a master cinematic director. Return valid JSON only.",
+            userPrompt: epPrompt
+        });
+
         const epRes = await fetch("https://api.deepseek.com/v1/chat/completions", {
             method: "POST",
             headers: {
@@ -210,22 +288,35 @@ Return ONLY valid JSON matching this schema:
                     { role: "user", content: epPrompt },
                 ],
                 temperature: 0.7,
-                max_tokens: 2048,
+                max_tokens: 4096,
             }),
         });
 
         if (!epRes.ok) {
             const errText = await epRes.text();
+            logAiActivity(`EPISODE_${epOutline.episodeNumber}_ERROR`, {
+                promptTitle: `${masterBlueprint.showTitle} - Episode ${epOutline.episodeNumber}`,
+                error: errText
+            });
             throw new Error(`DeepSeek API Episode ${epOutline.episodeNumber} Generation Error (HTTP ${epRes.status}): ${errText}`);
         }
 
         const epData = await epRes.json();
-        let epText = epData.choices?.[0]?.message?.content?.trim() || "";
-        if (epText.startsWith("```")) {
-            epText = epText.replace(/^```json\s*/, "").replace(/^```\s*/, "").replace(/\s*```$/, "");
+        const epText = epData.choices?.[0]?.message?.content?.trim() || "";
+
+        logAiActivity(`EPISODE_${epOutline.episodeNumber}_RESPONSE`, {
+            promptTitle: `${masterBlueprint.showTitle} - Episode ${epOutline.episodeNumber}`,
+            rawResponse: epText
+        });
+
+        const { data: epResult, repaired: epRepaired } = repairTruncatedJson<FilmEpisode>(epText);
+        if (epRepaired) {
+            logAiActivity(`EPISODE_${epOutline.episodeNumber}_REPAIRED`, {
+                promptTitle: `${masterBlueprint.showTitle} - Episode ${epOutline.episodeNumber}`,
+                repaired: true
+            });
         }
 
-        const epResult: FilmEpisode = JSON.parse(epText);
         fullEpisodes.push(epResult);
     }
 

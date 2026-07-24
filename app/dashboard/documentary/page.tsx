@@ -108,13 +108,24 @@ export default function DocumentaryPage() {
                         {documentaries.length} project{documentaries.length !== 1 ? "s" : ""}
                     </p>
                 </div>
-                <button
-                    onClick={() => setShowCreateModal(true)}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-500 hover:to-blue-500 text-white transition-all shadow-lg shadow-violet-500/20"
-                >
-                    <Plus className="w-4 h-4" />
-                    New Movie Project
-                </button>
+                <div className="flex items-center gap-2">
+                    <a
+                        href="/api/admin/logs/ai"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 transition-colors"
+                        title="Download AI Generation Log File"
+                    >
+                        📄 Download AI Log
+                    </a>
+                    <button
+                        onClick={() => setShowCreateModal(true)}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-500 hover:to-blue-500 text-white transition-all shadow-lg shadow-violet-500/20"
+                    >
+                        <Plus className="w-4 h-4" />
+                        New Movie Project
+                    </button>
+                </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
@@ -774,15 +785,21 @@ function CreateDocumentaryModal({
                             </div>
                         )}
                         <div className="flex-1">
-                            <label className="block text-[10px] font-medium text-gray-500 mb-1">Narrator</label>
-                            <select value={narratorStyle} onChange={(e) => setNarratorStyle(e.target.value)}
-                                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500">
-                                <option value="sleep">Sleep (slow pauses)</option>
-                                <option value="documentary">Documentary</option>
-                                <option value="dramatic">Dramatic</option>
-                                <option value="energetic">Energetic</option>
-                                <option value="conversational">Conversational</option>
-                            </select>
+                            <label className="block text-[10px] font-medium text-gray-500 mb-1">Narrator & Story Mode</label>
+                            {mode === "shows" ? (
+                                <div className="w-full bg-violet-955/40 border border-violet-800/40 rounded-lg px-2.5 py-1.5 text-xs text-violet-300 font-semibold flex items-center gap-1.5">
+                                    <span>🎭 Character Dialogue Driven (No Narrator)</span>
+                                </div>
+                            ) : (
+                                <select value={narratorStyle} onChange={(e) => setNarratorStyle(e.target.value)}
+                                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500">
+                                    <option value="sleep">Sleep (slow pauses)</option>
+                                    <option value="documentary">Documentary</option>
+                                    <option value="dramatic">Dramatic</option>
+                                    <option value="energetic">Energetic</option>
+                                    <option value="conversational">Conversational</option>
+                                </select>
+                            )}
                         </div>
                         <label className="flex items-center gap-1.5 cursor-pointer pb-1">
                             <input type="checkbox" checked={useBRoll} onChange={(e) => setUseBRoll(e.target.checked)}
