@@ -71,9 +71,8 @@ export const VISUAL_MODE_OPTIONS = [
 // ─── Image Model Options ───────────────────────────────
 
 export const IMAGE_MODEL_OPTIONS = [
-    { id: "chroma", label: "Chroma FP16 (Uncensored)", description: "Best for horror, mature, and unrestricted content. Apache 2.0, 8.9B params." },
-    { id: "flux", label: "Flux (Standard)", description: "Fast, safe-content generation. Great for education, children's, nature." },
-    { id: "juggernaut", label: "Juggernaut XL (Photorealistic)", description: "Best skin tones and photorealism. Great for true crime, biography, documentary." },
+    { id: "flux", label: "FLUX 1.1 Pro + PuLID (Face Anchored)", description: "State-of-the-art zero-shot face identity preservation and high-fidelity photorealism." },
+    { id: "chroma", label: "Chroma FP16 (Uncensored)", description: "Best for mature, unrestricted, and dark atmospheric content. 8.9B params." },
 ] as const;
 
 // ─── Audience Presets ───────────────────────────────────
@@ -203,25 +202,25 @@ export const GENRES: GenreDef[] = [
                 id: "forensic_files",
                 label: "Forensic Files",
                 promptBlock: "You are narrating a Forensic Files episode. Focus on the physical evidence — fibers, blood spatter, chemical analysis. Be clinical and precise. Let the science solve the crime. Use a steady, authoritative tone that slowly builds the case to an inevitable conclusion.",
-                defaults: { narratorStyle: "documentary", musicMood: "dark_ambient", useBRoll: true, useKenBurns: true, visualMode: "chapter_illustrations", imageModel: "juggernaut", pacing: "standard", audience: "adults", perspective: "omniscient", ending: "ai_decide", contentMode: "factual" },
+                defaults: { narratorStyle: "documentary", musicMood: "dark_ambient", useBRoll: true, useKenBurns: true, visualMode: "chapter_illustrations", imageModel: "flux", pacing: "standard", audience: "adults", perspective: "omniscient", ending: "ai_decide", contentMode: "factual" },
             },
             {
                 id: "unsolved_mysteries",
                 label: "Unsolved Mysteries",
                 promptBlock: "You are narrating an Unsolved Mysteries-style episode. Build atmospheric dread. Present the known facts, then linger on what remains unexplained. Use phrases like 'To this day, no one knows...' and 'The case remains open.' Leave the listener genuinely unsettled.",
-                defaults: { narratorStyle: "dramatic", musicMood: "dark_ambient", useBRoll: true, useKenBurns: true, visualMode: "chapter_illustrations", imageModel: "juggernaut", pacing: "slow", audience: "adults", perspective: "omniscient", ending: "cliffhanger", contentMode: "factual" },
+                defaults: { narratorStyle: "dramatic", musicMood: "dark_ambient", useBRoll: true, useKenBurns: true, visualMode: "chapter_illustrations", imageModel: "flux", pacing: "slow", audience: "adults", perspective: "omniscient", ending: "cliffhanger", contentMode: "factual" },
             },
             {
                 id: "making_murderer",
                 label: "Making a Murderer",
                 promptBlock: "You are narrating a deep-dive investigative documentary. Question the justice system. Present both sides but let contradictions speak for themselves. Use court transcripts, timeline discrepancies, and witness inconsistencies to build tension. The listener should question everything.",
-                defaults: { narratorStyle: "documentary", musicMood: "ambient", useBRoll: true, useKenBurns: true, visualMode: "chapter_illustrations", imageModel: "juggernaut", pacing: "standard", audience: "adults", perspective: "investigator", ending: "reflective", contentMode: "factual" },
+                defaults: { narratorStyle: "documentary", musicMood: "ambient", useBRoll: true, useKenBurns: true, visualMode: "chapter_illustrations", imageModel: "flux", pacing: "standard", audience: "adults", perspective: "investigator", ending: "reflective", contentMode: "factual" },
             },
             {
                 id: "cold_case",
                 label: "Cold Case Files",
                 promptBlock: "You are reopening a cold case. Start with the original incident, then jump to years later when new evidence emerges. Build dramatic irony — the listener knows things the original investigators didn't. Use time jumps effectively. The passage of time is a character in this story.",
-                defaults: { narratorStyle: "documentary", musicMood: "dark_ambient", useBRoll: true, useKenBurns: true, visualMode: "chapter_illustrations", imageModel: "juggernaut", pacing: "standard", audience: "adults", perspective: "investigator", ending: "ai_decide", contentMode: "factual" },
+                defaults: { narratorStyle: "documentary", musicMood: "dark_ambient", useBRoll: true, useKenBurns: true, visualMode: "chapter_illustrations", imageModel: "flux", pacing: "standard", audience: "adults", perspective: "investigator", ending: "ai_decide", contentMode: "factual" },
             },
         ],
     },
@@ -279,7 +278,7 @@ export const GENRES: GenreDef[] = [
                 id: "ken_burns",
                 label: "Ken Burns",
                 promptBlock: "You are narrating a Ken Burns-style historical documentary. Use primary source quotes read slowly. Layer personal stories over the sweep of history. Use the words of the people who lived it — letters, diaries, speeches. Let silence and images do the emotional work. History is people, not dates.",
-                defaults: { narratorStyle: "sleep", musicMood: "classical", useBRoll: false, useKenBurns: true, visualMode: "chapter_illustrations", imageModel: "juggernaut", pacing: "slow", audience: "adults", perspective: "omniscient", ending: "reflective", contentMode: "factual" },
+                defaults: { narratorStyle: "sleep", musicMood: "classical", useBRoll: false, useKenBurns: true, visualMode: "chapter_illustrations", imageModel: "flux", pacing: "slow", audience: "adults", perspective: "omniscient", ending: "reflective", contentMode: "factual" },
             },
             {
                 id: "epic_cinematic",

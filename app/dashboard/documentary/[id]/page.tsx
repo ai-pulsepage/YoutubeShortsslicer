@@ -168,38 +168,99 @@ export default function DocumentaryDetailPage({ params }: { params: Promise<{ id
 
             {/* Episode Selector Filter for Multi-Episode TV Mini-Series */}
             {doc.title?.includes("(Mini-Series)") && doc.scenes && doc.scenes.length > 0 && (
-                <div className="flex items-center gap-2 bg-black/40 border border-violet-500/20 rounded-xl p-2.5 mb-2">
-                    <span className="text-xs font-bold text-violet-400 uppercase tracking-wider px-2 flex-shrink-0">Filter Episode View:</span>
-                    <div className="flex items-center gap-1.5 overflow-x-auto pr-1">
-                        <button
-                            onClick={() => setSelectedEpisode("all")}
-                            className={cn("px-3 py-1 border rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 flex-shrink-0",
-                                selectedEpisode === "all"
-                                    ? "bg-violet-600 border-violet-500 text-white font-bold"
-                                    : "bg-gray-900 border-gray-800 text-gray-400 hover:text-white"
-                            )}
-                        >
-                            All Episodes ({doc.scenes.length})
-                        </button>
-                        {doc.scenes.map((epScene: any, epIdx: number) => {
-                            const epNum = epScene.sceneIndex || epIdx + 1;
-                            const isSelected = selectedEpisode === epNum;
-                            return (
-                                <button
-                                    key={epScene.id}
-                                    onClick={() => setSelectedEpisode(epNum)}
-                                    className={cn("px-3 py-1 border rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 flex-shrink-0",
-                                        isSelected
-                                            ? "bg-violet-600 border-violet-500 text-white font-bold shadow-lg"
-                                            : "bg-violet-955/20 border-violet-900/30 text-violet-300 hover:text-white hover:bg-violet-900/40"
-                                    )}
-                                >
-                                    <Film className="w-3 h-3 text-violet-400" />
-                                    {epScene.title?.startsWith("Episode") ? epScene.title : `Episode ${epNum}: ${epScene.title}`}
-                                </button>
-                            );
-                        })}
+                <div className="bg-black/40 border border-violet-500/20 rounded-xl p-3 mb-3 space-y-2">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2 overflow-x-auto pr-1">
+                            <span className="text-xs font-bold text-violet-400 uppercase tracking-wider px-1 flex-shrink-0">Episode:</span>
+                            <button
+                                onClick={() => setSelectedEpisode("all")}
+                                className={cn("px-3 py-1 border rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 flex-shrink-0",
+                                    selectedEpisode === "all"
+                                        ? "bg-violet-600 border-violet-500 text-white font-bold"
+                                        : "bg-gray-900 border-gray-800 text-gray-400 hover:text-white"
+                                )}
+                            >
+                                All Episodes ({doc.scenes.length})
+                            </button>
+                            {doc.scenes.map((epScene: any, epIdx: number) => {
+                                const epNum = epScene.sceneIndex || epIdx + 1;
+                                const isSelected = selectedEpisode === epNum;
+                                return (
+                                    <button
+                                        key={epScene.id}
+                                        onClick={() => setSelectedEpisode(epNum)}
+                                        className={cn("px-3 py-1 border rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 flex-shrink-0",
+                                            isSelected
+                                                ? "bg-violet-600 border-violet-500 text-white font-bold shadow-lg"
+                                                : "bg-violet-955/20 border-violet-900/30 text-violet-300 hover:text-white hover:bg-violet-900/40"
+                                        )}
+                                    >
+                                        <Film className="w-3 h-3 text-violet-400" />
+                                        {epScene.title?.startsWith("Episode") ? epScene.title : `Episode ${epNum}: ${epScene.title}`}
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
+
+                    {/* Per-Episode Action Toolbar */}
+                    {selectedEpisode !== "all" && (
+                        <div className="pt-2 border-t border-gray-800/60 flex items-center justify-between flex-wrap gap-2 text-xs">
+                            <span className="text-gray-400 font-medium">
+                                Controls for <strong>Episode {selectedEpisode}</strong>:
+                            </span>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={async () => {
+                                        if (!confirm(`Launch video generation for Episode ${selectedEpisode}? All 30+ shots will be queued into the Queue Monitor.`)) return;
+                                        try {
+                                            const res = await fetch(`/api/shows/episode/launch`, {
+                                                method: "POST",
+                                                headers: { "Content-Type": "application/json" },
+                                                body: JSON.stringify({ docId: doc.id, episodeNumber: selectedEpisode, action: "launch" })
+                                            });
+                                            if (res.ok) { alert(`🚀 Episode ${selectedEpisode} launched! All shots queued.`); fetchDoc(); }
+                                        } catch (err: any) { alert(err.message); }
+                                    }}
+                                    className="px-3 py-1 bg-emerald-600/80 hover:bg-emerald-500 text-white font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                                >
+                                    🚀 Launch Episode
+                                </button>
+                                <button
+                                    onClick={async () => {
+                                        if (!confirm(`Relaunch Episode ${selectedEpisode}? Existing renders will be reset and re-queued with your latest edited dialogue and prompts.`)) return;
+                                        try {
+                                            const res = await fetch(`/api/shows/episode/launch`, {
+                                                method: "POST",
+                                                headers: { "Content-Type": "application/json" },
+                                                body: JSON.stringify({ docId: doc.id, episodeNumber: selectedEpisode, action: "relaunch" })
+                                            });
+                                            if (res.ok) { alert(`🔄 Episode ${selectedEpisode} relaunched with edited prompts.`); fetchDoc(); }
+                                        } catch (err: any) { alert(err.message); }
+                                    }}
+                                    className="px-3 py-1 bg-violet-600/80 hover:bg-violet-500 text-white font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                                >
+                                    🔄 Relaunch Episode
+                                </button>
+                                <button
+                                    onClick={async () => {
+                                        if (!confirm(`Clear video renders for Episode ${selectedEpisode}? Script & shot text will NOT be deleted.`)) return;
+                                        try {
+                                            const res = await fetch(`/api/shows/episode/launch`, {
+                                                method: "POST",
+                                                headers: { "Content-Type": "application/json" },
+                                                body: JSON.stringify({ docId: doc.id, episodeNumber: selectedEpisode, action: "reset" })
+                                            });
+                                            if (res.ok) { alert(`🗑️ Renders cleared for Episode ${selectedEpisode}.`); fetchDoc(); }
+                                        } catch (err: any) { alert(err.message); }
+                                    }}
+                                    className="px-3 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                                >
+                                    🗑️ Reset Renders
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -1085,6 +1146,8 @@ function ShotMatrixTab({ doc, selectedEpisode = "all", onRefresh }: { doc: any; 
             cameraAngle: shot.cameraAngle || "",
             cameraMovement: shot.cameraMovement || "",
             action: shot.action || "",
+            dialogue: shot.dialogue || "",
+            compositePrompt: shot.compositePrompt || "",
             mood: shot.mood || "",
             lighting: shot.lighting || "",
             duration: shot.duration || 5,
@@ -1094,10 +1157,10 @@ function ShotMatrixTab({ doc, selectedEpisode = "all", onRefresh }: { doc: any; 
     const saveEdit = async () => {
         if (!editingShot) return;
         setSaving(true);
-        await fetch(`/api/documentary/shots/${editingShot}`, {
+        await fetch(`/api/shows/shot/update`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(editForm),
+            body: JSON.stringify({ shotId: editingShot, ...editForm }),
         });
         setSaving(false);
         setEditingShot(null);
@@ -1124,7 +1187,7 @@ function ShotMatrixTab({ doc, selectedEpisode = "all", onRefresh }: { doc: any; 
                         className="w-full px-5 py-3 border-b border-gray-800 bg-gray-900/80 flex items-center justify-between hover:bg-gray-800/60 transition-colors"
                     >
                         <h4 className="text-sm font-semibold text-white text-left">
-                            Scene {scene.sceneIndex + 1}: {scene.title || "Untitled"}
+                            {scene.title?.startsWith("Episode") ? scene.title : `Episode ${scene.sceneIndex + 1}: ${scene.title || "Untitled"}`}
                         </h4>
                         <div className="flex items-center gap-3">
                             <span className="text-xs text-gray-500">
@@ -1144,19 +1207,8 @@ function ShotMatrixTab({ doc, selectedEpisode = "all", onRefresh }: { doc: any; 
                                         <th className="px-4 py-2 text-left text-gray-500 font-medium">
                                             <Camera className="w-3 h-3 inline mr-1" />Shot
                                         </th>
-                                        <th className="px-4 py-2 text-left text-gray-500 font-medium">
-                                            <Eye className="w-3 h-3 inline mr-1" />Angle
-                                        </th>
-                                        <th className="px-4 py-2 text-left text-gray-500 font-medium">
-                                            <Move className="w-3 h-3 inline mr-1" />Movement
-                                        </th>
-                                        <th className="px-4 py-2 text-left text-gray-500 font-medium">Action</th>
-                                        <th className="px-4 py-2 text-left text-gray-500 font-medium">
-                                            <Palette className="w-3 h-3 inline mr-1" />Mood
-                                        </th>
-                                        <th className="px-4 py-2 text-left text-gray-500 font-medium">
-                                            <Sun className="w-3 h-3 inline mr-1" />Light
-                                        </th>
+                                        <th className="px-4 py-2 text-left text-gray-500 font-medium">Spoken Dialogue</th>
+                                        <th className="px-4 py-2 text-left text-gray-500 font-medium">Action Beat & Prompt</th>
                                         <th className="px-4 py-2 text-left text-gray-500 font-medium">Dur</th>
                                         <th className="px-4 py-2 text-left text-gray-500 font-medium">Status</th>
                                         <th className="px-4 py-2 text-left text-gray-500 font-medium"></th>
@@ -1166,31 +1218,23 @@ function ShotMatrixTab({ doc, selectedEpisode = "all", onRefresh }: { doc: any; 
                                     {(scene.shots || []).map((shot: any) => (
                                         editingShot === shot.id ? (
                                             <tr key={shot.id} className="border-b border-gray-800/50 bg-violet-500/5">
-                                                <td className="px-4 py-2 text-gray-500">{shot.shotIndex + 1}</td>
+                                                <td className="px-4 py-2 text-gray-500">{shot.shotIndex}</td>
                                                 <td className="px-2 py-1.5">
                                                     <input value={editForm.shotType} onChange={(e) => setEditForm({ ...editForm, shotType: e.target.value })}
                                                         className="w-full min-w-[80px] bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-violet-500" />
                                                 </td>
                                                 <td className="px-2 py-1.5">
-                                                    <input value={editForm.cameraAngle} onChange={(e) => setEditForm({ ...editForm, cameraAngle: e.target.value })}
-                                                        className="w-full min-w-[80px] bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-violet-500" />
+                                                    <textarea value={editForm.dialogue} onChange={(e) => setEditForm({ ...editForm, dialogue: e.target.value })}
+                                                        rows={2} placeholder="Character dialogue..."
+                                                        className="w-full min-w-[160px] bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-violet-500 resize-y" />
                                                 </td>
-                                                <td className="px-2 py-1.5">
-                                                    <input value={editForm.cameraMovement} onChange={(e) => setEditForm({ ...editForm, cameraMovement: e.target.value })}
-                                                        className="w-full min-w-[80px] bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-violet-500" />
-                                                </td>
-                                                <td className="px-2 py-1.5">
+                                                <td className="px-2 py-1.5 space-y-1">
                                                     <textarea value={editForm.action} onChange={(e) => setEditForm({ ...editForm, action: e.target.value })}
-                                                        rows={3}
+                                                        rows={2} placeholder="Action description..."
                                                         className="w-full min-w-[200px] bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-violet-500 resize-y" />
-                                                </td>
-                                                <td className="px-2 py-1.5">
-                                                    <input value={editForm.mood} onChange={(e) => setEditForm({ ...editForm, mood: e.target.value })}
-                                                        className="w-full min-w-[80px] bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-violet-500" />
-                                                </td>
-                                                <td className="px-2 py-1.5">
-                                                    <input value={editForm.lighting} onChange={(e) => setEditForm({ ...editForm, lighting: e.target.value })}
-                                                        className="w-full min-w-[80px] bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-violet-500" />
+                                                    <input value={editForm.compositePrompt} onChange={(e) => setEditForm({ ...editForm, compositePrompt: e.target.value })}
+                                                        placeholder="Kinematic AI camera prompt..."
+                                                        className="w-full min-w-[200px] bg-gray-900 border border-gray-750 rounded px-2 py-1 text-[10px] text-violet-300 font-mono focus:outline-none focus:border-violet-500" />
                                                 </td>
                                                 <td className="px-2 py-1.5">
                                                     <input type="number" value={editForm.duration} onChange={(e) => setEditForm({ ...editForm, duration: Number(e.target.value) })}
@@ -1199,11 +1243,11 @@ function ShotMatrixTab({ doc, selectedEpisode = "all", onRefresh }: { doc: any; 
                                                 <td className="px-2 py-1.5" colSpan={2}>
                                                     <div className="flex items-center gap-1">
                                                         <button onClick={saveEdit} disabled={saving}
-                                                            className="px-2 py-1 rounded bg-violet-600 hover:bg-violet-500 text-white text-[10px] font-medium disabled:opacity-50">
-                                                            {saving ? "..." : "Save"}
+                                                            className="px-2.5 py-1 rounded bg-violet-600 hover:bg-violet-500 text-white text-[10px] font-bold disabled:opacity-50 cursor-pointer">
+                                                            {saving ? "..." : "Save Edit"}
                                                         </button>
                                                         <button onClick={() => setEditingShot(null)}
-                                                            className="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-[10px]">
+                                                            className="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-[10px] cursor-pointer">
                                                             Cancel
                                                         </button>
                                                     </div>
@@ -1214,15 +1258,25 @@ function ShotMatrixTab({ doc, selectedEpisode = "all", onRefresh }: { doc: any; 
                                                 className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors cursor-pointer"
                                                 onClick={() => startEdit(shot)}
                                             >
-                                                <td className="px-4 py-2.5 text-gray-500">{shot.shotIndex + 1}</td>
-                                                <td className="px-4 py-2.5 text-white capitalize">{shot.shotType}</td>
-                                                <td className="px-4 py-2.5 text-gray-300">{shot.cameraAngle || "-"}</td>
-                                                <td className="px-4 py-2.5 text-gray-300">{shot.cameraMovement || "static"}</td>
-                                                <td className="px-4 py-2.5 text-gray-300">{shot.action || "-"}</td>
-                                                <td className="px-4 py-2.5">
-                                                    <span className="px-2 py-0.5 rounded-full bg-gray-800 text-gray-300">{shot.mood || "-"}</span>
+                                                <td className="px-4 py-2.5 text-gray-500 font-mono font-bold">{shot.shotIndex}</td>
+                                                <td className="px-4 py-2.5 text-white capitalize font-semibold">{shot.shotType}</td>
+                                                <td className="px-4 py-2.5 max-w-xs">
+                                                    {shot.dialogue ? (
+                                                        <span className="text-violet-300 font-medium italic bg-violet-955/30 border border-violet-800/30 px-2 py-1 rounded-lg block">
+                                                            &ldquo;{shot.dialogue}&rdquo;
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-gray-600 italic">Non-dialogue beat</span>
+                                                    )}
                                                 </td>
-                                                <td className="px-4 py-2.5 text-gray-300">{shot.lighting || "-"}</td>
+                                                <td className="px-4 py-2.5 text-gray-300 max-w-md space-y-1">
+                                                    <p>{shot.action || "-"}</p>
+                                                    {shot.compositePrompt && (
+                                                        <p className="text-[10px] text-gray-500 font-mono truncate" title={shot.compositePrompt}>
+                                                            🎬 {shot.compositePrompt}
+                                                        </p>
+                                                    )}
+                                                </td>
                                                 <td className="px-4 py-2.5 text-gray-400">{shot.duration || 5}s</td>
                                                 <td className="px-4 py-2.5">
                                                     {shot.clipPath ? (

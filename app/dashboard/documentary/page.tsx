@@ -581,24 +581,30 @@ function CreateDocumentaryModal({
                                     <label className="block text-[11px] font-bold text-gray-400 mb-1">
                                         🎙️ Character Voice Engine
                                     </label>
-                                    <div className="flex gap-1.5">
-                                        <button onClick={() => setVoiceEngine("cosyvoice2")}
-                                            className={cn("flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold border transition cursor-pointer text-center",
-                                                voiceEngine === "cosyvoice2"
-                                                    ? "bg-violet-600 border-violet-500 text-white"
-                                                    : "bg-gray-900 border-gray-800 text-gray-400 hover:text-white"
-                                            )}>
-                                            CosyVoice 2
-                                        </button>
-                                        <button onClick={() => setVoiceEngine("elevenlabs")}
-                                            className={cn("flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold border transition cursor-pointer text-center",
-                                                voiceEngine === "elevenlabs"
-                                                    ? "bg-emerald-600 border-emerald-500 text-white"
-                                                    : "bg-gray-900 border-gray-800 text-gray-400 hover:text-white"
-                                            )}>
-                                            ElevenLabs
-                                        </button>
-                                    </div>
+                                    {videoModel === "ltx2.3" ? (
+                                        <div className="py-1.5 px-3 rounded-lg text-xs font-semibold bg-amber-950/40 border border-amber-700/40 text-amber-300 text-center">
+                                            🔊 Native LTX SFX (Bypassed)
+                                        </div>
+                                    ) : (
+                                        <div className="flex gap-1.5">
+                                            <button onClick={() => setVoiceEngine("cosyvoice2")}
+                                                className={cn("flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold border transition cursor-pointer text-center",
+                                                    voiceEngine === "cosyvoice2"
+                                                        ? "bg-violet-600 border-violet-500 text-white"
+                                                        : "bg-gray-900 border-gray-800 text-gray-400 hover:text-white"
+                                                )}>
+                                                CosyVoice 2
+                                            </button>
+                                            <button onClick={() => setVoiceEngine("elevenlabs")}
+                                                className={cn("flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold border transition cursor-pointer text-center",
+                                                    voiceEngine === "elevenlabs"
+                                                        ? "bg-emerald-600 border-emerald-500 text-white"
+                                                        : "bg-gray-900 border-gray-800 text-gray-400 hover:text-white"
+                                                )}>
+                                                ElevenLabs
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -762,9 +768,8 @@ function CreateDocumentaryModal({
                                 <label className="block text-[10px] font-medium text-gray-500 mb-1">Image Model</label>
                                 <select value={imageModel} onChange={(e) => setImageModel(e.target.value)}
                                     className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500">
+                                    <option value="flux">FLUX 1.1 Pro + PuLID (Face Anchored)</option>
                                     <option value="chroma">Chroma FP16 (Uncensored)</option>
-                                    <option value="flux">Flux (Standard)</option>
-                                    <option value="juggernaut">Juggernaut XL (Photorealistic)</option>
                                 </select>
                             </div>
                         )}
