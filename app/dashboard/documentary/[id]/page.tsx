@@ -214,7 +214,7 @@ export default function DocumentaryDetailPage({ params }: { params: Promise<{ id
                                 className="px-3 py-1 bg-violet-600/10 hover:bg-violet-600/25 border border-violet-500/30 text-violet-300 hover:text-white rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 flex-shrink-0"
                             >
                                 <Film className="w-3 h-3 text-violet-400" />
-                                Episode {epScene.sceneIndex || epIdx + 1}: {epScene.title || `Episode ${epIdx + 1}`}
+                                {epScene.title?.startsWith("Episode") ? epScene.title : `Episode ${epScene.sceneIndex || epIdx + 1}: ${epScene.title}`}
                             </button>
                         ))}
                     </div>
