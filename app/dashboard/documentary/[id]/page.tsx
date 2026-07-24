@@ -601,19 +601,128 @@ function ScriptTab({ doc, onRefresh }: { doc: any; onRefresh: () => void }) {
         setTimeout(() => { onRefresh(); setRegenerating(false); }, 2000);
     };
 
-    if (!doc.script) {
+    // Try parsing script as structured JSON for Film Factory shows
+    let parsedScript: any = null;
+    try {
+        if (script.startsWith("{")) {
+            parsedScript = JSON.parse(script);
+        }
+    } catch {}
+
+    if (parsedScript && parsedScript.episodes) {
         return (
-            <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-8 text-center">
-                <FileText className="w-10 h-10 text-gray-600 mx-auto mb-3" />
-                <h3 className="text-sm font-semibold text-white mb-1">No script yet</h3>
-                <p className="text-xs text-gray-500">Click &ldquo;Generate Story&rdquo; to create the script from your source articles.</p>
+            <div className="space-y-6">
+                {/* Screenplay Header */}
+                <div className="bg-gradient-to-r from-violet-950/40 via-purple-950/20 to-black border border-violet-500/30 rounded-2xl p-6 shadow-xl">
+                    <div className="flex items-center justify-between flex-wrap gap-4 mb-4">
+                        <div>
+                            <span className="text-xs font-bold text-violet-400 uppercase tracking-widest bg-violet-500/10 border border-violet-500/20 px-2.5 py-1 rounded-full">
+                                🎬 Film Factory Screenplay
+                            </span>
+                            <h2 className="text-2xl font-extrabold text-white mt-2 tracking-tight">{parsedScript.showTitle || doc.title}</h2>
+                            <p className="text-xs text-violet-300/80 mt-1 max-w-3xl leading-relaxed">{parsedScript.premise}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button onClick={handleRegenerate} disabled={regenerating}
+                                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-50 transition-all shadow cursor-pointer">
+                                {regenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                                Regenerate Script
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Cast Roster Cards */}
+                    {parsedScript.cast && parsedScript.cast.length > 0 && (
+                        <div className="mt-5 pt-4 border-t border-violet-500/20">
+                            <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Cast Roster ({parsedScript.cast.length} Characters)</h4>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                                {parsedScript.cast.map((c: any, idx: number) => (
+                                    <div key={idx} className="bg-black/60 border border-gray-800 hover:border-violet-500/40 p-3 rounded-xl transition-all">
+                                        <div className="flex items-center justify-between mb-1">
+                                            <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                                                👤 {c.name}
+                                            </span>
+                                            <span className={cn("text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide",
+                                                c.role === "PROTAGONIST" ? "bg-emerald-950/50 text-emerald-400 border border-emerald-800/40" :
+                                                c.role === "ANTAGONIST" ? "bg-red-955/50 text-red-400 border border-red-800/40" :
+                                                "bg-blue-955/50 text-blue-400 border border-blue-800/40"
+                                            )}>
+                                                {c.role}
+                                            </span>
+                                        </div>
+                                        <p className="text-[10px] text-gray-400 leading-normal line-clamp-2">{c.physicalProfile}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Episodes & Shot Screenplay Flow */}
+                <div className="space-y-6">
+                    {parsedScript.episodes.map((ep: any, epIdx: number) => (
+                        <div key={epIdx} className="bg-gray-900/40 border border-gray-800 rounded-2xl overflow-hidden">
+                            {/* Episode Title Bar */}
+                            <div className="bg-black/50 border-b border-gray-800 p-4 flex items-center justify-between">
+                                <div>
+                                    <h3 className="text-base font-bold text-white flex items-center gap-2">
+                                        <Film className="w-4 h-4 text-violet-400" />
+                                        {ep.title?.startsWith("Episode") ? ep.title : `Episode ${ep.episodeNumber || epIdx + 1}: ${ep.title}`}
+                                    </h3>
+                                    {ep.logline && <p className="text-xs text-gray-400 mt-0.5">{ep.logline}</p>}
+                                </div>
+                                <span className="text-xs font-semibold text-violet-400 bg-violet-955/40 border border-violet-800/40 px-3 py-1 rounded-full">
+                                    {ep.shots?.length || 0} Shots (~{Math.round(((ep.shots?.length || 0) * 5) / 60 * 10) / 10} min)
+                                </span>
+                            </div>
+
+                            {/* Shots Screenplay Dialogue Flow */}
+                            <div className="p-4 space-y-3.5">
+                                {(ep.shots || []).map((shot: any, sIdx: number) => (
+                                    <div key={sIdx} className="bg-black/40 border border-gray-850 hover:border-gray-750 p-3.5 rounded-xl transition-all space-y-2">
+                                        <div className="flex items-center justify-between text-[11px] text-gray-500 border-b border-gray-850/60 pb-1.5">
+                                            <span className="font-mono font-bold text-violet-400 uppercase tracking-wider">
+                                                Shot {shot.shotIndex || sIdx + 1} • {shot.shotType || "medium shot"}
+                                            </span>
+                                            {shot.speakerName && (
+                                                <span className="text-gray-400 font-semibold flex items-center gap-1">
+                                                    🗣️ {shot.speakerName}
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {/* Spoken Dialogue Line */}
+                                        {shot.dialogueLine && (
+                                            <div className="bg-violet-955/20 border-l-2 border-violet-500 pl-3 py-1.5 my-1">
+                                                <p className="text-sm font-semibold text-violet-200 tracking-wide italic">
+                                                    &ldquo;{shot.dialogueLine}&rdquo;
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        {/* Action & Camera Description */}
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs text-gray-400 gap-1 pt-0.5">
+                                            <p className="flex-1 text-gray-300">
+                                                <span className="text-gray-500 font-semibold">Action:</span> {shot.actionDescription}
+                                            </p>
+                                            {shot.kinematicPrompt && (
+                                                <p className="text-[10px] text-gray-500 font-mono truncate max-w-md" title={shot.kinematicPrompt}>
+                                                    🎬 {shot.kinematicPrompt}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                </div>
             </div>
         );
     }
 
-    // Render script with highlighted [VISUAL:...] markers
     const renderScript = (text: string) => {
-        const parts = text.split(/(\[VISUAL:[^\]]*\])/g);
+        const parts = (text || "").split(/(\[VISUAL:[^\]]*\])/g);
         return parts.map((part, i) => {
             if (part.match(/^\[VISUAL:/)) {
                 return (
