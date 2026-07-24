@@ -159,23 +159,9 @@ export default function MasterShowHubPage({ params }: { params: Promise<{ id: st
                         </span>
                     </div>
 
-                    <button
-                        onClick={async () => {
-                            if (!confirm(`Dispatch ALL 30+ shots across ALL ${episodes.length} episodes to the GPU Worker?`)) return;
-                            for (let i = 1; i <= episodes.length; i++) {
-                                await fetch(`/api/shows/episode/launch`, {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ docId: doc.id, episodeNumber: i, action: "launch" })
-                                }).catch(() => {});
-                            }
-                            alert(`🚀 All episode shots dispatched to GPU worker queue!`);
-                            fetchDoc();
-                        }}
-                        className="px-3.5 py-1.5 bg-gradient-to-r from-emerald-600 to-violet-600 hover:from-emerald-500 hover:to-violet-500 text-white font-bold text-xs rounded-xl transition-all cursor-pointer shadow-md"
-                    >
-                        🚀 Dispatch All Series Jobs to GPU Worker
-                    </button>
+                    <span className="text-[11px] text-amber-400 font-semibold flex items-center gap-1.5 bg-amber-955/30 border border-amber-800/40 px-3 py-1.5 rounded-xl">
+                        🎬 Open an episode below to review script & launch GPU jobs
+                    </span>
                 </div>
             </div>
 

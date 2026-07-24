@@ -110,52 +110,7 @@ async function processShowGenerationInBackground(params: {
             });
         }
 
-        // 4. Dispatch ALL 30+ shots for each episode
-        for (const ep of showResult.episodes) {
-            const dbScene: any = updatedDoc.scenes.find((s: any) => s.sceneIndex === ep.episodeNumber);
-            if (!dbScene) continue;
-
-            for (const shot of ep.shots) {
-                const dbShot: any = dbScene.shots.find((s: any) => s.shotIndex === shot.shotIndex);
-                if (!dbShot) continue;
-
-                const r2Key = `shows/${updatedDoc.id}/scene_${dbScene.id}_shot_${dbShot.id}.mp4`;
-                const jobMetadata = {
-                    docId: updatedDoc.id,
-                    sceneId: dbScene.id,
-                    shotId: dbShot.id,
-                    title: updatedDoc.title,
-                    episodeNumber: ep.episodeNumber,
-                    shotIndex: shot.shotIndex,
-                    sourceApp: "Film Factory Studio",
-                    model: videoModel || "wan2.3",
-                    voiceEngine: voiceEngine || "cosyvoice2",
-                    r2Key
-                };
-
-                const genJob = await prisma.genJob.create({
-                    data: {
-                        documentaryId: updatedDoc.id,
-                        jobType: "shot_video",
-                        prompt: shot.kinematicPrompt || shot.actionDescription,
-                        status: "QUEUED",
-                        shotId: dbShot.id,
-                        metadata: jobMetadata as any
-                    }
-                });
-
-                await dispatchJob({
-                    jobId: genJob.id,
-                    documentaryId: updatedDoc.id,
-                    type: "shot_video",
-                    prompt: shot.kinematicPrompt || shot.actionDescription,
-                    referenceImages: [],
-                    metadata: jobMetadata
-                });
-            }
-        }
-
-        // Update project status to SCENES_PLANNED
+        // 4. Set project status to SCENES_PLANNED (Do NOT auto-queue video jobs to GPU)
         await prisma.documentary.update({
             where: { id: docId },
             data: { status: "SCENES_PLANNED" }
