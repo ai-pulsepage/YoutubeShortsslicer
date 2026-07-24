@@ -276,13 +276,13 @@ Return ONLY valid JSON matching this schema:
 {
   "shots": [
     {
-      "shotIndex": ${startShotIdx},
+      "shotIndex": 1,
       "shotType": "medium shot",
       "speakerName": "Character Name",
       "dialogueLine": "[emotional tag] Spoken line",
-      "actionDescription": "Detailed action description",
-      "environment": "Visual environment setting",
-      "cameraMovement": "Camera motion"
+      "actionDescription": "Detailed physical action description",
+      "environment": "Visual setting and mood",
+      "cameraMovement": "Camera movement cut"
     }
   ]
 }`;
